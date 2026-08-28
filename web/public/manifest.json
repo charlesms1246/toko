@@ -1,0 +1,40 @@
+{
+  "id": "/",
+  "short_name": "TOKO",
+  "name": "TOKO",
+  "description": "The world's first virtual gamified trading console. Built for fun and money.",
+  "categories": ["games", "finance"],
+  "icons": [
+    {
+      "src": "/assets/logos/toko-mark.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/logos/toko-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/logos/toko-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/logos/toko-512-maskable.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone"],
+  "orientation": "portrait",
+  "theme_color": "#000000",
+  "background_color": "#000000"
+}
