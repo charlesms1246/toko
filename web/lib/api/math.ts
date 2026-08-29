@@ -148,45 +148,11 @@ export function strikeFor(
   return spot * (1 + (side === "up" ? 1 : -1) * Math.max(vol * z, MIN_OFFSET));
 }
 
-// ── Range ────────────────────────────────────────────────────────────────────
-
-/** Seven knob detents, from a wide safe band to a narrow lottery band. */
-export const TIER_PROBS = [0.85, 0.65, 0.45, 0.3, 0.18, 0.11, 0.065];
-/** 810% annualised — crypto at minute scale. */
-export const ANNUAL_VOL = 8.1;
+/**
+ * House edge for the remaining simulated lab experiments. Kept when Range was
+ * dropped because `lib/games/lab-models.ts` prices against it.
+ */
 export const HOUSE_EDGE = 0.04;
-const SECONDS_PER_YEAR = 365.25 * 24 * 3600;
-
-/** Rounds are synchronised to the wall clock minute. */
-export const ROUND_MS = 60_000;
-export const MIN_ROUND_MS = 20_000;
-
-/** Next minute boundary — skipped if it is too close to be worth playing. */
-export function nextRoundExpiry(now = Date.now()): number {
-  let expiry = Math.floor(now / ROUND_MS) * ROUND_MS + ROUND_MS;
-  if (expiry - now < MIN_ROUND_MS) expiry += ROUND_MS;
-  return expiry;
-}
-
-export const sigma = (seconds: number) =>
-  ANNUAL_VOL * Math.sqrt(Math.max(1, seconds) / SECONDS_PER_YEAR);
-
-/** Half-band width as a fraction of spot, for a target survival probability. */
-export const halfWidth = (probability: number, seconds: number) =>
-  normalInv((1 + probability) / 2) * sigma(seconds);
-
-export const tierMultiplier = (probability: number) =>
-  Math.max(1.01, (1 / probability) * (1 - HOUSE_EDGE));
-
-export const tierProbability = (index: number) =>
-  TIER_PROBS[Math.max(0, Math.min(TIER_PROBS.length - 1, Math.round(index)))];
-
-/** Legacy explicit-width quoting, kept for the width-driven Range mode. */
-export function widthMultiplier(halfPct: number, duration: number): number {
-  const n = 0.6 * Math.sqrt(duration / DEFAULT_DURATION);
-  const r = 1 - Math.exp(-halfPct / n);
-  return Math.max(1.05, Math.min(0.97 / Math.max(r, 0.03), 99));
-}
 
 // ── Stake ladder ─────────────────────────────────────────────────────────────
 
@@ -269,21 +235,9 @@ export function markToMarket(
     };
   }
 
-  const inside =
-    price >= (play.lower ?? 0) && price <= (play.upper ?? Infinity);
-  const progress = clamp01(
-    (now - play.openedMs) / Math.max(1, play.expiryMs - play.openedMs),
-  );
-  const markValue = inside
-    ? play.stake * (1 + (play.lockedMult - 1) * 0.85 * progress)
-    : play.stake * Math.max(0.05, 1 - 0.9 * progress);
-
-  return {
-    markValue,
-    pnl: markValue - play.stake,
-    multiplier: play.lockedMult,
-    win: inside,
-  };
+  // Every remaining simulated game is directional, so the band branch that used
+  // to serve Range is gone with it.
+  return { markValue: play.stake, pnl: 0, multiplier: play.lockedMult, win: false };
 }
 
 // ── Formatting ───────────────────────────────────────────────────────────────

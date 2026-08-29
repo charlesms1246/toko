@@ -17,17 +17,12 @@ import {
   SUSPENSE_MS,
   STAKE_CONFIG,
   buildLadder,
-  halfWidth,
   luckyZ,
   markToMarket,
   money,
   moonshotZ,
-  nextRoundExpiry,
   roundVol,
   strikeFor,
-  tierMultiplier,
-  tierProbability,
-  TIER_PROBS,
   type MarkInput,
 } from "./math";
 import { SEED_PRICES, spot } from "./prices";
@@ -47,7 +42,6 @@ import type {
   MinigameScoreRow,
   Play,
   PlayStatus,
-  RangeQuote,
   Settings,
   Side,
   Stats,
@@ -463,67 +457,6 @@ export function openMoonshot(input: {
   return play;
 }
 
-export function openRange(input: {
-  asset: string;
-  stake: number;
-  tier: number;
-}): Play {
-  requireStake(input.stake);
-  const entry = spot(input.asset);
-  const openedMs = Date.now();
-  const expiryMs = nextRoundExpiry(openedMs);
-  const seconds = (expiryMs - openedMs) / 1000;
-  const probability = tierProbability(input.tier);
-  const half = halfWidth(probability, seconds);
-  const lower = entry * (1 - half);
-  const upper = entry * (1 + half);
-  const multiplier = tierMultiplier(probability);
-
-  const play: Play = {
-    id: newId(),
-    game: "range",
-    status: "pending",
-    stake: money(input.stake),
-    params: {
-      asset: input.asset,
-      lower: String(lower),
-      upper: String(upper),
-      widthPct: half * 100,
-      duration: Math.round(seconds),
-    },
-    market: {
-      asset: input.asset,
-      oracleId: `demo-oracle-${input.asset}`,
-      expiry: expiryMs,
-      lower: String(lower),
-      upper: String(upper),
-    },
-    entryValue: money(input.stake),
-    markValue: money(input.stake),
-    pnl: "0.00",
-    multiplier,
-    maxPayout: money(input.stake * multiplier),
-    entrySpot: String(entry),
-    openedAt: new Date(openedMs).toISOString(),
-    txMint: digest(),
-  };
-
-  register(play, {
-    game: "range",
-    asset: input.asset,
-    stake: input.stake,
-    entry,
-    lockedMult: multiplier,
-    lower,
-    upper,
-    openedMs,
-    expiryMs,
-    confirmAtMs: openedMs + CONFIRM_MS,
-    resolveAtMs: expiryMs + SUSPENSE_MS,
-  });
-  return play;
-}
-
 /** Lab games reuse the directional plumbing with their own multiplier. */
 export function openLabPlay(input: {
   game: GameId;
@@ -889,22 +822,6 @@ export function getStakeLadder(): number[] {
 }
 
 /** Seven tiered Range quotes for the current round. */
-export function rangeQuotes(asset: string): RangeQuote[] {
-  const price = spot(asset);
-  const seconds = (nextRoundExpiry() - Date.now()) / 1000;
-  return TIER_PROBS.map((probability, tier) => {
-    const half = halfWidth(probability, seconds);
-    return {
-      tier,
-      probability,
-      multiplier: tierMultiplier(probability),
-      lower: price * (1 - half),
-      upper: price * (1 + half),
-      halfWidthPct: half * 100,
-    };
-  });
-}
-
 /** How far each Moonshot target sits from spot. */
 export function moonshotAim(asset: string) {
   const price = spot(asset);

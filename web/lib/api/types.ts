@@ -1,6 +1,5 @@
 export type GameId =
   | "lucky"
-  | "range"
   | "moonshot"
   | "pin"
   | "snipe"
@@ -12,7 +11,6 @@ export type MinigameId = "line-rider" | "flappy-piper";
 
 export const GAME_LABELS: Record<GameId, string> = {
   lucky: "Lucky",
-  range: "Range",
   moonshot: "Moonshot",
   pin: "Pin",
   snipe: "Snipe",
@@ -22,7 +20,7 @@ export const GAME_LABELS: Record<GameId, string> = {
 };
 
 /** Games that ship to everyone. The rest are admin-gated lab experiments. */
-export const LIVE_GAMES: GameId[] = ["lucky", "range", "moonshot"];
+export const LIVE_GAMES: GameId[] = ["lucky", "moonshot"];
 export const LAB_GAMES: GameId[] = ["pin", "snipe", "press", "rush", "breakout"];
 export const MINIGAMES: MinigameId[] = ["line-rider", "flappy-piper"];
 
@@ -152,15 +150,6 @@ export interface MinigameScoreRow {
   isYou?: boolean;
 }
 
-
-export interface RangeQuote {
-  tier: number;
-  probability: number;
-  multiplier: number;
-  lower: number;
-  upper: number;
-  halfWidthPct: number;
-}
 
 export interface MoonshotLevel {
   reach: number;

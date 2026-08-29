@@ -108,14 +108,6 @@ export function usePlay(id: string | null) {
   return useSnapshot(get);
 }
 
-export function useRangeQuotes(asset: string) {
-  const version = usePriceVersion();
-  return useMemo(() => {
-    void version;
-    return store.rangeQuotes(asset);
-  }, [asset, version]);
-}
-
 export function useMoonshotAim(asset: string) {
   const version = usePriceVersion();
   return useMemo(() => {
@@ -182,18 +174,13 @@ export function useSettleListener(fn: (play: Play, unlocked: string[]) => void) 
   );
 }
 
-/**
- * An in-flight play for this game, left over from another page or a reload.
- *
- * Range is excluded on purpose: its rounds are clock-bound and short, so there
- * is nothing to come back to.
- */
+/** An in-flight play for this game, left over from another page or a reload. */
 export function useRestorePlay(game: string): Play | undefined {
   // The store's ticker settles plays as they expire, so anything still listed
   // as open really is live — no need to re-check the clock here.
   const open = usePlays("open", 30);
   return useMemo(
-    () => open.find((p) => p.game === game && p.game !== "range"),
+    () => open.find((p) => p.game === game),
     [open, game],
   );
 }
@@ -209,7 +196,6 @@ export function useStoreActions() {
   return useMemo(
     () => ({
       openLucky: store.openLucky,
-      openRange: store.openRange,
       openMoonshot: store.openMoonshot,
       openLabPlay: store.openLabPlay,
       cashOut: store.cashOut,
