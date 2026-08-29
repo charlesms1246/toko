@@ -10,6 +10,7 @@ import GameIcon from "@/components/games/GameIcon";
 import { GAME_TAGLINES } from "@/lib/api/fixtures";
 import { GAME_LABELS, LAB_GAMES, LIVE_GAMES, MINIGAMES } from "@/lib/api/types";
 import { useBalance, useIsAdmin } from "@/lib/api/hooks";
+import { formatCollateral } from "@/lib/dreamdex/wallet";
 import { playSfx } from "@/lib/sound";
 
 const MINIGAME_LABELS: Record<string, string> = {
@@ -52,7 +53,7 @@ export default function GamesPage() {
       label: "GAME",
       onChange: setIndex,
     },
-    status: { left: "SELECT GAME", right: `$${balance.toFixed(2)}` },
+    status: { left: "SELECT GAME", right: `$${formatCollateral(balance)}` },
   });
 
   return (

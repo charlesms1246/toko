@@ -166,7 +166,6 @@ export default function LineRiderPage() {
   if (!running) {
     return (
       <MinigameBoard
-        game="line-rider"
         title="Line Rider"
         best={best}
         lastScore={lastScore}

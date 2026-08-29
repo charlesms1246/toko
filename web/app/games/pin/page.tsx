@@ -1,6 +1,24 @@
 "use client";
 
-/** Pin — "Name the price. Closest call wins." Lab / admin only. */
+/**
+ * Pin — name the price and wait for the market to come to you.
+ *
+ * The original called a *price level* and paid for being closest. A binary has
+ * no continuous outcome to be close to, but it does have one thing worth naming:
+ * the price you are willing to pay. So Pin rests a bid at your called price and
+ * it fills only if the book travels to meet it.
+ *
+ * That makes Pin the one game whose mechanic is **making** rather than taking —
+ * every call adds real depth to a venue that is short of it. Playing it is
+ * indistinguishable from providing liquidity.
+ *
+ * It runs on the **5-minute** series: a resting bid needs room for the market to
+ * move, and a 60-second window rarely gives it any.
+ *
+ * The trade-off is honest and visible: call closer to the market and you fill
+ * often for a small multiple; call far out and you win a lot, or nothing at all
+ * because the price never came and the order simply expired.
+ */
 
 import { useState } from "react";
 import { useProgramConsole } from "@/lib/console/controls";
@@ -11,107 +29,212 @@ import {
   ScreenRoot,
   ScreenRow,
 } from "@/components/screen/Screen";
-import Sparkline from "@/components/games/Sparkline";
-import { LabGate } from "@/components/games/LabShell";
-import { useRequireAdmin } from "@/lib/games/lab";
-import { useGameRound } from "@/lib/games/useGameRound";
-import {
-  useBalance,
-  usePriceHistory,
-  useSpot,
-  useStakeIndex,
-  useStoreActions,
-} from "@/lib/api/hooks";
-import { PIN_MODEL, pinMultiplier } from "@/lib/games/lab-models";
-import { formatPrice, formatUsd } from "@/lib/api/math";
-import { TRADABLE_ASSETS } from "@/lib/api/prices";
+import { useMinuteRound, type Side } from "@/lib/games/useMinuteRound";
+import * as book from "@/lib/dreamdex/book";
+import { formatCollateral } from "@/lib/dreamdex/wallet";
+
+/** Called prices. Lower is further from the market and pays more. */
+const CALLS = [0.4, 0.3, 0.2, 0.1, 0.05];
+const SIZE = 1;
+const FIVE_MINUTES = 300;
 
 export default function PinPage() {
-  const admin = useRequireAdmin();
-  const [asset] = useState(TRADABLE_ASSETS[0]);
-  const [offsetIndex, setOffsetIndex] = useState(4);
+  const round = useMinuteRound(FIVE_MINUTES);
+  const [callIdx, setCallIdx] = useState(1);
+  const [side, setSide] = useState<Side>("up");
 
-  const price = useSpot(asset);
-  const points = usePriceHistory(asset);
-  const balance = useBalance();
-  const { ladder, index: stakeIndex, stake, set: setStakeIndex } = useStakeIndex();
-  const actions = useStoreActions();
-  const round = useGameRound("pin");
-  const { play, live, settled, secsLeft, progress } = round;
+  const call = CALLS[callIdx];
+  const settled = ["won", "lost", "void"].includes(round.status);
+  const resting = round.status === "resting";
+  const live = round.status === "open";
 
-  const offset = PIN_MODEL.offsets[offsetIndex];
-  const called = price * (1 + offset);
-  const multiplier = pinMultiplier(offset);
-  const pnl = play ? Number(play.pnl) : 0;
+  const ask = book.best(side === "up" ? round.book.yesAsks : round.book.noAsks);
+  /** How far the market still has to travel to reach the call. */
+  const distance = ask ? ask.price - call : null;
+
+  const place = (s: Side) => {
+    setSide(s);
+    if (!round.canEnter) return;
+    // `price` is the YES price on both sides — a DOWN call is 1 − the call.
+    round.rest(s, s === "up" ? call : 1 - call, SIZE);
+  };
 
   useProgramConsole({
     main: live
-      ? { label: "CASH OUT", pulse: true, onPress: round.cashOut }
-      : {
-          label: "CALL IT",
-          pulse: true,
-          onPress: () =>
-            round.open(() =>
-              actions.openLabPlay({
-                game: "pin",
-                asset,
-                stake,
-                side: offset >= 0 ? "up" : "down",
-                multiplier,
-              }),
-            ),
-        },
+      ? { label: "CASH OUT", pulse: true, onPress: round.sell }
+      : resting
+        ? { label: "WAITING", disabled: true }
+        : {
+            label: round.status === "pending" ? "…" : "PIN IT",
+            loading: round.status === "pending",
+            disabled: !round.canEnter,
+            onPress: () => place(side),
+          },
+    action1: {
+      label: "LONG",
+      pulse: !live && !resting && side === "up",
+      disabled: live || resting || round.status === "pending",
+      onPress: () => place("up"),
+    },
+    action2: {
+      label: "SHORT",
+      pulse: !live && !resting && side === "down",
+      disabled: live || resting || round.status === "pending",
+      onPress: () => place("down"),
+    },
     knob: {
       min: 0,
-      max: PIN_MODEL.offsets.length - 1,
+      max: CALLS.length - 1,
       step: 1,
-      value: offsetIndex,
+      value: callIdx,
       label: "CALL",
-      format: (v) => `${(PIN_MODEL.offsets[v] * 100).toFixed(1)}%`,
-      onChange: (v) => !live && setOffsetIndex(v),
+      format: (v) => `${(1 / CALLS[v]).toFixed(1)}x`,
+      onChange: (v) => !live && !resting && setCallIdx(v),
     },
-    numberWheel: {
-      min: 0,
-      max: ladder.length - 1,
-      step: 1,
-      value: stakeIndex,
-      label: "USDC",
-      format: (v) => `$${ladder[v]}`,
-      onChange: (v) => !live && setStakeIndex(v),
+    status: {
+      left: round.window
+        ? `${round.window.asset} ${round.secsLeft.toFixed(0)}s`
+        : "PIN",
+      right: `$${formatCollateral(round.balance)}`,
     },
-    status: { left: live ? `${secsLeft}s` : "PIN", right: `$${balance.toFixed(2)}` },
-    lightShow: settled,
+    lightShow: round.status === "settling" || settled,
   });
 
-  if (!admin) return <LabGate />;
-
-  if (settled && play) {
-    const won = play.status === "won" || play.status === "cashed_out";
+  if (settled) {
+    const won = round.status === "won";
+    const net =
+      round.payout != null && round.entryCost != null
+        ? Number(round.payout - round.entryCost) / 1e6
+        : null;
     return (
-      <ScreenRoot className="items-center gap-1">
+      <ScreenRoot className="items-center justify-center gap-1">
         <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          {won ? "Nailed it" : "Missed the pin"}
+          {round.status === "void" ? "Voided" : won ? "Pinned it" : "Missed"}
         </div>
-        <BigNumber value={formatUsd(pnl, true)} tone={won ? "up" : "down"} />
+        <BigNumber
+          value={net == null ? "—" : `${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(2)}`}
+          tone={won ? "up" : "down"}
+        />
+      </ScreenRoot>
+    );
+  }
+
+  if (round.status === "settling") {
+    return (
+      <ScreenRoot className="items-center justify-center gap-2">
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
+          Window closed
+        </div>
+        <BigNumber value="…" tone="brand" />
+      </ScreenRoot>
+    );
+  }
+
+  // ── The bid is on the book, waiting ──────────────────────────────────────
+  if (resting && round.window) {
+    return (
+      <ScreenRoot className="gap-1.5">
+        <ScreenHeader
+          left={`${round.window.asset} ${side === "up" ? "UP" : "DOWN"}`}
+          right={`${round.secsLeft.toFixed(0)}s`}
+        />
+        <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
+          Resting at
+        </div>
+        <BigNumber value={call.toFixed(2)} tone="brand" />
+        <ScreenRow
+          label="Market"
+          value={ask ? ask.price.toFixed(3) : "—"}
+        />
+        <ScreenRow
+          label="Needs to fall"
+          value={distance != null && distance > 0 ? distance.toFixed(3) : "—"}
+        />
+        <ScreenBar
+          progress={
+            round.window.intervalSec
+              ? 1 - round.secsLeft / round.window.intervalSec
+              : 0
+          }
+        />
+        <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
+          on the book · fills if the market comes
+        </div>
+      </ScreenRoot>
+    );
+  }
+
+  // ── Filled — the call was hit ────────────────────────────────────────────
+  if (live && round.window) {
+    return (
+      <ScreenRoot className="gap-1.5">
+        <ScreenHeader
+          left={`${round.window.asset} ${round.side === "up" ? "UP" : "DOWN"}`}
+          right={`${round.secsLeft.toFixed(0)}s`}
+        />
+        <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-up">
+          Call hit
+        </div>
+        <BigNumber
+          value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
+          tone="up"
+        />
+        <ScreenRow
+          label="Paid"
+          value={
+            round.entryCost != null
+              ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
+              : "—"
+          }
+        />
+        <ScreenBar
+          progress={
+            round.window.intervalSec
+              ? 1 - round.secsLeft / round.window.intervalSec
+              : 0
+          }
+        />
       </ScreenRoot>
     );
   }
 
   return (
-    <ScreenRoot className="gap-1.5">
-      <ScreenHeader left="Pin" right={live ? `${secsLeft}s` : `$${stake}`} />
-      <div className="text-center text-[11px] font-semibold text-text-2">
-        Name the price. Closest call wins.
-      </div>
-      <Sparkline
-        points={points}
-        height={54}
-        markers={[{ price: called, color: "var(--color-brand-500)" }]}
+    <ScreenRoot className="gap-2">
+      <ScreenHeader
+        left="Pin"
+        right={round.window ? `${round.secsLeft.toFixed(0)}s` : "—"}
       />
-      <ScreenRow label="Spot" value={formatPrice(price)} />
-      <ScreenRow label="Your call" value={formatPrice(called)} tone="brand" />
-      <ScreenRow label="Pays" value={`${multiplier.toFixed(2)}x`} tone="brand" />
-      {live && <ScreenBar progress={progress} />}
+      <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
+        Your call pays
+      </div>
+      <BigNumber value={`${(1 / call).toFixed(1)}x`} tone="brand" />
+
+      <div className="flex items-center justify-center gap-1.5">
+        {CALLS.map((c, i) => (
+          <span
+            key={c}
+            className={`rounded-md px-2 py-1 text-[11px] font-black tabular-nums ${
+              i === callIdx ? "bg-brand-500 text-black" : "text-text-3"
+            }`}
+          >
+            {c.toFixed(2)}
+          </span>
+        ))}
+      </div>
+
+      <ScreenRow
+        label={side === "up" ? "Up now" : "Down now"}
+        value={ask ? ask.price.toFixed(3) : "—"}
+      />
+      <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
+        {round.message
+          ? round.message
+          : !round.window
+            ? "finding a 5m window"
+            : round.balance === 0n
+              ? "fund your wallet"
+              : "name a price · the market must come to you"}
+      </div>
     </ScreenRoot>
   );
 }

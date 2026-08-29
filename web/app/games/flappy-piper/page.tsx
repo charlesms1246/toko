@@ -154,7 +154,6 @@ export default function FlappyPiperPage() {
   if (!running) {
     return (
       <MinigameBoard
-        game="flappy-piper"
         title="Flappy Piper"
         best={best}
         lastScore={lastScore}
