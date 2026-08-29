@@ -158,7 +158,7 @@ function build(trades: any[], resolutions: Map<string, any>): Stats {
 
   const rounds: Round[] = [];
   for (const round of byMarket.values()) {
-    const chain = resolutions.get(round.marketAddress);
+    const chain = resolutions.get(round.marketAddress.toLowerCase());
     if (chain) {
       round.voided = !!chain.voided;
       if (chain.settled) {
@@ -225,31 +225,29 @@ export async function load(): Promise<void> {
     const portfolio = await client.getPortfolio(owner);
     const trades = (portfolio?.trades ?? []) as unknown[];
 
-    // Each distinct market's outcome, read once.
-    const addresses = [
-      ...new Set(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        trades.map((t: any) => t.market?.marketAddress).filter(Boolean),
-      ),
-    ] as string[];
+    // Outcomes, in ONE read.
+    //
+    // `getBinaryMarket(marketAddress)` returns null for the addresses trade rows
+    // carry — despite the docs describing it as an address lookup — so this
+    // matches against a listing instead. That is also a single request rather
+    // than one per market, which is what made this read slow enough to look
+    // stuck.
+    //
+    // A market older than the page fetched here simply stays unresolved: its
+    // round shows as unsettled rather than being counted as a loss.
+    const recent = (await client.listBinaryMarkets({ limit: 300 })) as unknown[];
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resolutions = new Map<string, any>();
-    await Promise.all(
-      addresses.map(async (address) => {
-        try {
-          const market = await client.getBinaryMarket(address);
-          if (!market) return;
-          resolutions.set(address, {
-            settled: ["Resolved", "Finalized"].includes(market.status),
-            winningOutcome: market.winningOutcome,
-            voided: market.voided,
-          });
-        } catch {
-          // Leave it unresolved rather than guessing an outcome.
-        }
-      }),
-    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const m of recent as any[]) {
+      if (!m?.marketAddress) continue;
+      resolutions.set(String(m.marketAddress).toLowerCase(), {
+        settled: ["Resolved", "Finalized"].includes(m.status),
+        winningOutcome: m.winningOutcome,
+        voided: m.voided,
+      });
+    }
 
     set({ stats: build(trades, resolutions), loading: false, at: Date.now() });
   } catch (err) {
