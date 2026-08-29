@@ -54,6 +54,11 @@ export default function MenuHub() {
       <MenuSection title="Wallet">
         <MenuRow
           icon="/assets/icons/chip-logo.webp"
+          label="Somnia wallet"
+          href="/menu/wallet"
+        />
+        <MenuRow
+          icon="/assets/icons/chip-logo.webp"
           label="Deposit"
           href="/menu/deposit"
         />
