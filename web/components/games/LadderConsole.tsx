@@ -43,7 +43,7 @@ export default function LadderConsole({
     main: ladder.canPress
       ? { label: "PRESS", pulse: true, onPress: ladder.press }
       : live
-        ? { label: "RIDING", disabled: true, onPress: () => undefined }
+        ? { label: "RIDING", disabled: true }
         : {
             label: round.status === "pending" ? "…" : "START",
             loading: round.status === "pending",

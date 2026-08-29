@@ -13,6 +13,7 @@ import TapTarget from "@/components/ui/TapTarget";
 import { ScreenRoot } from "@/components/screen/Screen";
 import { useProgramConsole } from "@/lib/console/controls";
 import { useBalance } from "@/lib/api/hooks";
+import { formatCollateral } from "@/lib/dreamdex/wallet";
 import { useIsMounted } from "@/lib/react/hooks";
 
 export default function MenuDrawer({
@@ -27,7 +28,7 @@ export default function MenuDrawer({
   const isHub = pathname === "/menu";
 
   useProgramConsole({
-    status: { left: "MENU", right: `$${balance.toFixed(2)}` },
+    status: { left: "MENU", right: `$${formatCollateral(balance)}` },
   });
 
   const drawer = (

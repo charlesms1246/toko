@@ -1,22 +1,17 @@
 "use client";
 
 import { ScreenRoot } from "@/components/screen/Screen";
-import { useMinigameBoard } from "@/lib/api/hooks";
-import type { MinigameId } from "@/lib/api/types";
 
 /** The score board shown between runs of a free minigame. */
 export default function MinigameBoard({
-  game,
   title,
   best,
   lastScore,
 }: {
-  game: MinigameId;
   title: string;
   best: number;
   lastScore: number | null;
 }) {
-  const rows = useMinigameBoard(game).slice(0, 5);
 
   return (
     <ScreenRoot className="gap-2">
@@ -43,20 +38,7 @@ export default function MinigameBoard({
       </div>
 
       <div className="space-y-1 border-t border-[var(--color-line)] pt-1.5">
-        {rows.map((row) => (
-          <div
-            key={`${row.rank}-${row.handle}`}
-            className={`flex items-baseline justify-between text-[11px] ${
-              row.isYou ? "text-brand-500" : "text-text-2"
-            }`}
-          >
-            <span className="truncate font-semibold">
-              {row.rank}. {row.handle}
-            </span>
-            <span className="font-bold tabular-nums">{row.score}</span>
-          </div>
-        ))}
-      </div>
+              </div>
 
       <div className="pt-1 text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
         Press play to start
