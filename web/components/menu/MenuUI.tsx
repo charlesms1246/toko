@@ -31,6 +31,7 @@ export function MenuRow({
   href,
   onClick,
   danger,
+  external,
 }: {
   icon?: string;
   label: string;
@@ -38,6 +39,8 @@ export function MenuRow({
   href?: string;
   onClick?: () => void;
   danger?: boolean;
+  /** Open in a new tab — for faucets and the block explorer. */
+  external?: boolean;
 }) {
   const body = (
     <>
@@ -70,7 +73,11 @@ export function MenuRow({
 
   if (href) {
     return (
-      <TapTarget href={href} className={className}>
+      <TapTarget
+        href={href}
+        className={className}
+        {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
+      >
         {body}
       </TapTarget>
     );
