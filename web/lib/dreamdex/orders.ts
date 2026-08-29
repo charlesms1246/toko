@@ -30,7 +30,13 @@ import {
   type Address,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { CHAIN, COLLATERAL, GAS_LIMIT, HTTP_RPC_URL } from "./config";
+import {
+  CHAIN,
+  COLLATERAL,
+  GAS_LIMIT,
+  HTTP_RPC_URL,
+  MAKER_GAS_LIMIT,
+} from "./config";
 import { getClient } from "./client";
 import { exportKey } from "./wallet";
 import type { Window } from "./markets";
@@ -187,6 +193,83 @@ export async function buy(
     return summarise(res);
   } catch (err) {
     return asOutcome(err);
+  }
+}
+
+/**
+ * Rest a bid on the book instead of taking one.
+ *
+ * This is what makes Pin and co-op play *maker* games: the order sits at the
+ * called price and fills only if the market comes to it. Two consequences:
+ *
+ * - Escrow is locked for as long as it rests. It is released by a fill, a
+ *   cancel, or the order ageing out.
+ * - `expireTimestampNs` is pinned to the market's own expiry, which the pool
+ *   requires anyway — so a resting order can never outlive the window it was
+ *   placed in, and an unfilled one simply expires.
+ */
+export async function rest(
+  window: Window,
+  side: Side,
+  yesPrice: bigint,
+  size: bigint,
+): Promise<OrderOutcome & { orderId?: bigint }> {
+  const t = getTrader();
+  if (!t) return { ok: false, filled: 0n, error: "No wallet" };
+
+  const grid = await getGrid(window.poolAddress);
+  const quantity = snapSize(size, grid);
+  if (quantity === 0n) {
+    return { ok: false, filled: 0n, error: "Below the pool's minimum size" };
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await (t as any).placeOrder({
+      pool: window.poolAddress,
+      side: side === "up" ? "BUY_YES" : "BUY_NO",
+      price: snapPrice(yesPrice, grid.tick),
+      quantity,
+      orderType: ORDER_TYPE.REST,
+      expireTimestampNs: expiryNs(window),
+      // Resting writes into the book and costs multiples of a taker order.
+      gas: MAKER_GAS_LIMIT,
+      outcomeToken: OUTCOME_TOKEN,
+      yesId: BigInt(window.yesTokenId),
+      noId: BigInt(window.noTokenId),
+      collateral: COLLATERAL.address,
+    });
+    // A resting order may cross on arrival if the book moved to meet it; both
+    // outcomes are normal, so report the fill and the id it rested under.
+    return { ...summarise(res), ok: true, orderId: res.orderId };
+  } catch (err) {
+    return asOutcome(err);
+  }
+}
+
+/** Pull a resting order. The exact escrow comes back to the wallet. */
+export async function cancel(pool: string, orderId: bigint): Promise<OrderOutcome> {
+  const t = getTrader();
+  if (!t) return { ok: false, filled: 0n, error: "No wallet" };
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await (t as any).cancelOrder({ pool, orderId });
+    return { ok: true, filled: 0n, hash: res.hash };
+  } catch (err) {
+    return asOutcome(err);
+  }
+}
+
+/** Order ids this wallet has resting on a pool, straight from the pool. */
+export async function ownOpenOrders(pool: string): Promise<bigint[]> {
+  const client = getClient();
+  const key = exportKey();
+  if (!client || !key) return [];
+  try {
+    const account = privateKeyToAccount(key);
+    return (await client.getOwnOpenOrdersOnchain(pool, account.address)) as bigint[];
+  } catch {
+    return [];
   }
 }
 

@@ -60,25 +60,43 @@ export const STT_FAUCETS = [
 ] as const;
 
 /**
- * Gas ceiling for every write we sign.
+ * Gas ceilings.
  *
- * This is not a cost — it is a **balance requirement**. The SDK signs with fixed
- * fees (`maxFeePerGas` 60 gwei) and the node rejects a transaction unless
- * `balance >= gasLimit * maxFeePerGas`, whatever the transaction actually
- * spends. The SDK's own default of 10,000,000 therefore demands **0.6 STT just
- * to sign**, which a freshly sponsored wallet does not have — the first trade
- * fails with a bare `-32000 insufficient balance`.
+ * A ceiling here is not a cost — it is a **balance requirement**. The SDK signs
+ * with fixed fees (`maxFeePerGas` 60 gwei) and the node rejects a transaction
+ * unless `balance >= gasLimit * maxFeePerGas`, whatever it actually spends. The
+ * SDK's own default of 10,000,000 demands **0.6 STT just to sign**, which a
+ * freshly sponsored wallet does not have — its first trade fails with a bare
+ * `-32000 insufficient balance`.
  *
- * Observed usage is 253k–421k gas, so 2,000,000 is 5x headroom and brings the
- * requirement down to 0.12 STT.
+ * So the ceiling is set per call rather than once, because the two paths cost
+ * very different amounts:
+ *
+ * - **Taking** the book: 253k–795k observed. 2,000,000 is ample and keeps the
+ *   balance requirement at 0.12 STT, which is what makes onboarding cheap.
+ * - **Resting** an order on the book: writing into the book costs far more. A
+ *   2,000,000 ceiling was measured running out at **1,969,851 used** and
+ *   reverting with no decodable reason — the signature of an out-of-gas, not a
+ *   contract error. 8,000,000 gives real headroom at 0.48 STT.
  */
 export const GAS_LIMIT = 2_000_000n;
 
+/** Resting an order writes into the book — see the note above. */
+export const MAKER_GAS_LIMIT = 8_000_000n;
+
 /**
  * Measured burn is ~0.004 STT per transaction (see TESTNET_FACTS §Q8), so this
- * is roughly 125 trades — enough that a funded player never thinks about gas.
- * It must also stay comfortably above the `GAS_LIMIT` reserve above.
+ * is hundreds of trades — enough that a funded player never thinks about gas.
+ * It must also clear the **maker** reserve of 0.48 STT, or a player could fund a
+ * wallet and still be unable to rest an order.
  */
-export const TOPUP_AMOUNT_STT = "0.5";
-/** Below this, the wallet is topped up on sight. */
-export const TOPUP_THRESHOLD_STT = "0.05";
+export const TOPUP_AMOUNT_STT = "1.5";
+/**
+ * Below this, the wallet is topped up on sight.
+ *
+ * It must sit **above the maker reserve** (0.48 STT), not just above zero. A
+ * threshold of 0.05 left a wallet able to take the book but not rest an order,
+ * with nothing to trigger a refill — the resting order just failed with a bare
+ * "insufficient balance". Measured the hard way.
+ */
+export const TOPUP_THRESHOLD_STT = "0.6";
