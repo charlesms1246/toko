@@ -1,190 +1,189 @@
 "use client";
 
-/** Snipe — "The wall drifts in. Press when it is close." Lab / admin only. */
+/**
+ * Snipe — the wall drifts in. Press when it is close.
+ *
+ * The wall is real: as a window runs down, the underdog side's offer slides
+ * toward zero and its payout climbs. Waiting is worth more, and waiting costs
+ * you — inside the last couple of seconds the maker withdraws its quotes
+ * entirely and there is nothing left to take. That cutoff was measured, not
+ * invented (TESTNET_FACTS §Q3), and the console derives it from live depth
+ * rather than a hardcoded clock.
+ *
+ * So the skill is nerve, and the risk is real: hold out for a bigger multiple
+ * and you may find the book empty.
+ */
 
-import { useEffect, useRef, useState } from "react";
 import { useProgramConsole } from "@/lib/console/controls";
 import {
   BigNumber,
+  ScreenBar,
   ScreenHeader,
   ScreenRoot,
   ScreenRow,
 } from "@/components/screen/Screen";
-import { LabGate } from "@/components/games/LabShell";
-import { useRequireAdmin } from "@/lib/games/lab";
-import { useBalance, useStakeIndex, useStoreActions } from "@/lib/api/hooks";
-import { SNIPE_MODEL, snipeMultiplier } from "@/lib/games/lab-models";
-import { formatUsd } from "@/lib/api/math";
-import { useToast } from "@/components/ui/Toast";
-import { playLose, playTick, playWin } from "@/lib/sound";
-import haptics from "@/lib/haptics";
-import { TRADABLE_ASSETS } from "@/lib/api/prices";
+import { useMinuteRound, ENTRY_CUTOFF_SECONDS } from "@/lib/games/useMinuteRound";
+import * as book from "@/lib/dreamdex/book";
+import { formatCollateral } from "@/lib/dreamdex/wallet";
 
-type Phase = "idle" | "running" | "result";
+const SIZE = 1;
+const SLIPPAGE = 0.02;
 
 export default function SnipePage() {
-  const admin = useRequireAdmin();
-  const balance = useBalance();
-  const { ladder, index: stakeIndex, stake, set: setStakeIndex } = useStakeIndex();
-  const actions = useStoreActions();
-  const toast = useToast();
+  const round = useMinuteRound();
+  const settled = ["won", "lost", "void"].includes(round.status);
+  const live = round.status === "open";
 
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [speedIndex, setSpeedIndex] = useState(1);
-  const [wall, setWall] = useState(0);
-  const [outcome, setOutcome] = useState({ error: 0, multiplier: 0, pnl: 0 });
+  // The wall is whichever side is currently the underdog — the cheaper offer,
+  // and so the bigger payout.
+  const upAsk = book.best(round.book.yesAsks);
+  const downAsk = book.best(round.book.noAsks);
+  const wall =
+    upAsk && downAsk
+      ? upAsk.price <= downAsk.price
+        ? { side: "up" as const, ask: upAsk }
+        : { side: "down" as const, ask: downAsk }
+      : upAsk
+        ? { side: "up" as const, ask: upAsk }
+        : downAsk
+          ? { side: "down" as const, ask: downAsk }
+          : null;
 
-  const startedAt = useRef(0);
-  const raf = useRef(0);
-  const speed = [0.7, 1, 1.4, 1.9][speedIndex];
-  const travelMs = SNIPE_MODEL.travelMs / speed;
+  const multiple = wall ? book.multipleAt(wall.ask.price) : null;
+  const closing = round.secsLeft <= ENTRY_CUTOFF_SECONDS;
 
-  const finish = (error: number) => {
-    cancelAnimationFrame(raf.current);
-    const multiplier = snipeMultiplier(error);
-    const payout = stake * multiplier;
-    if (payout > 0) actions.deposit(payout);
-    const pnl = payout - stake;
-    setOutcome({ error, multiplier, pnl });
-    setPhase("result");
-    if (pnl >= 0) {
-      playWin();
-      haptics.outcome("win");
-    } else {
-      playLose();
-      haptics.outcome("lose");
-    }
-    toast(
-      multiplier > 0
-        ? `${multiplier.toFixed(2)}x — ${formatUsd(pnl, true)}`
-        : `Missed — ${formatUsd(pnl, true)}`,
-      pnl >= 0 ? "win" : "lose",
-    );
-  };
-
-  // The wall sweeps from 0 to 1; the mark sits at 0.78.
-  const MARK = 0.78;
-
-  useEffect(() => {
-    if (phase !== "running") return;
-    startedAt.current = performance.now();
-
-    const frame = () => {
-      const t = (performance.now() - startedAt.current) / travelMs;
-      if (t >= 1) {
-        // Never fired — the wall ran past.
-        setWall(1);
-        finish(1 - MARK);
-        return;
-      }
-      setWall(t);
-      raf.current = requestAnimationFrame(frame);
-    };
-    raf.current = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, travelMs]);
-
-  const start = () => {
-    try {
-      actions.openLabPlay({
-        game: "snipe",
-        asset: TRADABLE_ASSETS[0],
-        stake,
-        side: "up",
-        multiplier: 1,
-      });
-    } catch {
-      toast("Not enough chips for that stake.", "lose");
-      return;
-    }
-    setWall(0);
-    setPhase("running");
-    playTick();
+  const take = () => {
+    if (!wall || !round.canEnter) return;
+    const limit =
+      wall.side === "up"
+        ? wall.ask.price + SLIPPAGE
+        : 1 - wall.ask.price - SLIPPAGE;
+    round.buy(wall.side, limit, SIZE);
   };
 
   useProgramConsole({
-    main:
-      phase === "running"
-        ? { label: "FIRE", pulse: true, onPress: () => finish(wall - MARK) }
-        : { label: "ARM", pulse: true, onPress: start },
-    knob: {
-      min: 0,
-      max: 3,
-      step: 1,
-      value: speedIndex,
-      label: "SPEED",
-      format: (v) => ["SLOW", "NORMAL", "FAST", "BLUR"][v],
-      onChange: (v) => phase !== "running" && setSpeedIndex(v),
-    },
-    numberWheel: {
-      min: 0,
-      max: ladder.length - 1,
-      step: 1,
-      value: stakeIndex,
-      label: "USDC",
-      format: (v) => `$${ladder[v]}`,
-      onChange: (v) => phase !== "running" && setStakeIndex(v),
-    },
+    main: live
+      ? { label: "CASH OUT", pulse: true, onPress: round.sell }
+      : {
+          label: round.status === "pending" ? "…" : "TAKE",
+          loading: round.status === "pending",
+          disabled: !round.canEnter || !wall,
+          pulse: !!wall && !closing,
+          onPress: take,
+        },
     status: {
-      left: phase === "running" ? "FIRE NOW" : "SNIPE",
-      right: `$${balance.toFixed(2)}`,
+      left: round.window
+        ? `${round.window.asset} ${round.secsLeft.toFixed(0)}s`
+        : "SNIPE",
+      right: `$${formatCollateral(round.balance)}`,
     },
-    lightShow: phase === "result",
+    lightShow: round.status === "settling" || settled,
   });
 
-  if (!admin) return <LabGate />;
-
-  if (phase === "result") {
+  if (settled) {
+    const won = round.status === "won";
+    const net =
+      round.payout != null && round.entryCost != null
+        ? Number(round.payout - round.entryCost) / 1e6
+        : null;
     return (
-      <ScreenRoot className="items-center gap-1">
+      <ScreenRoot className="items-center justify-center gap-1">
         <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          {outcome.multiplier >= SNIPE_MODEL.maxMultiplier
-            ? "Perfect shot"
-            : outcome.multiplier > 0
-              ? "Hit"
-              : "Missed"}
+          {round.status === "void" ? "Voided" : won ? "Sniped" : "Missed"}
         </div>
         <BigNumber
-          value={formatUsd(outcome.pnl, true)}
-          tone={outcome.pnl >= 0 ? "up" : "down"}
+          value={net == null ? "—" : `${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(2)}`}
+          tone={won ? "up" : "down"}
         />
-        <div className="text-[11px] font-semibold text-text-2">
-          {outcome.multiplier.toFixed(2)}x · off by{" "}
-          {(Math.abs(outcome.error) * 100).toFixed(1)}%
+      </ScreenRoot>
+    );
+  }
+
+  if (round.status === "settling") {
+    return (
+      <ScreenRoot className="items-center justify-center gap-2">
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
+          Window closed
         </div>
+        <BigNumber value="…" tone="brand" />
+      </ScreenRoot>
+    );
+  }
+
+  if (live && round.window) {
+    return (
+      <ScreenRoot className="gap-1.5">
+        <ScreenHeader
+          left={`${round.window.asset} ${round.side === "up" ? "UP" : "DOWN"}`}
+          right={`${round.secsLeft.toFixed(0)}s`}
+        />
+        <BigNumber
+          value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
+          tone="brand"
+        />
+        <ScreenRow
+          label="Paid"
+          value={
+            round.entryCost != null
+              ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
+              : "—"
+          }
+        />
+        <ScreenBar
+          progress={
+            round.window.intervalSec
+              ? 1 - round.secsLeft / round.window.intervalSec
+              : 0
+          }
+        />
       </ScreenRoot>
     );
   }
 
   return (
-    <ScreenRoot className="gap-3">
-      <ScreenHeader left="Snipe" right={`$${stake}`} />
-      <div className="text-center text-[11px] font-semibold text-text-2">
-        The wall drifts in. Press when it is close.
-      </div>
+    <ScreenRoot className="gap-2">
+      <ScreenHeader
+        left="Snipe"
+        right={round.window ? `${round.secsLeft.toFixed(0)}s` : "—"}
+      />
 
-      {/* Track: the mark is fixed, the wall sweeps toward it. */}
-      <div className="relative h-14 w-full overflow-hidden rounded-lg border border-[var(--color-line)] bg-black/60">
-        <div
-          className="absolute inset-y-0 w-[3px] bg-brand-500"
-          style={{ left: `${MARK * 100}%` }}
-        />
-        <div
-          className="absolute inset-y-1 w-2 rounded-sm bg-[var(--color-viz-cyan)]"
-          style={{
-            left: `${wall * 100}%`,
-            boxShadow: "0 0 12px var(--color-viz-cyan)",
-          }}
-        />
+      <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
+        {wall ? `${wall.side === "up" ? "Up" : "Down"} pays` : "waiting for a quote"}
       </div>
+      <BigNumber
+        value={multiple ? `${multiple.toFixed(2)}x` : "—"}
+        tone={closing ? "down" : "brand"}
+      />
+
+      {/* The wall: how much of the window is left before the quotes vanish. */}
+      <ScreenBar
+        progress={
+          round.window && round.window.intervalSec
+            ? 1 - round.secsLeft / round.window.intervalSec
+            : 0
+        }
+      />
 
       <ScreenRow
-        label="Speed"
-        value={["Slow", "Normal", "Fast", "Blur"][speedIndex]}
-        tone="brand"
+        label="Costs"
+        value={wall ? `$${(wall.ask.price * SIZE).toFixed(2)}` : "—"}
       />
-      <ScreenRow label="Perfect pays" value={`${SNIPE_MODEL.maxMultiplier}x`} />
+
+      <div
+        className={`text-center text-[10px] font-semibold uppercase tracking-widest ${
+          closing ? "text-down" : "text-text-3"
+        }`}
+      >
+        {round.message
+          ? round.message
+          : !round.window
+            ? "finding a window"
+            : round.balance === 0n
+              ? "fund your wallet"
+              : closing
+                ? "too late — quotes pulled"
+                : "wait for the payout · press take"}
+      </div>
     </ScreenRoot>
   );
 }

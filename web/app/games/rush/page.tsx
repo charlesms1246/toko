@@ -1,140 +1,135 @@
 "use client";
 
-/** Rush — take the deal, or push for a better one. Lab / admin only. */
+/**
+ * Rush — take the deal, or push for a better one.
+ *
+ * The banker is the order book. Once you hold a position, the resting bid on
+ * your side *is* the deal: sell now and take it, or push and let the window
+ * settle for the full 1.00 a winning contract pays.
+ *
+ * Nothing is offered that the market is not actually offering — the deal is a
+ * real bid with real size behind it, and it moves as the window runs down. Push
+ * too far and there may be no bid left to take, which is the same liquidity
+ * cliff the entry cutoff is built around.
+ */
 
-import { useState } from "react";
 import { useProgramConsole } from "@/lib/console/controls";
 import {
   BigNumber,
+  ScreenBar,
   ScreenHeader,
   ScreenRoot,
   ScreenRow,
 } from "@/components/screen/Screen";
-import { LabGate } from "@/components/games/LabShell";
-import { useRequireAdmin } from "@/lib/games/lab";
-import {
-  useBalance,
-  useStakeIndex,
-  useStoreActions,
-} from "@/lib/api/hooks";
-import { RUSH_MODEL, rushDeal } from "@/lib/games/lab-models";
-import { formatUsd } from "@/lib/api/math";
-import { useToast } from "@/components/ui/Toast";
-import { playLose, playStepUp, playWin } from "@/lib/sound";
-import haptics from "@/lib/haptics";
-import { TRADABLE_ASSETS } from "@/lib/api/prices";
+import { useMinuteRound } from "@/lib/games/useMinuteRound";
+import * as book from "@/lib/dreamdex/book";
+import { formatCollateral } from "@/lib/dreamdex/wallet";
 
-type Phase = "idle" | "offer" | "busted" | "taken";
+const SIZE = 1;
+const SLIPPAGE = 0.02;
 
 export default function RushPage() {
-  const admin = useRequireAdmin();
-  const balance = useBalance();
-  const { ladder, index: stakeIndex, stake, set: setStakeIndex } = useStakeIndex();
-  const actions = useStoreActions();
-  const toast = useToast();
+  const round = useMinuteRound();
+  const settled = ["won", "lost", "void"].includes(round.status);
+  const live = round.status === "open";
 
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [round, setRound] = useState(0);
-  const [appetiteIndex, setAppetiteIndex] = useState(1);
-  const [result, setResult] = useState(0);
+  const upAsk = book.best(round.book.yesAsks);
+  const contracts = Number(round.held) / 1e6;
 
-  const appetite = [0.85, 1, 1.2, 1.45][appetiteIndex];
-  const deal = rushDeal(round, appetite);
-
-  const startRun = () => {
-    // The stake is committed up front; the run either pays out or busts.
-    try {
-      actions.openLabPlay({
-        game: "rush",
-        asset: TRADABLE_ASSETS[0],
-        stake,
-        side: "up",
-        multiplier: 1,
-      });
-    } catch {
-      toast("Not enough chips for that stake.", "lose");
-      return;
-    }
-    setRound(0);
-    setResult(0);
-    setPhase("offer");
-  };
-
-  const take = () => {
-    const payout = stake * deal.multiplier;
-    actions.deposit(payout);
-    setResult(payout - stake);
-    setPhase("taken");
-    playWin();
-    haptics.outcome("win");
-    toast(`Took the deal — ${formatUsd(payout)}`, "win");
-  };
-
-  const push = () => {
-    if (Math.random() < deal.survival) {
-      playStepUp(round * 6);
-      haptics.press("medium");
-      setRound((r) => Math.min(RUSH_MODEL.maxRounds, r + 1));
-      return;
-    }
-    setResult(-stake);
-    setPhase("busted");
-    playLose();
-    haptics.outcome("lose");
-    toast(`Busted — ${formatUsd(-stake, true)}`, "lose");
-  };
-
-  const running = phase === "offer";
+  /** The banker's standing offer: the live bid on the side held. */
+  const deal = live
+    ? book.best(round.side === "up" ? round.book.yesBids : round.book.noBids)
+    : null;
+  const dealValue = deal ? deal.price * contracts : null;
+  const cost = round.entryCost != null ? Number(round.entryCost) / 1e6 : null;
 
   useProgramConsole({
-    main: running
-      ? { label: "TAKE", pulse: true, onPress: take }
-      : { label: "DEAL", pulse: true, onPress: startRun },
-    action1: {
-      label: "PUSH",
-      pulse: running,
-      disabled: !running || round >= RUSH_MODEL.maxRounds,
-      onPress: push,
-    },
-    knob: {
-      min: 0,
-      max: 3,
-      step: 1,
-      value: appetiteIndex,
-      label: "APPETITE",
-      format: (v) => ["LOW", "MED", "HIGH", "WILD"][v],
-      onChange: (v) => !running && setAppetiteIndex(v),
-    },
-    numberWheel: {
-      min: 0,
-      max: ladder.length - 1,
-      step: 1,
-      value: stakeIndex,
-      label: "USDC",
-      format: (v) => `$${ladder[v]}`,
-      onChange: (v) => !running && setStakeIndex(v),
-    },
+    main: live
+      ? {
+          label: deal ? "TAKE THE DEAL" : "NO DEAL",
+          pulse: !!deal,
+          disabled: !deal,
+          onPress: round.sell,
+        }
+      : {
+          label: round.status === "pending" ? "…" : "ANTE UP",
+          loading: round.status === "pending",
+          disabled: !round.canEnter || !upAsk,
+          onPress: () =>
+            upAsk && round.buy("up", upAsk.price + SLIPPAGE, SIZE),
+        },
+    // No PUSH key: pushing *is* declining the deal, so a button for it would
+    // be a control that does nothing. The console offers the deal; ignoring it
+    // is the push.
     status: {
-      left: running ? `ROUND ${round + 1}` : "RUSH",
-      right: `$${balance.toFixed(2)}`,
+      left: round.window
+        ? `${round.window.asset} ${round.secsLeft.toFixed(0)}s`
+        : "RUSH",
+      right: `$${formatCollateral(round.balance)}`,
     },
-    lightShow: phase === "taken" || phase === "busted",
+    lightShow: round.status === "settling" || settled,
   });
 
-  if (!admin) return <LabGate />;
-
-  if (phase === "taken" || phase === "busted") {
+  if (settled) {
+    const won = round.status === "won";
+    const net =
+      round.payout != null && cost != null
+        ? Number(round.payout) / 1e6 - cost
+        : null;
     return (
-      <ScreenRoot className="items-center gap-1">
+      <ScreenRoot className="items-center justify-center gap-1">
         <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          {phase === "taken" ? "Deal taken" : "Busted"}
+          {round.status === "void" ? "Voided" : won ? "Pushed and won" : "Busted"}
         </div>
         <BigNumber
-          value={formatUsd(result, true)}
-          tone={result >= 0 ? "up" : "down"}
+          value={net == null ? "—" : `${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(2)}`}
+          tone={won ? "up" : "down"}
         />
-        <div className="text-[11px] font-semibold text-text-2">
-          {round + 1} round{round === 0 ? "" : "s"} deep
+      </ScreenRoot>
+    );
+  }
+
+  if (round.status === "settling") {
+    return (
+      <ScreenRoot className="items-center justify-center gap-2">
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
+          Pushed to the buzzer
+        </div>
+        <BigNumber value="…" tone="brand" />
+      </ScreenRoot>
+    );
+  }
+
+  if (live && round.window) {
+    const ahead = dealValue != null && cost != null && dealValue >= cost;
+    return (
+      <ScreenRoot className="gap-1.5">
+        <ScreenHeader
+          left={`${round.window.asset} ${round.side === "up" ? "UP" : "DOWN"}`}
+          right={`${round.secsLeft.toFixed(0)}s`}
+        />
+        <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
+          The deal
+        </div>
+        <BigNumber
+          value={dealValue == null ? "no bid" : `$${dealValue.toFixed(2)}`}
+          tone={ahead ? "up" : "down"}
+        />
+        <ScreenRow label="Paid" value={cost != null ? `$${cost.toFixed(2)}` : "—"} />
+        <ScreenRow
+          label="Push pays"
+          value={`$${contracts.toFixed(2)}`}
+          tone="brand"
+        />
+        <ScreenBar
+          progress={
+            round.window.intervalSec
+              ? 1 - round.secsLeft / round.window.intervalSec
+              : 0
+          }
+        />
+        <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
+          take the deal, or hold and let it ride
         </div>
       </ScreenRoot>
     );
@@ -144,48 +139,28 @@ export default function RushPage() {
     <ScreenRoot className="gap-2">
       <ScreenHeader
         left="Rush"
-        right={running ? `${round + 1}/${RUSH_MODEL.maxRounds}` : `$${stake}`}
+        right={round.window ? `${round.secsLeft.toFixed(0)}s` : "—"}
       />
-      <div className="text-center text-[11px] font-semibold text-text-2">
-        Take the deal, or push for a better one.
+      <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
+        Up pays
       </div>
-
-      {running ? (
-        <>
-          <BigNumber value={`${deal.multiplier.toFixed(2)}x`} tone="brand" />
-          <ScreenRow label="Pays" value={formatUsd(stake * deal.multiplier)} />
-          <ScreenRow
-            label="Push survives"
-            value={`${(deal.survival * 100).toFixed(0)}%`}
-            tone={deal.survival > 0.5 ? "up" : "down"}
-          />
-          <div className="flex justify-center gap-1 pt-1">
-            {Array.from({ length: RUSH_MODEL.maxRounds }, (_, i) => (
-              <span
-                key={i}
-                className={`h-1.5 w-3 rounded-full ${
-                  i <= round ? "bg-brand-500" : "bg-white/15"
-                }`}
-              />
-            ))}
-          </div>
-        </>
-      ) : (
-        <>
-          <ScreenRow
-            label="Appetite"
-            value={["Low", "Medium", "High", "Wild"][appetiteIndex]}
-            tone="brand"
-          />
-          <ScreenRow
-            label="Opening"
-            value={`${rushDeal(0, appetite).multiplier.toFixed(2)}x`}
-          />
-          <div className="pt-1 text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
-            Press deal to start
-          </div>
-        </>
-      )}
+      <BigNumber
+        value={upAsk ? `${book.multipleAt(upAsk.price).toFixed(2)}x` : "—"}
+        tone="brand"
+      />
+      <ScreenRow
+        label="Ante"
+        value={upAsk ? `$${(upAsk.price * SIZE).toFixed(2)}` : "—"}
+      />
+      <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
+        {round.message
+          ? round.message
+          : !round.window
+            ? "finding a window"
+            : round.balance === 0n
+              ? "fund your wallet"
+              : "ante up, then take or push"}
+      </div>
     </ScreenRoot>
   );
 }

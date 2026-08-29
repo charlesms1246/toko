@@ -123,6 +123,14 @@ export function useMinuteRound(): MinuteRound {
     if (pool) return book.track(pool, 1200);
   }, [pool]);
 
+  // Approve the window's pool while the console is idle. Every window is a new
+  // pool, so without this each round pays for an `approve` ahead of its order —
+  // two transactions on the press instead of one.
+  useEffect(() => {
+    if (!pool || status !== "idle") return;
+    void orders.preApprove(pool);
+  }, [pool, status]);
+
   const secsLeft = window ? Math.max(0, window.expiry - now / 1000) : 0;
   const impliedUp = book.impliedUp(bookState.book);
 

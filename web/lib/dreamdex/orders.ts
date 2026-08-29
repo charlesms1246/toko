@@ -21,7 +21,15 @@
  * - **Fills report `quantityFilled`, not `quantity`.**
  */
 
-import { createPublicClient, http, parseAbi, type Address } from "viem";
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  maxUint256,
+  parseAbi,
+  type Address,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { CHAIN, COLLATERAL, GAS_LIMIT, HTTP_RPC_URL } from "./config";
 import { getClient } from "./client";
 import { exportKey } from "./wallet";
@@ -47,6 +55,11 @@ export interface Grid {
 
 /** Cached per pool — the grid is fixed for a pool's lifetime. */
 const grids = new Map<string, Grid>();
+
+const erc20Abi = parseAbi([
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 value) returns (bool)",
+]);
 
 const poolAbi = parseAbi([
   "function getOrderBookParameters() view returns (uint256 tickSize, uint256 minQuantity, uint256 lotSize)",
@@ -210,6 +223,60 @@ export async function sell(
     return summarise(res);
   } catch (err) {
     return asOutcome(err);
+  }
+}
+
+/**
+ * Approve the collateral to a pool ahead of time.
+ *
+ * Escrow is pulled by the pool, so a buy needs an ERC-20 allowance to *that*
+ * pool — and every window is a new pool, so without this every round pays for an
+ * `approve` before its order: two transactions and roughly twice the wait.
+ * Calling this while the console is idle moves that cost off the press.
+ *
+ * Cheap to call repeatedly: the SDK caches approved (token, spender) pairs per
+ * trader, so after the first success it is a no-op with no request at all.
+ */
+const approved = new Set<string>();
+
+export async function preApprove(pool: string): Promise<void> {
+  const key = exportKey();
+  if (!key) return;
+  const spender = pool.toLowerCase();
+  if (approved.has(spender)) return;
+
+  try {
+    const account = privateKeyToAccount(key);
+    const allowance = (await publicClient.readContract({
+      address: COLLATERAL.address,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [account.address, pool as Address],
+    })) as bigint;
+
+    // Anything short of a full allowance gets topped up to max, matching what
+    // the SDK's own on-demand approval does.
+    if (allowance > ONE * 1_000_000n) {
+      approved.add(spender);
+      return;
+    }
+
+    const wallet = createWalletClient({
+      account,
+      chain: CHAIN,
+      transport: http(HTTP_RPC_URL),
+    });
+    const hash = await wallet.writeContract({
+      address: COLLATERAL.address,
+      abi: erc20Abi,
+      functionName: "approve",
+      args: [pool as Address, maxUint256],
+      gas: GAS_LIMIT,
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    approved.add(spender);
+  } catch {
+    // Not fatal — `placeOrder` approves on demand if this did not land.
   }
 }
 

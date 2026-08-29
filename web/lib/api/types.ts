@@ -20,8 +20,8 @@ export const GAME_LABELS: Record<GameId, string> = {
 };
 
 /** Games that ship to everyone. The rest are admin-gated lab experiments. */
-export const LIVE_GAMES: GameId[] = ["lucky", "moonshot"];
-export const LAB_GAMES: GameId[] = ["pin", "snipe", "press", "rush", "breakout"];
+export const LIVE_GAMES: GameId[] = ["lucky", "moonshot", "snipe", "rush"];
+export const LAB_GAMES: GameId[] = ["pin", "press", "breakout"];
 export const MINIGAMES: MinigameId[] = ["line-rider", "flappy-piper"];
 
 export type PlayStatus =
