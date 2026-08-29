@@ -2,14 +2,33 @@
 
 import Image from "next/image";
 import { MenuRow, MenuSection, StatTile } from "@/components/menu/MenuUI";
-import { useBalance, useStats, useUser } from "@/lib/api/hooks";
+import { useEffect, useSyncExternalStore } from "react";
+import { useUser } from "@/lib/api/hooks";
+import { formatCollateral } from "@/lib/dreamdex/wallet";
+import * as statsStore from "@/lib/dreamdex/stats";
+import * as wallet from "@/lib/dreamdex/wallet";
 import { formatUsd } from "@/lib/api/math";
 
 export default function MenuHub() {
   const user = useUser();
-  const balance = useBalance();
-  const stats = useStats();
-  const netPnl = Number(stats.netPnl);
+  const walletState = useSyncExternalStore(
+    wallet.subscribe,
+    wallet.getSnapshot,
+    wallet.getServerSnapshot,
+  );
+  const { stats } = useSyncExternalStore(
+    statsStore.subscribe,
+    statsStore.getSnapshot,
+    statsStore.getServerSnapshot,
+  );
+
+  useEffect(() => {
+    wallet.ensureWallet();
+    void wallet.refresh();
+    void statsStore.load();
+  }, []);
+
+  const netPnl = stats.netPnl;
 
   return (
     <>
@@ -33,7 +52,7 @@ export default function MenuHub() {
             height={16}
           />
           <span className="text-sm font-black tabular-nums">
-            {balance.toFixed(2)}
+            {formatCollateral(walletState.collateral)}
           </span>
         </div>
       </div>

@@ -1,16 +1,35 @@
 "use client";
 
 import { MenuRow, MenuSection, StatTile } from "@/components/menu/MenuUI";
-import { useStats, useUser } from "@/lib/api/hooks";
+import { useEffect, useSyncExternalStore } from "react";
+import { useUser } from "@/lib/api/hooks";
+import { formatCollateral } from "@/lib/dreamdex/wallet";
+import * as statsStore from "@/lib/dreamdex/stats";
+import * as wallet from "@/lib/dreamdex/wallet";
 import { formatUsd } from "@/lib/api/math";
 import { GAME_LABELS, type GameId } from "@/lib/api/types";
 import { useToast } from "@/components/ui/Toast";
 
 export default function AccountPage() {
   const user = useUser();
-  const stats = useStats();
+  const walletState = useSyncExternalStore(
+    wallet.subscribe,
+    wallet.getSnapshot,
+    wallet.getServerSnapshot,
+  );
+  const { stats } = useSyncExternalStore(
+    statsStore.subscribe,
+    statsStore.getSnapshot,
+    statsStore.getServerSnapshot,
+  );
+
+  useEffect(() => {
+    wallet.ensureWallet();
+    void wallet.refresh();
+    void statsStore.load();
+  }, []);
   const toast = useToast();
-  const netPnl = Number(stats.netPnl);
+  const netPnl = stats.netPnl;
 
   return (
     <>
@@ -29,7 +48,7 @@ export default function AccountPage() {
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-2">
-        <StatTile label="Plays" value={String(stats.gamesPlayed)} />
+        <StatTile label="Plays" value={String(stats.played)} />
         <StatTile
           label="Win rate"
           value={`${(stats.winRate * 100).toFixed(0)}%`}
@@ -39,11 +58,11 @@ export default function AccountPage() {
           value={formatUsd(netPnl, true)}
           tone={netPnl >= 0 ? "up" : "down"}
         />
-        <StatTile label="Volume" value={`$${stats.totalVolume}`} />
+        <StatTile label="Volume" value={`$${stats.volume.toFixed(2)}`} />
         <StatTile label="Best streak" value={String(stats.maxStreak)} tone="brand" />
         <StatTile
           label="Best multiple"
-          value={`${stats.bestMultiplier}x`}
+          value={`${stats.bestMultiple.toFixed(2)}x`}
           tone="brand"
         />
       </div>
@@ -52,11 +71,11 @@ export default function AccountPage() {
         <MenuRow label="Handle" value={`@${user.username}`} href="/menu/username" />
         <MenuRow
           label="Favourite game"
-          value={GAME_LABELS[stats.favoriteGame as GameId] ?? stats.favoriteGame}
+          value={stats.assets.join(", ") || "—"}
         />
         <MenuRow
           label="Playing since"
-          value={new Date(stats.firstPlayAt).toLocaleDateString()}
+          value={stats.firstAt ? new Date(stats.firstAt).toLocaleDateString() : "—"}
         />
       </MenuSection>
 
@@ -72,7 +91,7 @@ export default function AccountPage() {
           }}
         />
         <MenuRow label="Network" value="Somnia testnet" />
-        <MenuRow label="Chips" value={`$${user.balance} USDC`} />
+        <MenuRow label="Balance" value={`$${formatCollateral(walletState.collateral)} tUSDC`} />
       </MenuSection>
     </>
   );

@@ -3,39 +3,53 @@
 /**
  * The P&L share card.
  *
- * Composed from the shipped card art: a win/lose template, the pre-baked
- * classic console shot, and the screen plate. Picking a different settled play
- * re-renders the card.
+ * Composed from the shipped card art, over a **real settled round** — the
+ * numbers come from the wallet's own fills and the market's oracle result, so
+ * the card can only show something that actually happened.
  */
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import TapTarget from "@/components/ui/TapTarget";
 import { EmptyState } from "@/components/menu/MenuUI";
-import { usePlays, useUser } from "@/lib/api/hooks";
-import { GAME_LABELS, type GameId } from "@/lib/api/types";
+import { useUser } from "@/lib/api/hooks";
 import { formatUsd } from "@/lib/api/math";
 import { useToast } from "@/components/ui/Toast";
 import { playSfx } from "@/lib/sound";
+import * as stats from "@/lib/dreamdex/stats";
+import * as wallet from "@/lib/dreamdex/wallet";
 
 export default function SharePage() {
-  const plays = usePlays(undefined, 30);
+  const state = useSyncExternalStore(
+    stats.subscribe,
+    stats.getSnapshot,
+    stats.getServerSnapshot,
+  );
   const user = useUser();
   const toast = useToast();
   const [index, setIndex] = useState(0);
 
-  const settled = plays.filter((p) =>
-    ["won", "lost", "cashed_out"].includes(p.status),
-  );
+  useEffect(() => {
+    wallet.ensureWallet();
+    void stats.load();
+  }, []);
+
+  if (!state.at && !state.error) {
+    return <EmptyState>Reading your record…</EmptyState>;
+  }
+
+  const settled = state.stats.rounds.filter((r) => r.won !== null);
 
   if (!settled.length) {
-    return <EmptyState>Finish a play to make a card.</EmptyState>;
+    return <EmptyState>Settle a round to make a card.</EmptyState>;
   }
 
   const play = settled[Math.min(index, settled.length - 1)];
-  const pnl = Number(play.pnl);
+  const pnl = play.pnl;
   const won = pnl >= 0;
-  const roi = (pnl / Number(play.stake)) * 100;
+  const roi = play.cost > 0 ? (pnl / play.cost) * 100 : 0;
+  const multiple = play.entryPrice > 0 ? 1 / play.entryPrice : 0;
+  const label = play.side === 0 ? "UP" : "DOWN";
 
   return (
     <>
@@ -65,13 +79,13 @@ export default function SharePage() {
               unoptimized
             />
             <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">
-              {GAME_LABELS[play.game as GameId] ?? play.game}
+              {play.asset} {label}
             </span>
           </div>
 
           <div className="mt-4">
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/60">
-              {play.status === "cashed_out" ? "Cashed out" : won ? "Won" : "Rekt"}
+              {play.soldEarly ? "Cashed out" : won ? "Won" : "Rekt"}
             </div>
             <div
               className={`mt-1 text-4xl font-black tabular-nums ${
@@ -86,7 +100,7 @@ export default function SharePage() {
               }`}
             >
               {roi >= 0 ? "+" : ""}
-              {roi.toFixed(0)}% · {play.multiplier.toFixed(2)}x
+              {roi.toFixed(0)}% · {multiple.toFixed(2)}x
             </div>
           </div>
 
@@ -107,7 +121,7 @@ export default function SharePage() {
           <div className="flex items-end justify-between">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">
-                {play.params.asset} · ${play.stake}
+                {play.asset} · ${play.cost.toFixed(2)}
               </div>
               <div className="text-sm font-extrabold text-white">
                 @{user.username}
@@ -147,7 +161,7 @@ export default function SharePage() {
           playSfx("tap");
           void navigator.clipboard
             ?.writeText(
-              `${formatUsd(pnl, true)} on ${GAME_LABELS[play.game as GameId] ?? play.game} — https://toko.app/@${user.username}`,
+              `${formatUsd(pnl, true)} on ${play.asset} ${label} — https://toko.app/@${user.username}`,
             )
             .then(() => toast("Card text copied", "win"))
             .catch(() => toast("Couldn't copy that.", "lose"));
