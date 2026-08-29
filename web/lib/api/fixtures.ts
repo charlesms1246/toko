@@ -1,4 +1,4 @@
-import type { GameId, PlayStatus } from "./types";
+import type { GameId } from "./types";
 
 export interface AchievementDef {
   slug: string;
@@ -33,41 +33,6 @@ export const ACHIEVEMENTS: AchievementDef[] = [
 
 export const achievementImage = (slug: string) =>
   `/assets/achievements/achievement-${slug.replace(/_/g, "-")}.webp`;
-
-/** Seed history, newest first. */
-export interface SeedPlay {
-  game: GameId;
-  asset: string;
-  status: PlayStatus;
-  stake: number;
-  mult: number;
-  pnl: number;
-  minsAgo: number;
-}
-
-export const SEED_HISTORY: SeedPlay[] = [
-  { game: "lucky", asset: "BTC", status: "won", stake: 25, mult: 3, pnl: 50, minsAgo: 4 },
-  { game: "lucky", asset: "SOMI", status: "cashed_out", stake: 10, mult: 5, pnl: 22, minsAgo: 60 },
-  { game: "lucky", asset: "SOL", status: "lost", stake: 50, mult: 3, pnl: -50, minsAgo: 1740 },
-  { game: "lucky", asset: "ETH", status: "won", stake: 5, mult: 2, pnl: 5, minsAgo: 2040 },
-  { game: "moonshot", asset: "ETH", status: "lost", stake: 25, mult: 25, pnl: -25, minsAgo: 4800 },
-  { game: "lucky", asset: "BTC", status: "won", stake: 10, mult: 10, pnl: 90, minsAgo: 5940 },
-  { game: "moonshot", asset: "BTC", status: "cashed_out", stake: 10, mult: 10, pnl: 34, minsAgo: 7440 },
-  { game: "lucky", asset: "SOMI", status: "cashed_out", stake: 10, mult: 5, pnl: 18, minsAgo: 7980 },
-  { game: "moonshot", asset: "SOL", status: "won", stake: 25, mult: 5, pnl: 100, minsAgo: 8760 },
-  { game: "lucky", asset: "SOMI", status: "won", stake: 50, mult: 3, pnl: 100, minsAgo: 9000 },
-  { game: "lucky", asset: "ETH", status: "won", stake: 100, mult: 2, pnl: 100, minsAgo: 9540 },
-];
-
-export const DEMO_ADDRESS =
-  "0xa3f08c7e5b1d49260e8a3f7c6d20b9e41f5c8a037e94d2b60a3c5f81e9b27d4c";
-
-export const LEADERBOARD_HANDLES = [
-  "0xvitalik", "0xdegen", "moonboi", "tokomaster", "rangequeen",
-  "shortking", "diamondhands", "quickdraw", "thetagang", "sizematters",
-  "luckystrike", "candleman", "wickhunter", "gridbot", "apeindex",
-  "nocoiner", "fatfinger", "rugpull", "hodlite", "scalpel",
-];
 
 export const GAME_TAGLINES: Record<GameId, string> = {
   lucky: "Pick a side. Pick a payout.",
