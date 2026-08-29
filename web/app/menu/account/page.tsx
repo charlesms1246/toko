@@ -7,7 +7,6 @@ import { formatCollateral } from "@/lib/dreamdex/wallet";
 import * as statsStore from "@/lib/dreamdex/stats";
 import * as wallet from "@/lib/dreamdex/wallet";
 import { formatUsd } from "@/lib/api/math";
-import { GAME_LABELS, type GameId } from "@/lib/api/types";
 import { useToast } from "@/components/ui/Toast";
 
 export default function AccountPage() {
