@@ -6,11 +6,14 @@ import { ConsoleControlsProvider } from "@/lib/console/controls";
 import { ToastProvider } from "@/components/ui/Toast";
 import { useHydrateStore } from "@/lib/api/hooks";
 import { music } from "@/lib/sound";
+import { start as startPriceFeed } from "@/lib/api/prices";
 
 function Hydrate() {
   useHydrateStore();
   useEffect(() => {
     music.hydrate();
+    // Open the oracle feed before any screen that shows a price is reached.
+    startPriceFeed();
   }, []);
   return null;
 }
