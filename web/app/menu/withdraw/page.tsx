@@ -1,19 +1,71 @@
 "use client";
 
-import { useState } from "react";
+/**
+ * Send tUSDC out of the embedded wallet.
+ *
+ * A real ERC-20 transfer, signed by the burner key. This is the counterpart to
+ * exporting the key: a player who wants their testnet balance somewhere else can
+ * move it without handling the key at all.
+ */
+
+import { useCallback, useState, useSyncExternalStore } from "react";
+import { createWalletClient, http, isAddress, parseAbi, parseUnits, type Address } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import TapTarget from "@/components/ui/TapTarget";
-import { useBalance, useUser } from "@/lib/api/hooks";
-import { withdraw } from "@/lib/api/store";
+import { MenuRow } from "@/components/menu/MenuUI";
 import { useToast } from "@/components/ui/Toast";
+import { CHAIN, COLLATERAL, GAS_LIMIT, HTTP_RPC_URL, explorerTx } from "@/lib/dreamdex/config";
+import * as wallet from "@/lib/dreamdex/wallet";
+
+const erc20 = parseAbi(["function transfer(address to, uint256 value) returns (bool)"]);
 
 export default function WithdrawPage() {
-  const balance = useBalance();
-  const user = useUser();
   const toast = useToast();
+  const state = useSyncExternalStore(
+    wallet.subscribe,
+    wallet.getSnapshot,
+    wallet.getServerSnapshot,
+  );
   const [amount, setAmount] = useState("");
+  const [to, setTo] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [lastTx, setLastTx] = useState<string | null>(null);
 
+  const balance = Number(state.collateral) / 10 ** COLLATERAL.decimals;
   const value = Number(amount);
-  const valid = Number.isFinite(value) && value > 0 && value <= balance;
+  const valid =
+    Number.isFinite(value) && value > 0 && value <= balance && isAddress(to);
+
+  const send = useCallback(async () => {
+    const key = wallet.exportKey();
+    if (!key || !valid) return;
+    setBusy(true);
+    try {
+      const client = createWalletClient({
+        account: privateKeyToAccount(key),
+        chain: CHAIN,
+        transport: http(HTTP_RPC_URL),
+      });
+      const hash = await client.writeContract({
+        address: COLLATERAL.address,
+        abi: erc20,
+        functionName: "transfer",
+        args: [to as Address, parseUnits(amount, COLLATERAL.decimals)],
+        gas: GAS_LIMIT,
+      });
+      setLastTx(hash);
+      setAmount("");
+      toast(`Sent ${value.toFixed(2)} ${COLLATERAL.symbol}`, "win");
+      await wallet.refresh();
+    } catch (err) {
+      toast(
+        err instanceof Error ? err.message.split("\n")[0] : "Transfer failed",
+        "lose",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [amount, to, valid, value, toast]);
 
   return (
     <>
@@ -22,8 +74,9 @@ export default function WithdrawPage() {
           Available
         </div>
         <div className="mt-1 text-3xl font-black tabular-nums">
-          ${balance.toFixed(2)}
+          {wallet.formatCollateral(state.collateral)}
         </div>
+        <div className="mt-1 text-[11px] text-text-3">{COLLATERAL.symbol}</div>
       </div>
 
       <label className="mb-2 block px-1 text-[11px] font-bold uppercase tracking-[0.18em] text-text-3">
@@ -41,7 +94,7 @@ export default function WithdrawPage() {
         <button
           type="button"
           className="shrink-0 rounded-full border border-[var(--color-line-strong)] px-3 py-1 text-[11px] font-bold text-text-2"
-          onClick={() => setAmount(String(balance.toFixed(2)))}
+          onClick={() => setAmount(balance.toFixed(2))}
         >
           MAX
         </button>
@@ -50,30 +103,37 @@ export default function WithdrawPage() {
       <label className="mb-2 block px-1 text-[11px] font-bold uppercase tracking-[0.18em] text-text-3">
         Destination
       </label>
-      <div className="mb-6 truncate rounded-2xl border border-[var(--color-line)] bg-white/[.03] px-4 py-3 font-mono text-xs text-text-2">
-        {user.address}
-      </div>
+      <input
+        value={to}
+        onChange={(e) => setTo(e.target.value.trim())}
+        placeholder="0x…"
+        spellCheck={false}
+        className="mb-6 w-full rounded-2xl border border-[var(--color-line-strong)] bg-white/5 px-4 py-3 font-mono text-xs outline-none placeholder:text-text-3"
+      />
 
       <TapTarget
         className="w-full rounded-full bg-brand-500 py-3.5 text-sm font-extrabold text-black disabled:opacity-40"
-        disabled={!valid}
+        disabled={!valid || busy}
         haptic="high"
-        onClick={() => {
-          const result = withdraw(value);
-          if (result.ok) {
-            toast(`Withdrew $${value.toFixed(2)}`, "win");
-            setAmount("");
-          } else {
-            toast("Not enough chips for that withdrawal.", "lose");
-          }
-        }}
+        onClick={() => void send()}
       >
-        Withdraw
+        {busy ? "Sending…" : "Withdraw"}
       </TapTarget>
 
+      {lastTx && (
+        <div className="mt-4">
+          <MenuRow
+            label="Last withdrawal"
+            value={`${lastTx.slice(0, 10)}…↗`}
+            href={explorerTx(lastTx)}
+            external
+          />
+        </div>
+      )}
+
       <p className="mt-4 px-1 text-[11px] leading-relaxed text-text-3">
-        Withdrawals settle to your Somnia address as USDC. This demo moves the
-        balance locally and records a transaction.
+        A real transfer on Somnia testnet, signed by this device&apos;s wallet.
+        Check the destination — it cannot be undone.
       </p>
     </>
   );

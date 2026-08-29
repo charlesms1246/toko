@@ -41,7 +41,7 @@ export default function AccountPage() {
             @{user.username}
           </div>
           <div className="text-xs text-text-3">
-            Signed in with {user.provider}
+            Signed in with {"Embedded wallet"}
           </div>
         </div>
       </div>

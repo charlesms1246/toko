@@ -77,11 +77,6 @@ export default function MenuHub() {
           href="/menu/wallet"
         />
         <MenuRow
-          icon="/assets/icons/chip-logo.webp"
-          label="Deposit"
-          href="/menu/deposit"
-        />
-        <MenuRow
           icon="/assets/icons/icon-return.webp"
           label="Withdraw"
           href="/menu/withdraw"

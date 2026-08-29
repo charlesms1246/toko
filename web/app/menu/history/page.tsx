@@ -1,80 +1,83 @@
 "use client";
 
+/**
+ * Round history — every round this wallet has played, rebuilt from its fills.
+ */
+
+import { useEffect, useSyncExternalStore } from "react";
 import { EmptyState } from "@/components/menu/MenuUI";
-import GameIcon from "@/components/games/GameIcon";
-import { usePlays } from "@/lib/api/hooks";
-import { GAME_LABELS, LAB_GAMES, LIVE_GAMES, type GameId } from "@/lib/api/types";
-import { formatUsd } from "@/lib/api/math";
-
-const STATUS_LABEL: Record<string, string> = {
-  won: "Won",
-  lost: "Lost",
-  cashed_out: "Cashed out",
-  open: "Live",
-  pending: "Opening",
-  error: "Error",
-};
-
-function relative(iso: string): string {
-  const mins = Math.round((Date.now() - Date.parse(iso)) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
+import { explorerTx } from "@/lib/dreamdex/config";
+import * as statsStore from "@/lib/dreamdex/stats";
+import * as wallet from "@/lib/dreamdex/wallet";
 
 export default function HistoryPage() {
-  const plays = usePlays(undefined, 60);
+  const { stats, at, error } = useSyncExternalStore(
+    statsStore.subscribe,
+    statsStore.getSnapshot,
+    statsStore.getServerSnapshot,
+  );
 
-  if (!plays.length) return <EmptyState>No plays yet.</EmptyState>;
+  useEffect(() => {
+    wallet.ensureWallet();
+    void statsStore.load();
+  }, []);
+
+  if (error) {
+    return (
+      <p className="rounded-2xl border border-[var(--color-line)] px-4 py-3 text-[11px] text-down">
+        {error}
+      </p>
+    );
+  }
+  if (!at) return <EmptyState>Reading the chain…</EmptyState>;
+  if (!stats.rounds.length) {
+    return <EmptyState>No rounds yet. Play a window to make one.</EmptyState>;
+  }
 
   return (
-    <div className="space-y-2">
-      {plays.map((play) => {
-        const pnl = Number(play.pnl);
-        const live = play.status === "open" || play.status === "pending";
-        const known =
-          LIVE_GAMES.includes(play.game) || LAB_GAMES.includes(play.game);
-        return (
-          <div
-            key={play.id}
-            className="flex items-center gap-3 rounded-2xl border border-[var(--color-line)] bg-white/[.03] px-4 py-3"
-          >
-            <span className="text-text-2">
-              {known ? (
-                <GameIcon game={play.game as GameId} size={22} />
-              ) : (
-                <span className="text-lg">🎮</span>
+    <div className="overflow-hidden rounded-2xl border border-[var(--color-line)]">
+      {stats.rounds.map((r) => (
+        <a
+          key={r.marketAddress}
+          href={explorerTx(r.txHash)}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-3 border-b border-[var(--color-line)] px-4 py-3 last:border-b-0 transition hover:bg-white/[.04]"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-bold">
+              {r.asset}{" "}
+              <span className={r.side === 0 ? "text-up" : "text-down"}>
+                {r.side === 0 ? "UP" : "DOWN"}
+              </span>
+              {r.soldEarly && (
+                <span className="ml-2 text-[11px] text-text-3">sold early</span>
               )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-bold">
-                {GAME_LABELS[play.game as GameId] ?? play.game}
-                <span className="ml-1.5 font-semibold text-text-3">
-                  {play.params.asset}
-                </span>
-              </div>
-              <div className="text-[11px] text-text-3">
-                {STATUS_LABEL[play.status] ?? play.status} ·{" "}
-                {play.multiplier.toFixed(2)}x · {relative(play.openedAt)}
-              </div>
             </div>
-            <div className="text-right">
-              <div
-                className={`text-sm font-black tabular-nums ${
-                  live ? "text-brand-500" : pnl >= 0 ? "text-up" : "text-down"
-                }`}
-              >
-                {formatUsd(pnl, true)}
-              </div>
-              <div className="text-[11px] tabular-nums text-text-3">
-                ${play.stake}
-              </div>
+            <div className="text-[11px] text-text-3">
+              {r.contracts.toFixed(2)} @ {r.entryPrice.toFixed(3)} ·{" "}
+              {r.won === null ? "live" : r.voided ? "voided" : r.won ? "won" : "lost"}
             </div>
           </div>
-        );
-      })}
+          <div className="text-right">
+            <div
+              className={`text-sm font-black tabular-nums ${
+                r.won === null ? "text-text-2" : r.pnl >= 0 ? "text-up" : "text-down"
+              }`}
+            >
+              {r.won === null
+                ? `$${r.cost.toFixed(2)}`
+                : `${r.pnl >= 0 ? "+" : "−"}$${Math.abs(r.pnl).toFixed(2)}`}
+            </div>
+            <div className="text-[11px] text-text-3">
+              {new Date(r.at).toLocaleTimeString(undefined, {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </div>
+          </div>
+        </a>
+      ))}
     </div>
   );
 }

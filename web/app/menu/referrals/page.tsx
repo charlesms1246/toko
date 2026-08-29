@@ -1,77 +1,79 @@
 "use client";
 
-import { StatTile } from "@/components/menu/MenuUI";
+/**
+ * Your share link.
+ *
+ * There is deliberately no invite count or earnings figure here. Attribution
+ * would need an indexer keyed on the referral code, and there isn't one — so
+ * the numbers would be invented, which is exactly what the project forbids.
+ *
+ * The link itself is real, and the co-op challenge in Phase 8 is the mechanic
+ * that gives it teeth: an invite that *is* a resting order, so bringing someone
+ * in and adding depth to the book are the same action.
+ */
+
+import Image from "next/image";
 import TapTarget from "@/components/ui/TapTarget";
-import { useReferral } from "@/lib/api/hooks";
-import { claimReferral } from "@/lib/api/store";
+import { MenuRow, MenuSection } from "@/components/menu/MenuUI";
+import { useReferral, useUser } from "@/lib/api/hooks";
 import { useToast } from "@/components/ui/Toast";
+import { explorerAddress } from "@/lib/dreamdex/config";
 
 export default function ReferralsPage() {
   const referral = useReferral();
+  const user = useUser();
   const toast = useToast();
-  const claimable = Number(referral.claimable);
+
+  const copy = (text: string, what: string) => {
+    void navigator.clipboard
+      ?.writeText(text)
+      .then(() => toast(`${what} copied`, "win"))
+      .catch(() => toast("Couldn't copy that.", "lose"));
+  };
 
   return (
     <>
-      <p className="mb-5 px-1 text-sm leading-relaxed text-text-2">
-        Share your link. When someone you invited plays, you earn a cut of the
-        house edge on every play they make.
-      </p>
-
-      <div className="mb-5 grid grid-cols-3 gap-2">
-        <StatTile label="Invited" value={String(referral.invited)} />
-        <StatTile label="Earned" value={`$${referral.earned}`} tone="up" />
-        <StatTile
-          label="Claimable"
-          value={`$${referral.claimable}`}
-          tone="brand"
+      <div className="mb-6 flex flex-col items-center rounded-2xl border border-[var(--color-line)] bg-white/[.03] p-6 text-center">
+        <Image
+          src="/assets/icons/icon-referrals.webp"
+          alt=""
+          width={64}
+          height={64}
         />
+        <div className="mt-3 text-lg font-black tracking-tight">
+          @{referral.handle}
+        </div>
+        <p className="mt-1 text-[11px] leading-relaxed text-text-3">
+          Share your link. Anyone who opens it lands on the console.
+        </p>
       </div>
 
-      <div className="mb-3 rounded-2xl border border-[var(--color-line)] bg-white/[.03] p-4">
-        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
-          Your link
-        </div>
-        <div className="mt-1 break-all font-mono text-sm text-text">
-          {referral.url}
-        </div>
-      </div>
-
-      <div className="mb-6 flex gap-2">
-        <TapTarget
-          className="flex-1 rounded-full border border-[var(--color-line-strong)] py-3 text-sm font-bold text-text-2"
-          onClick={() => {
-            void navigator.clipboard
-              ?.writeText(referral.url)
-              .then(() => toast("Link copied"))
-              .catch(() => toast("Couldn't copy that link.", "lose"));
-          }}
+      <MenuSection title="Link">
+        <button
+          type="button"
+          className="w-full border-b border-[var(--color-line)] px-4 py-3.5 text-left last:border-b-0"
+          onClick={() => copy(referral.url, "Link")}
         >
-          Copy link
-        </TapTarget>
-        <TapTarget
-          className="flex-1 rounded-full border border-[var(--color-line-strong)] py-3 text-sm font-bold text-text-2"
-          onClick={() => {
-            void navigator.clipboard
-              ?.writeText(referral.code)
-              .then(() => toast("Code copied"))
-              .catch(() => toast("Couldn't copy that code.", "lose"));
-          }}
-        >
-          Copy code
-        </TapTarget>
-      </div>
+          <span className="break-all font-mono text-xs text-text-2">
+            {referral.url}
+          </span>
+        </button>
+        {user.address && (
+          <MenuRow
+            label="Your address"
+            value="↗"
+            href={explorerAddress(user.address)}
+            external
+          />
+        )}
+      </MenuSection>
 
       <TapTarget
-        className="w-full rounded-full bg-brand-500 py-3.5 text-sm font-extrabold text-black disabled:opacity-40"
-        disabled={claimable <= 0}
+        className="w-full rounded-full bg-brand-500 py-3.5 text-sm font-extrabold text-black"
         haptic="high"
-        onClick={() => {
-          const result = claimReferral();
-          if (result.ok) toast(`Claimed $${result.amount}`, "win");
-        }}
+        onClick={() => copy(referral.url, "Link")}
       >
-        Claim ${referral.claimable}
+        Copy your link
       </TapTarget>
     </>
   );
