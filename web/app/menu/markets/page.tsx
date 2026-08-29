@@ -33,9 +33,16 @@ function useNow(everyMs = 250) {
   return now;
 }
 
-/** Cross by a couple of ticks so a taker order actually meets the book. */
-const CROSS_TICKS = 2;
-const TICK = 0.001;
+/**
+ * Slippage allowance on a taker order, in price terms.
+ *
+ * Not cosmetic: a round trip is ~3 seconds (and the first trade from a wallet
+ * adds an `approve` leg before it), during which a binary price late in its
+ * window moves fast. Crossing by a tick or two reads as "aggressive" and then
+ * misses, reverting `ImmediateOrCancelNoFill` — observed on chain. 0.02 is a
+ * 2 ¢ tolerance, clamped into `(0, 1)` by `orders.snapPrice`.
+ */
+const SLIPPAGE = 0.02;
 
 export default function MarketsPage() {
   const now = useNow();
@@ -219,7 +226,7 @@ export default function MarketsPage() {
                     orders.buy(
                       focused,
                       "up",
-                      orders.toRawPrice(yesAsk.price + CROSS_TICKS * TICK),
+                      orders.toRawPrice(yesAsk.price + SLIPPAGE),
                       orders.toRawSize(size),
                     ),
                   )
@@ -238,7 +245,7 @@ export default function MarketsPage() {
                       focused,
                       "down",
                       // Buying DOWN sends a YES price; lower is more aggressive.
-                      orders.toRawPrice(1 - noAsk.price - CROSS_TICKS * TICK),
+                      orders.toRawPrice(1 - noAsk.price - SLIPPAGE),
                       orders.toRawSize(size),
                     ),
                   )
@@ -260,7 +267,7 @@ export default function MarketsPage() {
                       orders.sell(
                         focused,
                         "up",
-                        orders.toRawPrice(bid.price - CROSS_TICKS * TICK),
+                        orders.toRawPrice(bid.price - SLIPPAGE),
                         holdingState.holding.up,
                       ),
                     );
@@ -279,7 +286,7 @@ export default function MarketsPage() {
                         focused,
                         "down",
                         // Selling DOWN accepts a lower NO price = a higher YES price.
-                        orders.toRawPrice(1 - bid.price + CROSS_TICKS * TICK),
+                        orders.toRawPrice(1 - bid.price + SLIPPAGE),
                         holdingState.holding.down,
                       ),
                     );
