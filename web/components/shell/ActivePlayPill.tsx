@@ -15,8 +15,7 @@ export default function ActivePlayPill() {
   const router = useRouter();
   const open = usePlays("open", 5);
 
-  // Range rounds are clock-bound and short — there is nothing to come back to.
-  const play = open.find((p) => p.game !== "range");
+  const play = open[0];
   const { secsLeft } = useCountdown(play?.market.expiry);
 
   if (!play) return null;
