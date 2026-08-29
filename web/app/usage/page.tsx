@@ -1,83 +1,67 @@
 "use client";
 
-import Panel from "@/components/shell/Panel";
-import { MenuSection } from "@/components/menu/MenuUI";
-import GameIcon from "@/components/games/GameIcon";
-import { usePlays } from "@/lib/api/hooks";
+/**
+ * What this wallet has actually done on chain, rung by rung.
+ *
+ * Every row is a real round rebuilt from fills — see `lib/dreamdex/stats.ts`.
+ */
+
+import { useEffect, useSyncExternalStore } from "react";
+import { EmptyState } from "@/components/menu/MenuUI";
 import { useRequireAdmin } from "@/lib/games/lab";
-import {
-  GAME_LABELS,
-  LAB_GAMES,
-  LIVE_GAMES,
-  type GameId,
-} from "@/lib/api/types";
-import { formatUsd } from "@/lib/api/math";
+import { explorerTx } from "@/lib/dreamdex/config";
+import * as statsStore from "@/lib/dreamdex/stats";
+import * as wallet from "@/lib/dreamdex/wallet";
 
 export default function UsagePage() {
   const admin = useRequireAdmin();
-  const plays = usePlays(undefined, 500);
+  const { stats, at } = useSyncExternalStore(
+    statsStore.subscribe,
+    statsStore.getSnapshot,
+    statsStore.getServerSnapshot,
+  );
 
-  const games = [...LIVE_GAMES, ...LAB_GAMES] as GameId[];
-  const rows = games
-    .map((game) => {
-      const forGame = plays.filter((p) => p.game === game);
-      const settled = forGame.filter(
-        (p) => p.status !== "open" && p.status !== "pending",
-      );
-      const wins = settled.filter(
-        (p) => p.status === "won" || p.status === "cashed_out",
-      ).length;
-      return {
-        game,
-        plays: forGame.length,
-        volume: forGame.reduce((s, p) => s + Number(p.stake), 0),
-        pnl: settled.reduce((s, p) => s + Number(p.pnl), 0),
-        winRate: settled.length ? wins / settled.length : 0,
-      };
-    })
-    .sort((a, b) => b.plays - a.plays);
+  useEffect(() => {
+    wallet.ensureWallet();
+    void statsStore.load();
+  }, []);
+
+  if (!admin) return null;
+  if (!at) return <EmptyState>Reading the chain…</EmptyState>;
+  if (!stats.rounds.length) return <EmptyState>No rounds yet.</EmptyState>;
 
   return (
-    <Panel
-      title="Usage"
-      backHref="/admin"
-      screenLabel="Usage"
-      status={{ left: "USAGE", right: `${plays.length} PLAYS` }}
-    >
-      {!admin ? (
-        <p className="py-10 text-center text-sm text-text-3">
-          Admin access only.
-        </p>
-      ) : (
-        <MenuSection title="Per game">
-          {rows.map((row) => (
-            <div
-              key={row.game}
-              className="flex items-center gap-3 border-b border-[var(--color-line)] px-4 py-3 last:border-b-0"
+    <div className="p-4">
+      <div className="mb-4 text-sm font-bold">
+        {stats.played} rounds · {stats.wins}W / {stats.losses}L · $
+        {stats.volume.toFixed(2)} volume
+      </div>
+      <div className="overflow-hidden rounded-2xl border border-[var(--color-line)]">
+        {stats.rounds.map((r) => (
+          <a
+            key={r.marketAddress}
+            href={explorerTx(r.txHash)}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-3 border-b border-[var(--color-line)] px-4 py-2.5 text-xs last:border-b-0 hover:bg-white/[.04]"
+          >
+            <span className="w-12 font-bold">{r.asset}</span>
+            <span className={r.side === 0 ? "w-12 text-up" : "w-12 text-down"}>
+              {r.side === 0 ? "UP" : "DOWN"}
+            </span>
+            <span className="flex-1 tabular-nums text-text-3">
+              {r.contracts.toFixed(2)} @ {r.entryPrice.toFixed(3)}
+            </span>
+            <span
+              className={`tabular-nums font-bold ${
+                r.won === null ? "text-text-3" : r.won ? "text-up" : "text-down"
+              }`}
             >
-              <span className="text-brand-500">
-                <GameIcon game={row.game} size={20} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-bold">
-                  {GAME_LABELS[row.game]}
-                </div>
-                <div className="text-[11px] tabular-nums text-text-3">
-                  {row.plays} plays · ${row.volume.toFixed(0)} ·{" "}
-                  {(row.winRate * 100).toFixed(0)}% win
-                </div>
-              </div>
-              <span
-                className={`text-sm font-black tabular-nums ${
-                  row.pnl >= 0 ? "text-up" : "text-down"
-                }`}
-              >
-                {formatUsd(row.pnl, true)}
-              </span>
-            </div>
-          ))}
-        </MenuSection>
-      )}
-    </Panel>
+              {r.won === null ? "live" : `${r.pnl >= 0 ? "+" : "−"}$${Math.abs(r.pnl).toFixed(2)}`}
+            </span>
+          </a>
+        ))}
+      </div>
+    </div>
   );
 }
