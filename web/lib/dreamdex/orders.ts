@@ -22,7 +22,7 @@
  */
 
 import { createPublicClient, http, parseAbi, type Address } from "viem";
-import { CHAIN, COLLATERAL, HTTP_RPC_URL } from "./config";
+import { CHAIN, COLLATERAL, GAS_LIMIT, HTTP_RPC_URL } from "./config";
 import { getClient } from "./client";
 import { exportKey } from "./wallet";
 import type { Window } from "./markets";
@@ -92,7 +92,12 @@ function getTrader() {
   const client = getClient();
   const key = exportKey();
   if (!client || !key) return null;
-  trader = client.createTrader({ privateKey: key, decimals: COLLATERAL.decimals });
+  trader = client.createTrader({
+    privateKey: key,
+    decimals: COLLATERAL.decimals,
+    // Without this the SDK's 10M default demands 0.6 STT of balance to sign.
+    gas: GAS_LIMIT,
+  });
   return trader;
 }
 

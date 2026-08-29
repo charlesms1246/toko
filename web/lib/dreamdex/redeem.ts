@@ -17,7 +17,7 @@
  *   redemption — claiming one does not claim the other.
  */
 
-import { COLLATERAL } from "./config";
+import { COLLATERAL, GAS_LIMIT } from "./config";
 import { getClient } from "./client";
 import { exportKey } from "./wallet";
 import type { Position } from "./portfolio";
@@ -29,7 +29,12 @@ function getTrader() {
   const client = getClient();
   const key = exportKey();
   if (!client || !key) return null;
-  trader = client.createTrader({ privateKey: key, decimals: COLLATERAL.decimals });
+  trader = client.createTrader({
+    privateKey: key,
+    decimals: COLLATERAL.decimals,
+    // Without this the SDK's 10M default demands 0.6 STT of balance to sign.
+    gas: GAS_LIMIT,
+  });
   return trader;
 }
 

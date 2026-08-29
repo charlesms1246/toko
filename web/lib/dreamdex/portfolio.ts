@@ -115,12 +115,16 @@ function classify(row: any): Position {
 }
 
 export async function load(): Promise<void> {
-  const client = getClient();
-  const owner = ensureWallet();
-  if (!client || !owner) return;
-
   set({ loading: true, error: null });
   try {
+    // Inside the try: constructing the exchange can throw, and a rejection here
+    // would otherwise leave the screen loading forever with nothing to show.
+    const client = getClient();
+    const owner = ensureWallet();
+    if (!client || !owner) {
+      set({ loading: false, error: "No wallet yet" });
+      return;
+    }
     const portfolio = await client.getPortfolio(owner);
     const positions = ((portfolio?.positions ?? []) as unknown[])
       .map(classify)

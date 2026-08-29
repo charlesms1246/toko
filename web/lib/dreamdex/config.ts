@@ -60,8 +60,24 @@ export const STT_FAUCETS = [
 ] as const;
 
 /**
+ * Gas ceiling for every write we sign.
+ *
+ * This is not a cost — it is a **balance requirement**. The SDK signs with fixed
+ * fees (`maxFeePerGas` 60 gwei) and the node rejects a transaction unless
+ * `balance >= gasLimit * maxFeePerGas`, whatever the transaction actually
+ * spends. The SDK's own default of 10,000,000 therefore demands **0.6 STT just
+ * to sign**, which a freshly sponsored wallet does not have — the first trade
+ * fails with a bare `-32000 insufficient balance`.
+ *
+ * Observed usage is 253k–421k gas, so 2,000,000 is 5x headroom and brings the
+ * requirement down to 0.12 STT.
+ */
+export const GAS_LIMIT = 2_000_000n;
+
+/**
  * Measured burn is ~0.004 STT per transaction (see TESTNET_FACTS §Q8), so this
  * is roughly 125 trades — enough that a funded player never thinks about gas.
+ * It must also stay comfortably above the `GAS_LIMIT` reserve above.
  */
 export const TOPUP_AMOUNT_STT = "0.5";
 /** Below this, the wallet is topped up on sight. */
