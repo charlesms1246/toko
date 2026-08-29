@@ -37,6 +37,8 @@ import type { Position } from "@/lib/dreamdex/portfolio";
 export type RoundStatus =
   | "idle"
   | "pending"
+  /** A bid is resting on the book, waiting for the market to come to it. */
+  | "resting"
   | "open"
   | "settling"
   | "won"
@@ -66,6 +68,8 @@ export interface MinuteRound {
   canEnter: boolean;
   message: string | null;
   buy: (side: Side, limitPrice: number, contracts: number) => void;
+  /** Place a bid that waits for the market instead of taking it. */
+  rest: (side: Side, limitPrice: number, contracts: number) => void;
   sell: () => void;
   reset: () => void;
 }
@@ -79,7 +83,12 @@ function useNow(everyMs = 200) {
   return now;
 }
 
-export function useMinuteRound(): MinuteRound {
+/**
+ * @param intervalSec Which series to play. 60 is the arcade round; the 5m series
+ *   (300) suits the maker games, where a resting bid needs time for the market
+ *   to travel to it.
+ */
+export function useMinuteRound(intervalSec = 60): MinuteRound {
   const now = useNow();
 
   const { windows } = useSyncExternalStore(
@@ -115,7 +124,7 @@ export function useMinuteRound(): MinuteRound {
 
   // The window to trade is the next 1m to close; once a position is open the
   // round stays with the window it was opened in, even as the next one rolls.
-  const live = markets.nextToClose(windows, 60);
+  const live = markets.nextToClose(windows, intervalSec);
   const window = playing ?? live;
   const pool = window?.poolAddress;
 
@@ -150,6 +159,10 @@ export function useMinuteRound(): MinuteRound {
   // set-state-in-effect shape the React Compiler rules reject.
   const settling =
     status === "open" && !!playing && playing.expiry - now / 1000 <= 0;
+
+  /** An unfilled resting bid dies with its window; the escrow comes back. */
+  const restingExpired =
+    status === "resting" && !!playing && playing.expiry - now / 1000 <= 0;
 
   useEffect(() => {
     if (!settling || !playing || !side) return;
@@ -211,7 +224,7 @@ export function useMinuteRound(): MinuteRound {
 
   const buy = useCallback(
     (nextSide: Side, limitPrice: number, contracts: number) => {
-      const target = markets.nextToClose(markets.getSnapshot().windows, 60);
+      const target = markets.nextToClose(markets.getSnapshot().windows, intervalSec);
       if (!target) {
         setMessage("No live window");
         return;
@@ -244,8 +257,71 @@ export function useMinuteRound(): MinuteRound {
         setStatus("open");
       })();
     },
-    [],
+    [intervalSec],
   );
+
+  const rest = useCallback(
+    (nextSide: Side, limitPrice: number, contracts: number) => {
+      const target = markets.nextToClose(markets.getSnapshot().windows, intervalSec);
+      if (!target) {
+        setMessage("No live window");
+        return;
+      }
+      setStatus("pending");
+      setSide(nextSide);
+      setMessage(null);
+      setPayout(null);
+
+      void (async () => {
+        const before = wallet.getSnapshot().collateral;
+        const result = await orders.rest(
+          target,
+          nextSide,
+          orders.toRawPrice(limitPrice),
+          orders.toRawSize(contracts),
+        );
+        if (!result.ok) {
+          setStatus("idle");
+          setSide(null);
+          setMessage(result.error ?? "Could not place the order");
+          return;
+        }
+        await wallet.refresh();
+        setEntryCost(before - wallet.getSnapshot().collateral);
+        setPlaying(target);
+        // It may have crossed on arrival if the book moved to meet it.
+        if (result.filled > 0n) {
+          setHeld(result.filled);
+          setStatus("open");
+        } else {
+          setStatus("resting");
+        }
+      })();
+    },
+    [intervalSec],
+  );
+
+  // While a bid rests, the only thing that tells us it was taken is the
+  // position itself — a fill is somebody else's transaction, not ours.
+  useEffect(() => {
+    if (status !== "resting" || !playing) return;
+    let cancelled = false;
+    const check = async () => {
+      const holding = await positions.readHolding(playing);
+      if (cancelled) return;
+      const mine = side === "up" ? holding.up : holding.down;
+      if (mine > 0n) {
+        setHeld(mine);
+        setStatus("open");
+      }
+    };
+    void check();
+    const timer = setInterval(() => void check(), 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [status, playing, side]);
 
   const sell = useCallback(() => {
     if (!playing || !side || held === 0n) return;
@@ -300,13 +376,14 @@ export function useMinuteRound(): MinuteRound {
     impliedUp,
     held,
     side,
-    status: settling ? "settling" : status,
+    status: settling ? "settling" : restingExpired ? "idle" : status,
     balance: walletState.collateral,
     payout,
     entryCost,
     canEnter,
     message,
     buy,
+    rest,
     sell,
     reset,
   };

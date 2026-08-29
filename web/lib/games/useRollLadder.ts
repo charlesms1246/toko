@@ -40,7 +40,11 @@ export interface RollLadder {
   height: number;
   /** Contracts the next press would stake. */
   nextStake: number;
-  /** Collateral put into the ladder so far, tUSDC. */
+  /**
+   * Collateral put into the ladder so far, tUSDC — including the rung currently
+   * riding. Counting only banked rungs read as $0.00 while a rung was live,
+   * which is exactly when the number matters.
+   */
   atRisk: number;
   /** A rung has just won and can be pressed on. */
   canPress: boolean;
@@ -124,7 +128,11 @@ export function useRollLadder(lockSide: boolean): RollLadder {
     banked,
     height: banked.length + (justWon ? 1 : 0),
     nextStake: justWon ? Number(round.held) / 1e6 : stake,
-    atRisk: banked.reduce((sum, r) => sum + r.cost, 0),
+    atRisk:
+      banked.reduce((sum, r) => sum + r.cost, 0) +
+      (round.entryCost != null && round.status !== "idle"
+        ? Number(round.entryCost) / 1e6
+        : 0),
     canPress: justWon && !folded,
     finished: justLost || folded,
     idle: !started && round.status === "idle",
