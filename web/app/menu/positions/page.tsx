@@ -30,7 +30,7 @@ export default function PositionsPage() {
   const [busy, setBusy] = useState(false);
   const [lastTx, setLastTx] = useState<string | null>(null);
 
-  const { positions, error, at } = useSyncExternalStore(
+  const { positions, error, at, loading } = useSyncExternalStore(
     portfolio.subscribe,
     portfolio.getSnapshot,
     portfolio.getServerSnapshot,
@@ -68,7 +68,11 @@ export default function PositionsPage() {
   const live = positions.filter((p) => p.kind === "live");
   const settled = positions.filter((p) => p.kind !== "live");
 
-  if (!at && !error) return <EmptyState>Reading your positions…</EmptyState>;
+  // Distinguish "still reading" from "read and found nothing" — conflating them
+  // hides a stalled read behind what looks like an empty portfolio.
+  if (!at && !error) {
+    return <EmptyState>{loading ? "Reading your positions…" : "Starting up…"}</EmptyState>;
+  }
 
   return (
     <>
