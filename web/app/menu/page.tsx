@@ -74,6 +74,14 @@ export default function MenuHub() {
         />
       </MenuSection>
 
+      <MenuSection title="Markets">
+        <MenuRow
+          icon="/assets/icons/icon-plays.webp"
+          label="Live windows"
+          href="/menu/markets"
+        />
+      </MenuSection>
+
       <MenuSection title="Play">
         <MenuRow
           icon="/assets/icons/icon-history.webp"
