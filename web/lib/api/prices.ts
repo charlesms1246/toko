@@ -1,20 +1,34 @@
 /**
- * Price feed.
+ * Price feed — Somnia's on-chain EMA oracle.
  *
- * A mean-reverting random walk with momentum and occasional jumps, anchored to
- * a seed price per asset. It ticks every 300ms and keeps a rolling 60-second
- * history — the same window the console's sparkline reads from.
+ * This module used to be a mean-reverting random walk. It now reads the real
+ * oracle through the markets SDK and keeps the same tiny surface, so everything
+ * downstream (`useSpot`, `usePriceHistory`, the sparklines) got real prices
+ * without changing.
+ *
+ * `watchPrices` resolves in well under a second and arrives with ~100 ticks of
+ * history already in the store, so `priceHistory` is useful immediately. Between
+ * first render and that first delivery `spot` reports 0 — call `start()` early
+ * (the app does, in `providers.tsx`) so it has happened before any screen that
+ * shows a price is reached.
  */
 
+import { getClient } from "@/lib/dreamdex/client";
+
+/**
+ * Reference prices for the seeded play history only. Not a live source — the
+ * oracle is. These go when the seed fixtures do.
+ */
 export const SEED_PRICES: Record<string, number> = {
   BTC: 63575,
   ETH: 1725,
   SOL: 71.45,
   SOMI: 0.71,
-  DEEP: 0.0166,
 };
 
-export const ALL_ASSETS = Object.keys(SEED_PRICES);
+/** Assets we keep a live feed for. All four are carried by the oracle. */
+export const ALL_ASSETS = ["BTC", "ETH", "SOMI", "SOL"];
+
 /** Assets offered in the game picker. */
 export const TRADABLE_ASSETS = ["BTC", "ETH", "SOMI"];
 
@@ -25,134 +39,94 @@ export const ASSET_LOGOS: Record<string, string | undefined> = {
   SOMI: "/assets/images/coins/somnia-logo.png",
 };
 
-const TICK_MS = 300;
-const NOISE = 4e-4;
-const MOMENTUM_DECAY = 0.92;
-const DRIFT_PULL = 0.018;
-const MAX_STEP = 0.003;
-const JUMP_PROB = 0.08;
-const JUMP_SIZE = 0.005;
-const JUMP_DECAY = 0.3;
-const MAX_DEVIATION = 0.08;
-const HISTORY_MS = 60_000;
-
 export interface PricePoint {
   t: number;
   p: number;
 }
 
-const anchor = new Map<string, number>();
-const current = new Map<string, number>();
-const deviation = new Map<string, number>();
-const momentum = new Map<string, number>();
-const jump = new Map<string, number>();
-const history = new Map<string, PricePoint[]>();
-const listeners = new Map<string, Set<(price: number) => void>>();
-/**
- * Immutable per-tick copies of the history, so `useSyncExternalStore` sees a
- * stable reference between ticks instead of a fresh array on every read.
- */
-const historySnapshot = new Map<string, PricePoint[]>();
-const tickListeners = new Set<() => void>();
+const HISTORY_POINTS = 120;
+/** How often we resample the live store into a snapshot for React. */
+const POLL_MS = 400;
 
+const listeners = new Set<() => void>();
+/** Immutable per-tick copies, so `useSyncExternalStore` sees a stable reference. */
+const snapshots = new Map<string, PricePoint[]>();
+const latest = new Map<string, number>();
+
+let started = false;
 let timer: ReturnType<typeof setInterval> | null = null;
 
-function ensure(asset: string) {
-  if (current.has(asset)) return;
-  const seed = SEED_PRICES[asset] ?? 1;
-  anchor.set(asset, seed);
-  current.set(asset, seed);
-  deviation.set(asset, 0);
-  momentum.set(asset, 0);
-  jump.set(asset, 0);
-  history.set(asset, []);
-  historySnapshot.set(asset, []);
-}
+function sample() {
+  const client = getClient();
+  if (!client) return;
+  let changed = false;
 
-function record(asset: string, price: number, now: number) {
-  const points = history.get(asset)!;
-  points.push({ t: now, p: price });
-  const cutoff = now - HISTORY_MS;
-  while (points.length && points[0].t < cutoff) points.shift();
-}
-
-function step() {
-  const now = Date.now();
   for (const asset of ALL_ASSETS) {
-    ensure(asset);
-    const base = anchor.get(asset)!;
-
-    let m = (momentum.get(asset) ?? 0) * MOMENTUM_DECAY +
-      (Math.random() - 0.5) * 2 * NOISE;
-    if (m > MAX_STEP) m = MAX_STEP;
-    else if (m < -MAX_STEP) m = -MAX_STEP;
-    momentum.set(asset, m);
-
-    let dev = (deviation.get(asset) ?? 0) + m;
-    dev -= dev * DRIFT_PULL;
-    if (dev > MAX_DEVIATION) dev = MAX_DEVIATION;
-    else if (dev < -MAX_DEVIATION) dev = -MAX_DEVIATION;
-    deviation.set(asset, dev);
-
-    let j = (jump.get(asset) ?? 0) * JUMP_DECAY;
-    if (Math.random() < JUMP_PROB) {
-      j += (Math.random() < 0.5 ? -1 : 1) * JUMP_SIZE;
+    const live = client.getLivePrice(asset);
+    if (live && live.price !== latest.get(asset)) {
+      latest.set(asset, live.price);
+      changed = true;
     }
-    jump.set(asset, j);
-
-    const next = base * (1 + dev + j);
-    const price = next > 0 ? next : base;
-    current.set(asset, price);
-    record(asset, price, now);
-    historySnapshot.set(asset, history.get(asset)!.slice());
-    listeners.get(asset)?.forEach((fn) => fn(price));
+    const ticks = client.getLivePriceTicks(asset, { limit: HISTORY_POINTS }) as
+      | { blockTimestamp?: number; timestamp?: number; price: number }[]
+      | undefined;
+    if (ticks?.length) {
+      const previous = snapshots.get(asset);
+      // `ticks` is newest-first, `previous` is oldest-first, so the newest of
+      // each are at opposite ends.
+      const newest = ticks[0].price;
+      if (!previous || previous.length !== ticks.length ||
+          previous[previous.length - 1]?.p !== newest) {
+        // The feed hands ticks back newest-first; charts want oldest-first, or
+        // the line is drawn backwards in time.
+        snapshots.set(
+          asset,
+          ticks
+            .map((tick) => ({
+              t: (tick.blockTimestamp ?? tick.timestamp ?? 0) * 1000,
+              p: tick.price,
+            }))
+            .reverse(),
+        );
+        changed = true;
+      }
+    }
   }
-  tickListeners.forEach((fn) => fn());
+
+  if (changed) listeners.forEach((fn) => fn());
 }
 
-function start() {
-  if (timer || typeof window === "undefined") return;
-  for (const asset of ALL_ASSETS) ensure(asset);
-  timer = setInterval(step, TICK_MS);
+/** Open the oracle feed. Safe to call repeatedly; the SDK ref-counts the watch. */
+export function start(): void {
+  if (started || typeof window === "undefined") return;
+  const client = getClient();
+  if (!client) return;
+  started = true;
+  void client.watchPrices(ALL_ASSETS).then(sample).catch(() => {
+    // The socket heals itself; the poll below picks the feed up when it does.
+  });
+  timer ??= setInterval(sample, POLL_MS);
 }
 
-/** Latest price for an asset, starting the feed on first use. */
+/** Latest oracle price, or 0 before the first delivery. */
 export function spot(asset: string): number {
-  ensure(asset);
   start();
-  return current.get(asset)!;
+  return latest.get(asset) ?? 0;
 }
 
-/** Rolling 60-second history — a stable reference until the next tick. */
+/** Recent oracle ticks — a stable reference until the feed moves. */
 export function priceHistory(asset: string): PricePoint[] {
-  ensure(asset);
   start();
-  return historySnapshot.get(asset)!;
+  return snapshots.get(asset) ?? EMPTY;
 }
 
-/** Subscribe to every tick, for `useSyncExternalStore`. */
+const EMPTY: PricePoint[] = [];
+
+/** Subscribe to feed movement, for `useSyncExternalStore`. */
 export function subscribeTick(fn: () => void): () => void {
   start();
-  tickListeners.add(fn);
+  listeners.add(fn);
   return () => {
-    tickListeners.delete(fn);
-  };
-}
-
-/** Subscribe to ticks. Returns an unsubscribe function. */
-export function subscribePrice(
-  asset: string,
-  fn: (price: number) => void,
-): () => void {
-  ensure(asset);
-  start();
-  let set = listeners.get(asset);
-  if (!set) {
-    set = new Set();
-    listeners.set(asset, set);
-  }
-  set.add(fn);
-  return () => {
-    set!.delete(fn);
+    listeners.delete(fn);
   };
 }

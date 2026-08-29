@@ -152,14 +152,6 @@ export interface MinigameScoreRow {
   isYou?: boolean;
 }
 
-export interface Transaction {
-  id: string;
-  kind: "deposit" | "withdraw" | "grant" | "faucet" | "play" | "payout";
-  amount: string;
-  status: "confirmed" | "pending" | "failed";
-  at: string;
-  digest?: string;
-}
 
 export interface RangeQuote {
   tier: number;

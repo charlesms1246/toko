@@ -51,7 +51,6 @@ import type {
   Settings,
   Side,
   Stats,
-  Transaction,
   User,
 } from "./types";
 import { MOONSHOT_LADDER } from "./math";
@@ -127,7 +126,6 @@ interface State {
   counters: Counters;
   unlocked: Record<string, string>;
   minigameScores: Record<MinigameId, number>;
-  transactions: Transaction[];
   referralCode: string;
   referralClaimed: number;
   admin: boolean;
@@ -154,7 +152,6 @@ function initialState(): State {
     counters: seedCounters(),
     unlocked: {},
     minigameScores: { "line-rider": 1240, "flappy-piper": 14 },
-    transactions: [],
     referralCode: "TOKO-DEMO",
     referralClaimed: 0,
     admin: false,
@@ -189,7 +186,6 @@ function persist() {
         counters: state.counters,
         unlocked: state.unlocked,
         minigameScores: state.minigameScores,
-        transactions: state.transactions.slice(0, 50),
         referralClaimed: state.referralClaimed,
         admin: state.admin,
       }),
@@ -665,14 +661,6 @@ function settle(id: string, reason: SettleReason) {
     counters.closeCall = true;
   }
 
-  state.transactions.unshift({
-    id: newId(),
-    kind: payout > 0 ? "payout" : "play",
-    amount: money(payout > 0 ? payout : -context.stake),
-    status: "confirmed",
-    at: new Date().toISOString(),
-    digest: play.txSettle ?? play.txRedeem,
-  });
 
   const unlocked = checkAchievements();
   persist();
@@ -940,14 +928,6 @@ export function requestFaucet(): { ok: boolean; error?: string } {
   }
   state.lastFaucetMs = now;
   state.balance += FAUCET_AMOUNT;
-  state.transactions.unshift({
-    id: newId(),
-    kind: "faucet",
-    amount: money(FAUCET_AMOUNT),
-    status: "confirmed",
-    at: new Date().toISOString(),
-    digest: digest(),
-  });
   persist();
   emit();
   return { ok: true };
@@ -957,14 +937,6 @@ export function requestFaucet(): { ok: boolean; error?: string } {
 export function requestGrant(): { granted: boolean } {
   if (state.balance >= GRANT_THRESHOLD) return { granted: false };
   state.balance += GRANT_AMOUNT;
-  state.transactions.unshift({
-    id: newId(),
-    kind: "grant",
-    amount: money(GRANT_AMOUNT),
-    status: "confirmed",
-    at: new Date().toISOString(),
-    digest: digest(),
-  });
   persist();
   emit();
   return { granted: true };
@@ -972,14 +944,6 @@ export function requestGrant(): { granted: boolean } {
 
 export function deposit(amount: number) {
   state.balance += amount;
-  state.transactions.unshift({
-    id: newId(),
-    kind: "deposit",
-    amount: money(amount),
-    status: "confirmed",
-    at: new Date().toISOString(),
-    digest: digest(),
-  });
   persist();
   emit();
 }
@@ -987,21 +951,9 @@ export function deposit(amount: number) {
 export function withdraw(amount: number): { ok: boolean; error?: string } {
   if (amount > state.balance) return { ok: false, error: "INSUFFICIENT_BALANCE" };
   state.balance -= amount;
-  state.transactions.unshift({
-    id: newId(),
-    kind: "withdraw",
-    amount: money(amount),
-    status: "confirmed",
-    at: new Date().toISOString(),
-    digest: digest(),
-  });
   persist();
   emit();
   return { ok: true };
-}
-
-export function getTransactions(): Transaction[] {
-  return state.transactions;
 }
 
 // ── Leaderboards ─────────────────────────────────────────────────────────────
