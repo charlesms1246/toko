@@ -1,99 +1,99 @@
 "use client";
 
-import { MenuRow, MenuSection, StatTile } from "@/components/menu/MenuUI";
-import GameIcon from "@/components/games/GameIcon";
-import { useMarkets, usePlays, useStats } from "@/lib/api/hooks";
-import { formatPrice, formatUsd } from "@/lib/api/math";
-import { GAME_LABELS, LIVE_GAMES } from "@/lib/api/types";
+/**
+ * Operator view of this wallet's real trading record.
+ *
+ * There is no house and no server, so there is nothing global to administer —
+ * what an operator can actually see is the same on-chain record the player sees,
+ * plus the venue-wide activity the leaderboard samples.
+ */
 
-export default function AdminDashboard() {
-  const stats = useStats();
-  const plays = usePlays(undefined, 200);
-  const markets = useMarkets();
+import { useEffect, useSyncExternalStore } from "react";
+import { EmptyState, MenuSection, MenuRow, StatTile } from "@/components/menu/MenuUI";
+import { explorerAddress } from "@/lib/dreamdex/config";
+import * as statsStore from "@/lib/dreamdex/stats";
+import * as leaderboard from "@/lib/dreamdex/leaderboard";
+import * as wallet from "@/lib/dreamdex/wallet";
+import { useStoreActions, useIsAdmin } from "@/lib/api/hooks";
 
-  const open = plays.filter(
-    (p) => p.status === "open" || p.status === "pending",
-  ).length;
-  const volume = plays.reduce((sum, p) => sum + Number(p.stake), 0);
-  const house = plays
-    .filter((p) => p.status !== "open" && p.status !== "pending")
-    .reduce((sum, p) => sum - Number(p.pnl), 0);
+export default function AdminPage() {
+  const actions = useStoreActions();
+  const admin = useIsAdmin();
+  const { stats, at } = useSyncExternalStore(
+    statsStore.subscribe,
+    statsStore.getSnapshot,
+    statsStore.getServerSnapshot,
+  );
+  const board = useSyncExternalStore(
+    leaderboard.subscribe,
+    leaderboard.getSnapshot,
+    leaderboard.getServerSnapshot,
+  );
+  const walletState = useSyncExternalStore(
+    wallet.subscribe,
+    wallet.getSnapshot,
+    wallet.getServerSnapshot,
+  );
 
-  const byGame = LIVE_GAMES.map((game) => {
-    const rows = plays.filter((p) => p.game === game);
-    const wins = rows.filter((p) => p.status === "won").length;
-    return {
-      game,
-      count: rows.length,
-      wins,
-      volume: rows.reduce((s, p) => s + Number(p.stake), 0),
-    };
-  });
+  useEffect(() => {
+    wallet.ensureWallet();
+    void statsStore.load();
+    void leaderboard.load();
+  }, []);
 
-  const maxCount = Math.max(1, ...byGame.map((row) => row.count));
+  if (!at) return <EmptyState>Reading the chain…</EmptyState>;
 
   return (
     <>
-      <div className="mb-5 grid grid-cols-2 gap-2">
-        <StatTile label="Plays" value={String(plays.length)} />
-        <StatTile label="Open now" value={String(open)} tone="brand" />
-        <StatTile label="Volume" value={`$${volume.toFixed(0)}`} />
+      <div className="mb-6 grid grid-cols-3 gap-2">
+        <StatTile label="Rounds" value={String(stats.played)} />
         <StatTile
-          label="House P&L"
-          value={formatUsd(house, true)}
-          tone={house >= 0 ? "up" : "down"}
+          label="Win rate"
+          value={`${(stats.winRate * 100).toFixed(0)}%`}
+          tone="up"
+        />
+        <StatTile
+          label="Net P&L"
+          value={`${stats.netPnl >= 0 ? "+" : "−"}$${Math.abs(stats.netPnl).toFixed(2)}`}
+          tone={stats.netPnl >= 0 ? "up" : "down"}
         />
       </div>
 
-      <MenuSection title="By game">
-        <div className="space-y-3 p-4">
-          {byGame.map((row) => (
-            <div key={row.game}>
-              <div className="mb-1 flex items-center gap-2">
-                <span className="text-brand-500">
-                  <GameIcon game={row.game} size={16} />
-                </span>
-                <span className="flex-1 text-xs font-bold">
-                  {GAME_LABELS[row.game]}
-                </span>
-                <span className="text-xs tabular-nums text-text-3">
-                  {row.count} · ${row.volume.toFixed(0)}
-                </span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-brand-500"
-                  style={{ width: `${(row.count / maxCount) * 100}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </MenuSection>
-
-      <MenuSection title="Markets">
-        {markets.map((market) => (
+      <MenuSection title="This wallet">
+        <MenuRow label="Volume" value={`$${stats.volume.toFixed(2)}`} />
+        <MenuRow label="Best multiple" value={`${stats.bestMultiple.toFixed(2)}x`} />
+        <MenuRow label="Longest streak" value={String(stats.maxStreak)} />
+        <MenuRow label="Assets" value={stats.assets.join(", ") || "—"} />
+        <MenuRow label="tUSDC" value={wallet.formatCollateral(walletState.collateral)} />
+        <MenuRow label="Gas" value={`${wallet.formatGas(walletState.gas)} STT`} />
+        {walletState.address && (
           <MenuRow
-            key={market.asset}
-            label={market.asset}
-            value={`$${formatPrice(market.spot)}`}
+            label="On explorer"
+            value="↗"
+            href={explorerAddress(walletState.address)}
+            external
           />
-        ))}
+        )}
       </MenuSection>
 
-      <MenuSection title="Player">
-        <MenuRow label="Games played" value={String(stats.gamesPlayed)} />
+      <MenuSection title={`Venue sample · ${board.pools} pools`}>
+        <MenuRow label="Traders seen" value={String(board.rows.length)} />
         <MenuRow
-          label="Win rate"
-          value={`${(stats.winRate * 100).toFixed(1)}%`}
+          label="Volume"
+          value={`$${board.rows.reduce((s, r) => s + r.volume, 0).toFixed(2)}`}
         />
-        <MenuRow label="Net P&L" value={formatUsd(Number(stats.netPnl), true)} />
+        <MenuRow
+          label="Fills"
+          value={String(board.rows.reduce((s, r) => s + r.trades, 0))}
+        />
       </MenuSection>
 
-      <MenuSection title="Reports">
-        <MenuRow label="Usage" href="/usage" />
-        <MenuRow label="Performance" href="/perf" />
-        <MenuRow label="Errors" href="/errors" />
+      <MenuSection title="Device">
+        <MenuRow
+          label="Admin mode"
+          value={admin ? "on" : "off"}
+          onClick={() => actions.setAdmin(!admin)}
+        />
       </MenuSection>
     </>
   );
