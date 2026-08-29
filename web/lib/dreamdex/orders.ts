@@ -1,0 +1,215 @@
+"use client";
+
+/**
+ * Placing and closing orders.
+ *
+ * Everything awkward about this venue is handled here so callers never have to
+ * think about it. All of it was measured in Phase 0 — see
+ * `claude-docs/TESTNET_FACTS.md`:
+ *
+ * - **`price` is the YES price on all four sides.** `BUY_NO` escrows
+ *   `quantity × (1 − price)`, so a short sends a YES price and gets *more*
+ *   aggressive by going *lower*. Getting this backwards inverts every short.
+ * - **Price must stay inside `(0, 1)` on the tick grid** or the pool reverts
+ *   `PriceOutOfBounds()`. Crossing hard on a near-certain side runs straight
+ *   into that: NO at 0.998 is a YES price of 0.002.
+ * - **`expireTimestampNs` is mandatory, in nanoseconds, and must not exceed the
+ *   market's own expiry.** Passing it explicitly also skips a pre-send read.
+ * - **An IOC that finds nothing reverts** with `ImmediateOrCancelNoFill()`
+ *   rather than returning zero fills. On a thin book that is the *normal*
+ *   outcome and must not read as an error.
+ * - **Fills report `quantityFilled`, not `quantity`.**
+ */
+
+import { createPublicClient, http, parseAbi, type Address } from "viem";
+import { CHAIN, COLLATERAL, HTTP_RPC_URL } from "./config";
+import { getClient } from "./client";
+import { exportKey } from "./wallet";
+import type { Window } from "./markets";
+
+const ONE = BigInt(10 ** COLLATERAL.decimals);
+
+/** The shared ERC-6909 singleton every outcome token lives on. */
+export const OUTCOME_TOKEN = "0xB52c5934113Af5c0Bb20eb3C72290C8215f755b9" as Address;
+
+const publicClient = createPublicClient({ chain: CHAIN, transport: http(HTTP_RPC_URL) });
+
+/** OrderBook `OrderType`: 0 rest, 1 fill-or-kill, 2 IOC, 3 post-only. */
+export const ORDER_TYPE = { REST: 0, FOK: 1, IOC: 2, POST_ONLY: 3 } as const;
+
+export type Side = "up" | "down";
+
+export interface Grid {
+  tick: bigint;
+  lot: bigint;
+  minQuantity: bigint;
+}
+
+/** Cached per pool — the grid is fixed for a pool's lifetime. */
+const grids = new Map<string, Grid>();
+
+const poolAbi = parseAbi([
+  "function getOrderBookParameters() view returns (uint256 tickSize, uint256 minQuantity, uint256 lotSize)",
+]);
+
+/**
+ * Read the pool's price/size grid. One creator on Shannon stamps a 1.0-contract
+ * minimum while the live pools use 0.001, so this is never assumed.
+ */
+export async function getGrid(pool: string): Promise<Grid> {
+  const cached = grids.get(pool);
+  if (cached) return cached;
+
+  const [tick, minQuantity, lot] = (await publicClient.readContract({
+    address: pool as Address,
+    abi: poolAbi,
+    functionName: "getOrderBookParameters",
+  })) as [bigint, bigint, bigint];
+
+  const grid = { tick, lot, minQuantity };
+  grids.set(pool, grid);
+  return grid;
+}
+
+/** Snap a YES price onto the grid and inside `(0, 1)`. */
+export function snapPrice(price: bigint, tick: bigint): bigint {
+  const snapped = (price / tick) * tick;
+  if (snapped < tick) return tick;
+  if (snapped > ONE - tick) return ONE - tick;
+  return snapped;
+}
+
+/** Snap a size down onto the lot grid. Returns 0n when it rounds away. */
+export function snapSize(size: bigint, grid: Grid): bigint {
+  const snapped = (size / grid.lot) * grid.lot;
+  return snapped < grid.minQuantity ? 0n : snapped;
+}
+
+let trader: unknown = null;
+
+function getTrader() {
+  if (trader) return trader;
+  const client = getClient();
+  const key = exportKey();
+  if (!client || !key) return null;
+  trader = client.createTrader({ privateKey: key, decimals: COLLATERAL.decimals });
+  return trader;
+}
+
+export interface OrderOutcome {
+  ok: boolean;
+  hash?: string;
+  /** Contracts actually filled, raw. */
+  filled: bigint;
+  /** Average fill price in YES terms, raw. */
+  fillPrice?: bigint;
+  /** Set when nothing was there to trade against — expected, not an error. */
+  noLiquidity?: boolean;
+  error?: string;
+}
+
+/** The market's own expiry, in nanoseconds — the pool rejects anything later. */
+const expiryNs = (w: Window) => BigInt(w.expiry) * 1_000_000_000n;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function summarise(res: any): OrderOutcome {
+  const fills = (res.fills ?? []) as { quantityFilled: bigint; fillPrice: bigint }[];
+  const filled = fills.reduce((sum, f) => sum + BigInt(f.quantityFilled ?? 0n), 0n);
+  return {
+    ok: filled > 0n,
+    hash: res.hash,
+    filled,
+    fillPrice: fills[0]?.fillPrice,
+  };
+}
+
+function asOutcome(err: unknown): OrderOutcome {
+  const message = err instanceof Error ? err.message.split("\n")[0] : String(err);
+  if (message.includes("ImmediateOrCancelNoFill")) {
+    return { ok: false, filled: 0n, noLiquidity: true };
+  }
+  return { ok: false, filled: 0n, error: message.replace(/^@somnia-chain\/markets-sdk: /, "") };
+}
+
+/**
+ * Take the book on one side. `yesPrice` is the limit in YES terms whichever side
+ * is being bought — see the note at the top of this file.
+ */
+export async function buy(
+  window: Window,
+  side: Side,
+  yesPrice: bigint,
+  size: bigint,
+): Promise<OrderOutcome> {
+  const t = getTrader();
+  if (!t) return { ok: false, filled: 0n, error: "No wallet" };
+
+  const grid = await getGrid(window.poolAddress);
+  const quantity = snapSize(size, grid);
+  if (quantity === 0n) {
+    return { ok: false, filled: 0n, error: "Below the pool's minimum size" };
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await (t as any).placeOrder({
+      pool: window.poolAddress,
+      side: side === "up" ? "BUY_YES" : "BUY_NO",
+      price: snapPrice(yesPrice, grid.tick),
+      quantity,
+      orderType: ORDER_TYPE.IOC,
+      expireTimestampNs: expiryNs(window),
+      // Passing the pool's own metadata skips the pre-send reads that otherwise
+      // run on every order.
+      outcomeToken: OUTCOME_TOKEN,
+      yesId: BigInt(window.yesTokenId),
+      noId: BigInt(window.noTokenId),
+      collateral: COLLATERAL.address,
+    });
+    return summarise(res);
+  } catch (err) {
+    return asOutcome(err);
+  }
+}
+
+/** Sell a held position back into the book. */
+export async function sell(
+  window: Window,
+  side: Side,
+  yesPrice: bigint,
+  size: bigint,
+): Promise<OrderOutcome> {
+  const t = getTrader();
+  if (!t) return { ok: false, filled: 0n, error: "No wallet" };
+
+  const grid = await getGrid(window.poolAddress);
+  const quantity = snapSize(size, grid);
+  if (quantity === 0n) {
+    return { ok: false, filled: 0n, error: "Below the pool's minimum size" };
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await (t as any).placeOrder({
+      pool: window.poolAddress,
+      side: side === "up" ? "SELL_YES" : "SELL_NO",
+      price: snapPrice(yesPrice, grid.tick),
+      quantity,
+      orderType: ORDER_TYPE.IOC,
+      expireTimestampNs: expiryNs(window),
+      outcomeToken: OUTCOME_TOKEN,
+      yesId: BigInt(window.yesTokenId),
+      noId: BigInt(window.noTokenId),
+      collateral: COLLATERAL.address,
+    });
+    return summarise(res);
+  } catch (err) {
+    return asOutcome(err);
+  }
+}
+
+/** Human helpers — the UI works in contracts and a 0–1 price. */
+export const toRawSize = (contracts: number) =>
+  BigInt(Math.round(contracts * Number(ONE)));
+export const toRawPrice = (price: number) => BigInt(Math.round(price * Number(ONE)));
+export const fromRaw = (raw: bigint) => Number(raw) / Number(ONE);

@@ -8,12 +8,18 @@
  * on-chain EMA oracle.
  */
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { MenuSection, StatTile } from "@/components/menu/MenuUI";
+import TapTarget from "@/components/ui/TapTarget";
+import { useToast } from "@/components/ui/Toast";
 import { useSpot } from "@/lib/api/hooks";
 import { formatPrice } from "@/lib/api/math";
+import { COLLATERAL, explorerTx } from "@/lib/dreamdex/config";
 import * as markets from "@/lib/dreamdex/markets";
 import * as book from "@/lib/dreamdex/book";
+import * as orders from "@/lib/dreamdex/orders";
+import * as positions from "@/lib/dreamdex/positions";
+import * as wallet from "@/lib/dreamdex/wallet";
 
 const ONE_MINUTE = 60;
 
@@ -27,8 +33,16 @@ function useNow(everyMs = 250) {
   return now;
 }
 
+/** Cross by a couple of ticks so a taker order actually meets the book. */
+const CROSS_TICKS = 2;
+const TICK = 0.001;
+
 export default function MarketsPage() {
   const now = useNow();
+  const toast = useToast();
+  const [size, setSize] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [lastTx, setLastTx] = useState<string | null>(null);
   const { windows, error } = useSyncExternalStore(
     markets.subscribe,
     markets.getSnapshot,
@@ -39,6 +53,16 @@ export default function MarketsPage() {
     book.getBookSnapshot,
     book.getBookServerSnapshot,
   );
+  const holdingState = useSyncExternalStore(
+    positions.subscribe,
+    positions.getSnapshot,
+    positions.getServerSnapshot,
+  );
+  const walletState = useSyncExternalStore(
+    wallet.subscribe,
+    wallet.getSnapshot,
+    wallet.getServerSnapshot,
+  );
 
   useEffect(() => markets.startPolling(), []);
 
@@ -48,6 +72,51 @@ export default function MarketsPage() {
   useEffect(() => {
     if (pool) return book.track(pool);
   }, [pool]);
+
+  useEffect(() => {
+    wallet.ensureWallet();
+    void wallet.refresh();
+  }, []);
+
+  useEffect(() => {
+    if (focused) return positions.track(focused);
+    // Only the identity of the window matters, not the object it arrived in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focused?.marketId]);
+
+  const settle = useCallback(
+    async (
+      label: string,
+      side: orders.Side,
+      run: () => Promise<orders.OrderOutcome>,
+    ) => {
+      setBusy(true);
+      const result = await run();
+      setBusy(false);
+      if (result.ok) {
+        setLastTx(result.hash ?? null);
+        // `fillPrice` is the YES price on every side — show it in the side's own
+        // terms or a DOWN fill at 0.969 reads as 0.031.
+        const shown =
+          result.fillPrice == null
+            ? "?"
+            : (side === "up"
+                ? orders.fromRaw(result.fillPrice)
+                : 1 - orders.fromRaw(result.fillPrice)
+              ).toFixed(3);
+        toast(
+          `${label} ${orders.fromRaw(result.filled).toFixed(3)} @ ${shown}`,
+          "win",
+        );
+        void positions.refresh();
+        void wallet.refresh();
+        return;
+      }
+      if (result.noLiquidity) toast("Nobody on the other side right now", "lose");
+      else toast(result.error ?? "Order failed", "lose");
+    },
+    [toast],
+  );
 
   const spot = useSpot(focused?.asset ?? "BTC");
   const up = book.impliedUp(bookState.book);
@@ -120,6 +189,118 @@ export default function MarketsPage() {
               tone="down"
             />
           </div>
+
+          <MenuSection title={`Trade · ${walletState.ready ? wallet.formatCollateral(walletState.collateral) : "—"} ${COLLATERAL.symbol}`}>
+            <div className="flex items-center gap-3 border-b border-[var(--color-line)] px-4 py-3">
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-text-3">
+                Size
+              </span>
+              <input
+                inputMode="decimal"
+                value={size}
+                onChange={(e) => setSize(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)}
+                className="w-20 bg-transparent text-sm font-bold tabular-nums outline-none"
+              />
+              <span className="flex-1 text-[11px] text-text-3">contracts</span>
+              <span className="text-[11px] text-text-3">
+                held {positions.contracts(holdingState.holding.up).toFixed(2)} up ·{" "}
+                {positions.contracts(holdingState.holding.down).toFixed(2)} down
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-px bg-[var(--color-line)]">
+              <TapTarget
+                haptic="high"
+                disabled={busy || !yesAsk || size <= 0}
+                className="bg-[#0b0b0d] py-4 text-sm font-extrabold text-up disabled:opacity-40"
+                onClick={() =>
+                  yesAsk &&
+                  void settle("Bought up", "up", () =>
+                    orders.buy(
+                      focused,
+                      "up",
+                      orders.toRawPrice(yesAsk.price + CROSS_TICKS * TICK),
+                      orders.toRawSize(size),
+                    ),
+                  )
+                }
+              >
+                {busy ? "…" : `BUY UP${yesAsk ? ` ${yesAsk.price.toFixed(3)}` : ""}`}
+              </TapTarget>
+              <TapTarget
+                haptic="high"
+                disabled={busy || !noAsk || size <= 0}
+                className="bg-[#0b0b0d] py-4 text-sm font-extrabold text-down disabled:opacity-40"
+                onClick={() =>
+                  noAsk &&
+                  void settle("Bought down", "down", () =>
+                    orders.buy(
+                      focused,
+                      "down",
+                      // Buying DOWN sends a YES price; lower is more aggressive.
+                      orders.toRawPrice(1 - noAsk.price - CROSS_TICKS * TICK),
+                      orders.toRawSize(size),
+                    ),
+                  )
+                }
+              >
+                {busy ? "…" : `BUY DOWN${noAsk ? ` ${noAsk.price.toFixed(3)}` : ""}`}
+              </TapTarget>
+            </div>
+
+            {(holdingState.holding.up > 0n || holdingState.holding.down > 0n) && (
+              <div className="grid grid-cols-2 gap-px border-t border-[var(--color-line)] bg-[var(--color-line)]">
+                <TapTarget
+                  disabled={busy || holdingState.holding.up === 0n || !book.best(bookState.book.yesBids)}
+                  className="bg-[#0b0b0d] py-3 text-[11px] font-bold text-text-2 disabled:opacity-30"
+                  onClick={() => {
+                    const bid = book.best(bookState.book.yesBids);
+                    if (!bid) return;
+                    void settle("Sold up", "up", () =>
+                      orders.sell(
+                        focused,
+                        "up",
+                        orders.toRawPrice(bid.price - CROSS_TICKS * TICK),
+                        holdingState.holding.up,
+                      ),
+                    );
+                  }}
+                >
+                  SELL UP
+                </TapTarget>
+                <TapTarget
+                  disabled={busy || holdingState.holding.down === 0n || !book.best(bookState.book.noBids)}
+                  className="bg-[#0b0b0d] py-3 text-[11px] font-bold text-text-2 disabled:opacity-30"
+                  onClick={() => {
+                    const bid = book.best(bookState.book.noBids);
+                    if (!bid) return;
+                    void settle("Sold down", "down", () =>
+                      orders.sell(
+                        focused,
+                        "down",
+                        // Selling DOWN accepts a lower NO price = a higher YES price.
+                        orders.toRawPrice(1 - bid.price + CROSS_TICKS * TICK),
+                        holdingState.holding.down,
+                      ),
+                    );
+                  }}
+                >
+                  SELL DOWN
+                </TapTarget>
+              </div>
+            )}
+
+            {lastTx && (
+              <a
+                href={explorerTx(lastTx)}
+                target="_blank"
+                rel="noreferrer"
+                className="block border-t border-[var(--color-line)] px-4 py-3 text-[11px] text-text-3"
+              >
+                Last fill {lastTx.slice(0, 14)}… ↗
+              </a>
+            )}
+          </MenuSection>
 
           <MenuSection title="Order book">
             <div className="grid grid-cols-2 gap-px bg-[var(--color-line)]">
