@@ -16,9 +16,11 @@
  * escrow whether or not anything of ours is running. The window is then whichever
  * live one outlasts the offer.
  *
- * If nobody has taken it by **half** the escrow time, the challenge is pulled and
- * the collateral goes back, so it can be re-posted at better odds instead of
- * sitting on a book nobody is crossing.
+ * Once posted the offer looks after itself. A challenge does not die of old age,
+ * it dies of going **stale**: the book moves, somebody outbids it, and from
+ * behind the queue it can never fill. So it is moved back to the front when that
+ * happens — never above the price you first agreed to pay, and when the market
+ * passes that, the offer stops and the escrow comes back.
  *
  * Two honest constraints shape the screen, both measured on chain:
  *
@@ -61,10 +63,11 @@ export default function DuelPage() {
   const [side, setSide] = useState<Side>("up");
   /** When the offer was posted, for the half-time revert. */
   const [postedAt, setPostedAt] = useState<number | null>(null);
-  const [reverted, setReverted] = useState<string | null>(null);
   const now = useNow(500);
   /** The price actually posted. The live ladder keeps moving; this must not. */
   const [posted_, setPosted] = useState<number | null>(null);
+  /** The dearest price the knob was offering when posted — the chase budget. */
+  const [budget, setBudget] = useState<number | null>(null);
   const me = useSyncExternalStore(
     wallet.subscribe,
     wallet.getSnapshot,
@@ -81,8 +84,19 @@ export default function DuelPage() {
   const myCost = price == null ? null : side === "up" ? price : 1 - price;
   const theirCost = myCost == null ? null : 1 - myCost;
 
+  // The watcher's state is the screen's — read, not copied into local state,
+  // which is what the React Compiler's set-state-in-effect rule is about.
+  const keep = useSyncExternalStore(
+    coop.subscribeKeepAlive,
+    coop.getKeepAlive,
+    coop.getKeepAliveServer,
+  );
+  const finished = keep.status === "expired" || keep.status === "pricedOut";
+
+  /** What the offer costs *now* — it is re-priced each time it moves. */
+  const livePrice = keep.status === "live" && keep.yesPrice > 0 ? keep.yesPrice : posted_;
   const postedCost =
-    posted_ == null ? null : round.side === "down" ? 1 - posted_ : posted_;
+    livePrice == null ? null : coop.costOf(round.side ?? side, livePrice);
 
   const settled = ["won", "lost", "void"].includes(round.status);
   const posted = round.status === "resting";
@@ -107,8 +121,9 @@ export default function DuelPage() {
     setSide(s);
     if (!round.canEnter || price == null) return;
     setPosted(price);
+    setBudget(coop.budgetPrice(round.book, s));
     setPostedAt(Date.now());
-    setReverted(null);
+    coop.clearKeepAlive();
     // `price` is the YES price whichever side is bought, so it is sent as-is;
     // going *down* the ladder makes a short more aggressive, not less.
     round.rest(s, price, SIZE, {
@@ -117,23 +132,27 @@ export default function DuelPage() {
     });
   };
 
-  // Nobody came. Pull the order and hand the collateral back rather than let it
-  // sit for the rest of the offer's life. The watcher lives outside React so it
-  // survives leaving this screen; the offer's own on-chain expiry is the
+  // Keep the offer takeable while it stands. This watcher lives outside React so
+  // it survives leaving the screen; the order's own on-chain expiry is the
   // backstop if the tab is closed entirely.
   useEffect(() => {
-    if (!posted || !round.window || round.restingOrderId == null) return;
-    return coop.revertIfUnclaimed(
-      round.window.poolAddress,
-      round.restingOrderId,
-      escrow.secs,
-      () => {
-        void wallet.refresh();
-        setReverted(`No takers — escrow returned after ${escrow.label} / 2`);
-        round.reset();
+    if (!posted || !round.window || round.restingOrderId == null || posted_ == null) {
+      return;
+    }
+    return coop.keepAlive({
+      window: round.window,
+      side: round.side ?? side,
+      orderId: round.restingOrderId,
+      yesPrice: posted_,
+      size: SIZE,
+      escrowSecs: escrow.secs,
+      maxCost: coop.costOf(round.side ?? side, budget ?? posted_),
+      // A callback from an external system is where a reset belongs.
+      onFinish: (status) => {
+        if (status === "expired" || status === "pricedOut") round.reset();
       },
-    );
-  }, [posted, round, escrow]);
+    });
+  }, [posted, round, posted_, budget, side, escrow]);
 
   const share = async () => {
     if (!challenge) return;
@@ -290,6 +309,14 @@ export default function DuelPage() {
           value={postedCost == null ? "—" : `$${(1 - postedCost).toFixed(2)}`}
         />
         <ScreenRow
+          label="Chase up to"
+          value={
+            budget == null
+              ? "—"
+              : `$${coop.costOf(round.side ?? side, budget).toFixed(2)}`
+          }
+        />
+        <ScreenRow
           label="Offer expires in"
           value={
             postedAt == null
@@ -303,7 +330,9 @@ export default function DuelPage() {
           }
         />
         <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
-          on the public board · anyone can take it
+          {keep.reposts > 0
+            ? `moved to the front ${keep.reposts}x · anyone can take it`
+            : "on the public board · anyone can take it"}
         </div>
       </ScreenRoot>
     );
@@ -349,8 +378,8 @@ export default function DuelPage() {
       <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
         {round.message
           ? round.message
-          : reverted
-            ? reverted
+          : finished
+            ? keep.message
             : !round.window
               ? `finding a window that outlasts ${escrow.label}`
               : round.balance === 0n

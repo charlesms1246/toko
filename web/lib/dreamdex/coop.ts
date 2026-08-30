@@ -43,6 +43,7 @@ import type { Address } from "viem";
 import * as markets from "./markets";
 import * as orders from "./orders";
 import * as book from "./book";
+import * as wallet from "./wallet";
 import { MAKER_GAS_LIMIT } from "./config";
 import { getClient } from "./client";
 
@@ -162,6 +163,68 @@ export function decode(code: string): Challenge | null {
 
 export const linkFor = (c: Challenge) =>
   `${typeof window === "undefined" ? "" : window.location.origin}/c/${encode(c)}`;
+
+// ── Reading the queue ───────────────────────────────────────────────────────
+
+/**
+ * What one contract costs the buyer of a side, given a YES price.
+ *
+ * `price` is the YES price on both sides, so a Down buyer pays the complement.
+ * Every comparison about "better" or "worse" has to go through this: for Up a
+ * higher number is worse, for Down a *lower* one is.
+ */
+export const costOf = (side: Side, yesPrice: number) =>
+  side === "up" ? yesPrice : 1 - yesPrice;
+
+/**
+ * Is this challenge first in its queue?
+ *
+ * The two sides queue on opposite ends of one book, and this is easy to get
+ * backwards. A `BUY_YES` rests as a **bid**, so its rivals are the other bids
+ * and the front is the *highest* of them. A `BUY_NO` rests as an **ask** — a
+ * Down buyer paying more means a lower YES number — so its rivals are the asks
+ * and the front is the *lowest*.
+ *
+ * Comparing both sides against the bid ladder, as this first did, reports every
+ * short as being in front when it may be last.
+ */
+export function isAtFront(side: Side, yesPrice: number, b: book.Book): boolean {
+  if (side === "up") {
+    const best = book.best(b.yesBids)?.price;
+    return best == null || yesPrice >= best;
+  }
+  const best = book.best(b.yesAsks)?.price;
+  return best == null || yesPrice <= best;
+}
+
+/**
+ * The most a challenger might have to pay to stay in front: the *generous* end
+ * of the spread, opposite `frontPrice`. Null when the spread has no room.
+ *
+ * This is the natural budget for keeping an offer alive, because it is the
+ * dearest price the knob was already offering when they posted — so staying in
+ * front never costs more than something they were shown and accepted.
+ */
+export function budgetPrice(b: book.Book, side: Side): number | null {
+  const range = postableRange(b);
+  if (!range) return null;
+  return side === "up" ? range.max : range.min;
+}
+
+/**
+ * The **cheapest** price that still puts a side at the front of the book, or
+ * null when the spread has no room for one.
+ *
+ * Every price in the postable range is in front; this picks the one that costs
+ * the challenger least. For Up that is the bottom of the range, for Down the
+ * top — because a Down buyer pays the complement, so a *higher* YES number is
+ * the cheaper one.
+ */
+export function frontPrice(b: book.Book, side: Side): number | null {
+  const range = postableRange(b);
+  if (!range) return null;
+  return side === "up" ? range.min : range.max;
+}
 
 // ── The public board ────────────────────────────────────────────────────────
 
@@ -377,10 +440,12 @@ export async function status(c: Challenge): Promise<ChallengeStatus> {
   const resting = await orders.openOrdersOf(window.poolAddress, c.from);
   if (resting.some((id) => id.toString() === c.orderId)) {
     const b = await book.readBook(window.poolAddress, 1);
-    const bestBid = book.best(b.yesBids)?.price;
-    // Their bid competes with everyone else's; ours only wins if it is first.
-    const atFront = bestBid == null || c.yesPrice >= bestBid;
-    return { state: "open", window, secsLeft, atFront };
+    return {
+      state: "open",
+      window,
+      secsLeft,
+      atFront: isAtFront(c.side, c.yesPrice, b),
+    };
   }
 
   // Gone from the book. Look for the fill that removed it.
@@ -436,49 +501,213 @@ export async function crossedWith(pool: string, taker: Address): Promise<Address
   }
 }
 
-// ── Pulling an unclaimed challenge ──────────────────────────────────────────
+// ── Keeping a challenge alive ───────────────────────────────────────────────
 
 /**
- * Watch your own challenge and pull it if nobody comes.
+ * Watch your own challenge and keep it takeable.
  *
- * This lives at module level, not in a screen, because the challenger will walk
- * away from the duel page — to the board, to another game — and the promise that
- * an unclaimed offer is reverted should not depend on which route is mounted.
+ * A challenge does not fail because it ran out of time. It fails because it goes
+ * **stale**: the book moves, somebody outbids it, and from behind the queue it
+ * can never fill — whoever accepts crosses the better bid instead. Waiting
+ * longer on a stale price cannot help. So the trigger here is being outbid, not
+ * a fraction of a clock.
  *
- * It is still best-effort: close the tab and nothing of ours runs. That is why
- * the offer also carries its own `expireTimestampNs`, which the pool enforces
- * whatever we do. The half-time pull returns the collateral *sooner* so it can
- * be re-posted at better odds; the protocol expiry is what guarantees it comes
- * back at all.
+ * When that happens the offer is re-posted at the front rather than simply
+ * pulled, because a live front-of-book challenge is the thing this whole feature
+ * exists to create — cancelling it would destroy exactly the liquidity it was
+ * meant to add. Both paths cost the same single cancel.
+ *
+ * **A budget bounds the chase.** Following the front as the market moves would
+ * otherwise raise the challenger's cost without limit, so `maxCost` caps it —
+ * defaulted to the dearest price the knob was already offering when they posted,
+ * so staying in front never costs more than something they were shown. When the
+ * front passes it the offer stops and the escrow comes back, which is a
+ * principled way to give up rather than an arbitrary deadline.
+ *
+ * Note the budget has to be *above* the posted price for any of this to happen:
+ * being outbid means somebody is paying more, so matching them always costs more
+ * than what was posted. Setting the cap to the posted price makes the re-post
+ * branch unreachable — measured, and the reason `maxCost` is passed in rather
+ * than derived from the price.
+ *
+ * This lives at module level so leaving the duel screen does not abandon the
+ * offer. It is still best-effort — close the tab and nothing of ours runs —
+ * which is why the order also carries its own `expireTimestampNs`, enforced by
+ * the pool whatever we do.
  */
-let pending: ReturnType<typeof setTimeout> | null = null;
 
-export function revertIfUnclaimed(
-  pool: string,
-  orderId: bigint,
-  escrowSecs: number,
-  onReverted?: () => void,
-): () => void {
-  cancelRevertWatch();
-  pending = setTimeout(
-    () => {
-      pending = null;
-      void (async () => {
-        // Someone may have taken it in the meantime; cancelling a filled order
-        // simply fails, which is the outcome we want anyway.
-        const result = await orders.cancel(pool, orderId);
-        if (result.ok) onReverted?.();
-      })();
-    },
-    escrowSecs * REVERT_AT * 1000,
-  );
-  return cancelRevertWatch;
+export type KeepAliveStatus =
+  /** On the book and reachable. */
+  | "live"
+  /** Somebody crossed it. */
+  | "taken"
+  /** The offer's own lifetime ran out. */
+  | "expired"
+  /** Staying in front would cost more than the challenger agreed to pay. */
+  | "pricedOut"
+  | "idle";
+
+export interface KeepAliveState {
+  status: KeepAliveStatus;
+  orderId: bigint | null;
+  /** The price currently posted, which moves as the offer is re-posted. */
+  yesPrice: number;
+  /** How many times the offer has been moved to the front. */
+  reposts: number;
+  message: string | null;
 }
 
-/** Stop watching — the challenge was taken, or the player pulled it themselves. */
-export function cancelRevertWatch() {
-  if (pending) clearTimeout(pending);
-  pending = null;
+const IDLE: KeepAliveState = {
+  status: "idle",
+  orderId: null,
+  yesPrice: 0,
+  reposts: 0,
+  message: null,
+};
+
+let keepState: KeepAliveState = IDLE;
+const keepListeners = new Set<() => void>();
+
+function setKeep(patch: Partial<KeepAliveState>) {
+  keepState = { ...keepState, ...patch };
+  keepListeners.forEach((fn) => fn());
+}
+
+export function subscribeKeepAlive(fn: () => void) {
+  keepListeners.add(fn);
+  return () => {
+    keepListeners.delete(fn);
+  };
+}
+
+export const getKeepAlive = () => keepState;
+export const getKeepAliveServer = () => IDLE;
+
+/** How long to tolerate being outbid before moving. Avoids thrashing on a blip. */
+const OUTBID_GRACE_MS = 30_000;
+const POLL_MS = 6_000;
+
+let keepTimer: ReturnType<typeof setInterval> | null = null;
+
+export function keepAlive(opts: {
+  window: markets.Window;
+  side: Side;
+  orderId: bigint;
+  yesPrice: number;
+  size: number;
+  escrowSecs: number;
+  /** The most this may cost per contract while chasing the front. */
+  maxCost: number;
+  /** Fired once the offer is off the book for good, whatever the reason. */
+  onFinish?: (status: KeepAliveStatus) => void;
+}): () => void {
+  stopKeepAlive();
+
+  const { window, side, size, escrowSecs, maxCost } = opts;
+  const startedAt = Date.now();
+  let orderId = opts.orderId;
+  let yesPrice = opts.yesPrice;
+  let reposts = 0;
+  let outbidSince: number | null = null;
+  let busy = false;
+
+  setKeep({ status: "live", orderId, yesPrice, reposts, message: null });
+
+  const finish = (status: KeepAliveStatus, message: string | null) => {
+    stopKeepAlive();
+    setKeep({ status, message });
+    // The balance moved on every one of these paths — a fill, a refund, or a
+    // cancel — so it is refreshed here rather than by each caller.
+    void wallet.refresh();
+    opts.onFinish?.(status);
+  };
+
+  const run = async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      const secsLeft = escrowSecs - (Date.now() - startedAt) / 1000;
+
+      // Gone from the book: taken by somebody, since we are the only one who
+      // cancels it.
+      const own = await orders.ownOpenOrders(window.poolAddress);
+      const stillResting = own.some((id) => id === orderId);
+      if (!stillResting) {
+        finish("taken", "Somebody took it");
+        return;
+      }
+
+      if (secsLeft <= 0) {
+        await orders.cancel(window.poolAddress, orderId);
+        finish("expired", "Offer expired — escrow returned");
+        return;
+      }
+
+      const b = await book.readBook(window.poolAddress, 1);
+      if (isAtFront(side, yesPrice, b)) {
+        outbidSince = null;
+        return;
+      }
+
+      outbidSince ??= Date.now();
+      if (Date.now() - outbidSince < OUTBID_GRACE_MS) return;
+
+      const front = frontPrice(b, side);
+      if (front == null) return; // spread has no room; wait for it to open
+      if (costOf(side, front) > maxCost) {
+        await orders.cancel(window.poolAddress, orderId);
+        finish("pricedOut", "Market moved past your price — escrow returned");
+        return;
+      }
+
+      // Move to the front: pull, then re-rest for whatever life the offer has
+      // left. A failed cancel means it filled between the two reads, which the
+      // next pass reports as taken.
+      const pulled = await orders.cancel(window.poolAddress, orderId);
+      if (!pulled.ok) return;
+
+      const again = await orders.rest(
+        window,
+        side,
+        orders.toRawPrice(front),
+        orders.toRawSize(size),
+        {
+          expireNs: BigInt(Math.floor(Date.now() / 1000 + secsLeft)) * 1_000_000_000n,
+          userData: DUEL_TAG,
+        },
+      );
+      if (!again.ok || again.orderId == null) {
+        finish("expired", again.error ?? "Could not move the offer — escrow returned");
+        return;
+      }
+
+      orderId = again.orderId;
+      yesPrice = front;
+      reposts += 1;
+      outbidSince = null;
+      setKeep({ orderId, yesPrice, reposts, message: null });
+    } catch {
+      // A read failed; try again next pass rather than abandon the offer.
+    } finally {
+      busy = false;
+    }
+  };
+
+  keepTimer = setInterval(() => void run(), POLL_MS);
+  return stopKeepAlive;
+}
+
+/** Stop watching. The order stays on the book until taken or expired. */
+export function stopKeepAlive() {
+  if (keepTimer) clearInterval(keepTimer);
+  keepTimer = null;
+}
+
+/** Reset the watcher's reported state, once a screen has shown its result. */
+export function clearKeepAlive() {
+  stopKeepAlive();
+  keepState = IDLE;
+  keepListeners.forEach((fn) => fn());
 }
 
 // ── Accepting ───────────────────────────────────────────────────────────────
