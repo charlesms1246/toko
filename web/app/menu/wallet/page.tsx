@@ -3,8 +3,8 @@
 /**
  * The real wallet — everything on this screen comes from Shannon.
  *
- * The chip balance the games still use is the local simulator and lives on the
- * Deposit screen; it is replaced by this one when the games move on-chain.
+ * A new player is funded during onboarding, so this screen is the manual path:
+ * topping up again, taking the collateral faucet, and exporting the key.
  */
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";

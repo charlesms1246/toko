@@ -2,27 +2,58 @@
 
 /**
  * The ordered gates a new player passes through before the console becomes
- * playable: landing -> onboarding -> username -> welcome -> customize.
+ * playable: landing -> starting -> username -> funding -> customize.
+ *
+ * The funding gate is the one that matters. A visitor arrives with a wallet
+ * generated in their browser and nothing in it, so this is where the treasury
+ * sends them STT for gas and the collateral contract's faucet sends them tUSDC
+ * — two real transactions on Shannon, which is why the step shows its progress
+ * and its result rather than pretending to be instant.
+ *
+ * It never blocks: if the treasury is dry or unconfigured it says so, points at
+ * the public faucets, and lets the player through.
  */
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import TapTarget from "@/components/ui/TapTarget";
 import PresetCarousel from "@/components/customize/PresetCarousel";
 import { useConsoleTheme } from "@/lib/console/theme-context";
 import { useStoreActions } from "@/lib/api/hooks";
 import { APP } from "@/lib/api/fixtures";
 import { resumeAudio } from "@/lib/sound";
+import { COLLATERAL, GAS, STT_FAUCETS } from "@/lib/dreamdex/config";
+import * as wallet from "@/lib/dreamdex/wallet";
 
-type Step = "landing" | "starting" | "username" | "welcome" | "customize";
+type Step = "landing" | "starting" | "username" | "funding" | "customize";
 
 export default function Onboarding({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<Step>("landing");
   const [handle, setHandle] = useState("");
+  const [stage, setStage] = useState<wallet.FundingStage | null>(null);
+  const [fundError, setFundError] = useState<string | null>(null);
   const { setUsername } = useStoreActions();
   const { custom, set } = useConsoleTheme();
+  const funds = useSyncExternalStore(
+    wallet.subscribe,
+    wallet.getSnapshot,
+    wallet.getServerSnapshot,
+  );
 
   const handleValid = handle.length >= 3 && handle.length <= 20;
+
+  /**
+   * Started from the press rather than an effect, so the two transactions are
+   * something the player set going.
+   */
+  const fund = () => {
+    setStep("funding");
+    setStage(null);
+    setFundError(null);
+    void wallet.ensureFunded(setStage).then((result) => {
+      if (!result.ok) setFundError(result.reason ?? "Could not fund your wallet");
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/92 px-6 backdrop-blur-md">
@@ -93,7 +124,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
             haptic="high"
             onClick={() => {
               setUsername(handle);
-              setStep("welcome");
+              fund();
             }}
           >
             Continue
@@ -101,30 +132,87 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
         </div>
       )}
 
-      {step === "welcome" && (
-        <button
-          type="button"
-          className="flex max-w-sm flex-col items-center text-center"
-          onClick={() => setStep("customize")}
-        >
-          <Image
-            src="/assets/logos/toko-mark.svg"
-            alt=""
-            width={120}
-            height={120}
-            unoptimized
-            style={{ animation: "welcome-pop .5s cubic-bezier(.16,1,.3,1) both" }}
-          />
-          <h2 className="mt-6 text-2xl font-extrabold tracking-tight">
-            We&apos;ve sent you 250 chips
-          </h2>
-          <p className="mt-2 text-sm text-text-2">
-            Chips are USDC on Somnia testnet. Play with them however you like.
-          </p>
-          <p className="mt-8 text-xs font-bold uppercase tracking-[0.2em] text-text-3">
-            Press any button to continue
-          </p>
-        </button>
+      {step === "funding" && (
+        <div className="flex w-full max-w-sm flex-col items-center text-center">
+          {stage === "done" && !fundError ? (
+            <>
+              <Image
+                src="/assets/logos/toko-mark.svg"
+                alt=""
+                width={120}
+                height={120}
+                unoptimized
+                style={{ animation: "welcome-pop .5s cubic-bezier(.16,1,.3,1) both" }}
+              />
+              <h2 className="mt-6 text-2xl font-extrabold tracking-tight">
+                You&apos;re funded
+              </h2>
+              <div className="mt-3 text-4xl font-black tabular-nums text-brand-500">
+                {wallet.formatCollateral(funds.collateral)}
+              </div>
+              <p className="mt-1 text-xs font-bold uppercase tracking-[0.2em] text-text-3">
+                {COLLATERAL.symbol} · Somnia testnet
+              </p>
+              <p className="mt-4 text-sm leading-relaxed text-text-2">
+                Real testnet collateral, in a wallet only this browser holds. Gas
+                is on us — every round you play settles on chain.
+              </p>
+              <TapTarget
+                className="mt-8 w-full rounded-full bg-brand-500 px-8 py-4 text-base font-extrabold text-black"
+                haptic="high"
+                onClick={() => setStep("customize")}
+              >
+                Continue
+              </TapTarget>
+            </>
+          ) : fundError ? (
+            <>
+              <h2 className="text-2xl font-extrabold tracking-tight">
+                Grab some {GAS.symbol} first
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-text-2">{fundError}</p>
+              <div className="mt-6 w-full">
+                {STT_FAUCETS.map((faucet) => (
+                  <a
+                    key={faucet.id}
+                    href={faucet.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mb-2 flex items-center justify-between rounded-2xl border border-[var(--color-line-strong)] bg-white/5 px-4 py-3 text-left"
+                  >
+                    <span className="text-sm font-bold">{faucet.name}</span>
+                    <span className="text-[11px] text-text-3">{faucet.detail}</span>
+                  </a>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-text-3">
+                Send it to the address on your wallet screen, then take the
+                {` ${COLLATERAL.symbol} `}faucet there too.
+              </p>
+              <TapTarget
+                className="mt-6 w-full rounded-full border border-[var(--color-line-strong)] px-8 py-4 text-base font-extrabold"
+                haptic="high"
+                onClick={() => setStep("customize")}
+              >
+                Continue anyway
+              </TapTarget>
+            </>
+          ) : (
+            <>
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/15 border-t-brand-500" />
+              <p className="mt-4 text-sm font-semibold text-text-2">
+                {stage === "gas"
+                  ? `Sending you ${GAS.symbol} for gas…`
+                  : stage === "collateral"
+                    ? `Sending you 10,000 ${COLLATERAL.symbol}…`
+                    : "Creating your wallet…"}
+              </p>
+              <p className="mt-2 text-[11px] text-text-3">
+                Two transactions on Somnia. A few seconds.
+              </p>
+            </>
+          )}
+        </div>
       )}
 
       {step === "customize" && (

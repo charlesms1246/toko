@@ -223,3 +223,45 @@ export async function requestCollateral(): Promise<FundingResult> {
     };
   }
 }
+
+/** Where first-run funding has got to. Every stage is a real transaction. */
+export type FundingStage = "gas" | "collateral" | "done";
+
+/**
+ * Fund a brand-new wallet so a first-time visitor can actually trade.
+ *
+ * Two real transactions on Shannon: our treasury sends STT for gas, then the
+ * collateral contract's own faucet sends tUSDC. Each leg is skipped when the
+ * wallet already has what it needs, so this is safe to call more than once —
+ * and the top-up route independently refuses an address that can already pay.
+ *
+ * It reports failure instead of retrying. A dry or unconfigured treasury means
+ * the player has to use a public faucet, and the screen calling this has to say
+ * so rather than leave them on a console that silently cannot trade.
+ */
+export async function ensureFunded(
+  onStage?: (stage: FundingStage) => void,
+): Promise<FundingResult> {
+  if (!ensureWallet()) return { ok: false, reason: "No wallet yet" };
+  await refresh();
+
+  if (needsGas(state.gas)) {
+    onStage?.("gas");
+    const gas = await requestGas();
+    if (!gas.ok) {
+      // "Already funded" is the route declining because we can pay — re-read
+      // the balance before treating any refusal as a failure.
+      await refresh();
+      if (needsGas(state.gas)) return { ok: false, reason: gas.reason };
+    }
+  }
+
+  if (state.collateral === 0n) {
+    onStage?.("collateral");
+    const collateral = await requestCollateral();
+    if (!collateral.ok) return collateral;
+  }
+
+  onStage?.("done");
+  return { ok: true };
+}
