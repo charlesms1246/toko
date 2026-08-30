@@ -5,7 +5,8 @@ export type GameId =
   | "snipe"
   | "press"
   | "rush"
-  | "breakout";
+  | "breakout"
+  | "duel";
 
 export type MinigameId = "line-rider" | "flappy-piper";
 
@@ -17,6 +18,7 @@ export const GAME_LABELS: Record<GameId, string> = {
   press: "Press",
   rush: "Rush",
   breakout: "Breakout",
+  duel: "Duel",
 };
 
 /** Games that ship to everyone. The rest are admin-gated lab experiments. */
@@ -28,6 +30,7 @@ export const LIVE_GAMES: GameId[] = [
   "press",
   "breakout",
   "pin",
+  "duel",
 ];
 /** Empty: every game now trades real Event Contract windows. */
 export const LAB_GAMES: GameId[] = [];

@@ -42,6 +42,7 @@ export const GAME_TAGLINES: Record<GameId, string> = {
   press: "Tighten your winning band, or fold.",
   rush: "Take the deal, or push for a better one.",
   breakout: "Call the break before it happens.",
+  duel: "Post your odds. Someone takes the other side.",
 };
 
 // Placeholders — point these at the real TOKO accounts when they exist.
