@@ -57,6 +57,8 @@ export interface MinuteRound {
   impliedUp: number | null;
   /** Contracts held on the side in play, raw. */
   held: bigint;
+  /** The id a resting bid is sitting under. Co-op's link points at this. */
+  restingOrderId: bigint | null;
   side: Side | null;
   status: RoundStatus;
   /** Real tUSDC balance, raw. */
@@ -113,6 +115,7 @@ export function useMinuteRound(intervalSec = 60): MinuteRound {
   const [entryCost, setEntryCost] = useState<bigint | null>(null);
   const [payout, setPayout] = useState<bigint | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [restingOrderId, setRestingOrderId] = useState<bigint | null>(null);
   /** The window the open position belongs to — not necessarily the live one. */
   const [playing, setPlaying] = useState<markets.Window | null>(null);
 
@@ -289,6 +292,7 @@ export function useMinuteRound(intervalSec = 60): MinuteRound {
         await wallet.refresh();
         setEntryCost(before - wallet.getSnapshot().collateral);
         setPlaying(target);
+        setRestingOrderId(result.orderId ?? null);
         // It may have crossed on arrival if the book moved to meet it.
         if (result.filled > 0n) {
           setHeld(result.filled);
@@ -359,6 +363,7 @@ export function useMinuteRound(intervalSec = 60): MinuteRound {
     setPayout(null);
     setPlaying(null);
     setMessage(null);
+    setRestingOrderId(null);
     void positions.refresh();
   }, []);
 
@@ -375,6 +380,7 @@ export function useMinuteRound(intervalSec = 60): MinuteRound {
     book: bookState.book,
     impliedUp,
     held,
+    restingOrderId,
     side,
     status: settling ? "settling" : restingExpired ? "idle" : status,
     balance: walletState.collateral,
