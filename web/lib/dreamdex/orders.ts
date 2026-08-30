@@ -210,11 +210,28 @@ export async function buy(
  *   requires anyway — so a resting order can never outlive the window it was
  *   placed in, and an unfilled one simply expires.
  */
+export interface RestOptions {
+  /**
+   * When this offer ages off the book, in nanoseconds. Defaults to the market's
+   * own expiry, which is also the ceiling — the pool rejects anything later.
+   * Setting it shorter gives the order a real, protocol-enforced lifetime that
+   * needs no client to be running.
+   */
+  expireNs?: bigint;
+  /**
+   * Opaque per-order data the pool stores and returns verbatim. The venue's
+   * market maker uses small integers for its own bookkeeping; we use it to mark
+   * an order as a TOKO challenge so the public list can find it.
+   */
+  userData?: bigint;
+}
+
 export async function rest(
   window: Window,
   side: Side,
   yesPrice: bigint,
   size: bigint,
+  options: RestOptions = {},
 ): Promise<OrderOutcome & { orderId?: bigint }> {
   const t = getTrader();
   if (!t) return { ok: false, filled: 0n, error: "No wallet" };
@@ -233,7 +250,12 @@ export async function rest(
       price: snapPrice(yesPrice, grid.tick),
       quantity,
       orderType: ORDER_TYPE.REST,
-      expireTimestampNs: expiryNs(window),
+      // Never past the market's own expiry — the pool rejects that outright.
+      expireTimestampNs:
+        options.expireNs && options.expireNs < expiryNs(window)
+          ? options.expireNs
+          : expiryNs(window),
+      userData: options.userData ?? 0n,
       // Resting writes into the book and costs multiples of a taker order.
       gas: MAKER_GAS_LIMIT,
       outcomeToken: OUTCOME_TOKEN,

@@ -49,6 +49,42 @@ import { getClient } from "./client";
 export type Side = orders.Side;
 
 /**
+ * Marks a resting order as a TOKO challenge — `0x544f4b4f`, ASCII "TOKO".
+ *
+ * `userData` is an opaque per-order field the pool stores and hands back
+ * verbatim; the venue's own market maker uses small integers in it for
+ * bookkeeping. Writing a known value into it is what makes the public list
+ * exact rather than a guess: a challenge is not "any order that isn't the
+ * maker's", it is an order that says it is one. Verified round-tripping on
+ * chain — see TESTNET_FACTS §4c.
+ */
+export const DUEL_TAG = 0x544f4b4fn;
+
+/**
+ * How long a challenge stands on the book waiting for someone.
+ *
+ * This is the order's own `expireTimestampNs`, not the series — so durations
+ * the venue has no series for (30m) are perfectly real, and an unclaimed offer
+ * ages off **by protocol**, returning its escrow with no client running.
+ */
+export const ESCROW_OPTIONS = [
+  { label: "5m", secs: 5 * 60 },
+  { label: "30m", secs: 30 * 60 },
+  { label: "1h", secs: 60 * 60 },
+  { label: "4h", secs: 4 * 60 * 60 },
+] as const;
+
+/**
+ * Fraction of the escrow after which an unclaimed challenge is pulled.
+ *
+ * Half the offer's life is long enough to find a taker; past that the collateral
+ * is better back in the challenger's hands than sitting on a book nobody is
+ * crossing. The pool's own expiry is the backstop for anyone who closes the app
+ * before this fires.
+ */
+export const REVERT_AT = 0.5;
+
+/**
  * What a challenge link carries.
  *
  * Keyed by `marketId`, never by pool — pools recycle across windows *and* across
@@ -126,6 +162,115 @@ export function decode(code: string): Challenge | null {
 
 export const linkFor = (c: Challenge) =>
   `${typeof window === "undefined" ? "" : window.location.origin}/c/${encode(c)}`;
+
+// ── The public board ────────────────────────────────────────────────────────
+
+export interface OpenChallenge {
+  challenge: Challenge;
+  window: markets.Window;
+  /** Seconds until the offer ages off the book. */
+  offerSecsLeft: number;
+  /** Seconds until the window settles. */
+  windowSecsLeft: number;
+  /** What taking it costs, in collateral. */
+  cost: number;
+}
+
+/**
+ * Every open challenge, read straight off the pools.
+ *
+ * There is no backend and no registry: the board *is* the order books. Each live
+ * window's resting orders are read on chain and filtered to the ones tagged
+ * `DUEL_TAG`, so anyone can see and take any challenge — including ones posted
+ * by people who never told them about it.
+ *
+ * Both sides have to be read. A `BUY_YES` rests as a bid; a `BUY_NO` is
+ * economically a YES ask, so it rests on the other side of the same book.
+ *
+ * Every live window is scanned, not the first few. Windows are ordered by
+ * expiry, so a cap silently hides exactly the long-dated challenges that a long
+ * offer produces — a 30-minute offer lands on a 24h window, which sorts last.
+ * Shannon runs about fourteen windows at a time and the venue documents no rate
+ * limits, so the honest read is the affordable one.
+ */
+export async function listOpen(maxWindows = 32): Promise<OpenChallenge[]> {
+  const client = getClient();
+  if (!client) return [];
+
+  const windows = markets
+    .getSnapshot()
+    .windows.filter((w) => markets.secondsLeft(w) > 0)
+    .slice(0, maxWindows);
+
+  const perWindow = await Promise.all(
+    windows.map(async (window) => {
+      const sides = await Promise.all(
+        [true, false].map(async (isBid) => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const res = (await (client as any).getAllOpenOrdersOnchain(window.poolAddress, {
+              isBid,
+              limit: 50,
+            })) as { orders?: RawOrder[] };
+            return (res?.orders ?? []).map((o) => ({ order: o, isBid }));
+          } catch {
+            return [];
+          }
+        }),
+      );
+      return sides.flat().flatMap(({ order, isBid }) => {
+        const open = toOpen(order, isBid, window);
+        return open ? [open] : [];
+      });
+    }),
+  );
+
+  return perWindow
+    .flat()
+    .sort((a, b) => a.offerSecsLeft - b.offerSecsLeft);
+}
+
+interface RawOrder {
+  orderId: bigint;
+  owner: Address;
+  userData: bigint;
+  price: bigint;
+  quantityRemaining: bigint;
+  expireTimestampNs: bigint;
+}
+
+const RAW = 1e6;
+
+/** One resting order, if it is a live TOKO challenge. */
+function toOpen(
+  o: RawOrder,
+  isBid: boolean,
+  window: markets.Window,
+): OpenChallenge | null {
+  if (BigInt(o.userData) !== DUEL_TAG) return null;
+  if (BigInt(o.quantityRemaining) <= 0n) return null;
+
+  const offerSecsLeft =
+    Number(BigInt(o.expireTimestampNs) / 1_000_000_000n) - Date.now() / 1000;
+  if (offerSecsLeft <= 0) return null;
+
+  const challenge: Challenge = {
+    marketId: window.marketId,
+    side: isBid ? "up" : "down",
+    yesPrice: Number(o.price) / RAW,
+    size: Number(o.quantityRemaining) / RAW,
+    from: o.owner,
+    orderId: o.orderId.toString(),
+  };
+
+  return {
+    challenge,
+    window,
+    offerSecsLeft,
+    windowSecsLeft: markets.secondsLeft(window),
+    cost: costToAccept(challenge),
+  };
+}
 
 // ── Where a challenge has to sit ────────────────────────────────────────────
 
@@ -289,6 +434,51 @@ export async function crossedWith(pool: string, taker: Address): Promise<Address
   } catch {
     return undefined;
   }
+}
+
+// ── Pulling an unclaimed challenge ──────────────────────────────────────────
+
+/**
+ * Watch your own challenge and pull it if nobody comes.
+ *
+ * This lives at module level, not in a screen, because the challenger will walk
+ * away from the duel page — to the board, to another game — and the promise that
+ * an unclaimed offer is reverted should not depend on which route is mounted.
+ *
+ * It is still best-effort: close the tab and nothing of ours runs. That is why
+ * the offer also carries its own `expireTimestampNs`, which the pool enforces
+ * whatever we do. The half-time pull returns the collateral *sooner* so it can
+ * be re-posted at better odds; the protocol expiry is what guarantees it comes
+ * back at all.
+ */
+let pending: ReturnType<typeof setTimeout> | null = null;
+
+export function revertIfUnclaimed(
+  pool: string,
+  orderId: bigint,
+  escrowSecs: number,
+  onReverted?: () => void,
+): () => void {
+  cancelRevertWatch();
+  pending = setTimeout(
+    () => {
+      pending = null;
+      void (async () => {
+        // Someone may have taken it in the meantime; cancelling a filled order
+        // simply fails, which is the outcome we want anyway.
+        const result = await orders.cancel(pool, orderId);
+        if (result.ok) onReverted?.();
+      })();
+    },
+    escrowSecs * REVERT_AT * 1000,
+  );
+  return cancelRevertWatch;
+}
+
+/** Stop watching — the challenge was taken, or the player pulled it themselves. */
+export function cancelRevertWatch() {
+  if (pending) clearTimeout(pending);
+  pending = null;
 }
 
 // ── Accepting ───────────────────────────────────────────────────────────────

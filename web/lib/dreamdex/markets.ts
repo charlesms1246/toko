@@ -130,8 +130,19 @@ export const secondsLeft = (w: Window) => w.expiry - Date.now() / 1000;
 export const ofInterval = (windows: Window[], intervalSec: number) =>
   windows.filter((w) => w.intervalSec === intervalSec);
 
-/** The window closing next — what the console counts down to. */
-export function nextToClose(windows: Window[], intervalSec?: number): Window | null {
+/**
+ * The window closing next — what the console counts down to.
+ *
+ * `minSecsLeft` asks for one with room to spare, which is what a challenge needs:
+ * an offer that stands for thirty minutes has to be posted in a window that
+ * outlasts it. Omit `intervalSec` to search every series, so a long offer can
+ * find a long window without the caller mapping durations to series by hand.
+ */
+export function nextToClose(
+  windows: Window[],
+  intervalSec?: number,
+  minSecsLeft = 0,
+): Window | null {
   const pool = intervalSec ? ofInterval(windows, intervalSec) : windows;
-  return pool.filter((w) => secondsLeft(w) > 0)[0] ?? null;
+  return pool.filter((w) => secondsLeft(w) > minSecsLeft)[0] ?? null;
 }
