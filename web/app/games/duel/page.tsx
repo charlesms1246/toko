@@ -10,8 +10,15 @@
  * the one venue property that lets two strangers open a market between them on a
  * book nobody else is standing in.
  *
- * It runs on the **5-minute** series: a challenge has to survive being sent to
- * somebody, and a 60-second window does not give you time to send anything.
+ * You choose how long the offer stands — 5m, 30m, 1h, 4h. That is the order's
+ * own expiry rather than a series, so a duration the venue has no series for is
+ * still real, and an unclaimed offer ages off **by protocol** and returns its
+ * escrow whether or not anything of ours is running. The window is then whichever
+ * live one outlasts the offer.
+ *
+ * If nobody has taken it by **half** the escrow time, the challenge is pulled and
+ * the collateral goes back, so it can be re-posted at better odds instead of
+ * sitting on a book nobody is crossing.
  *
  * Two honest constraints shape the screen, both measured on chain:
  *
@@ -24,7 +31,7 @@
  *   take it too. The screen says who took it rather than pretending otherwise.
  */
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useProgramConsole } from "@/lib/console/controls";
 import {
   BigNumber,
@@ -33,7 +40,7 @@ import {
   ScreenRoot,
   ScreenRow,
 } from "@/components/screen/Screen";
-import { useMinuteRound, type Side } from "@/lib/games/useMinuteRound";
+import { useMinuteRound, useNow, type Side } from "@/lib/games/useMinuteRound";
 import * as coop from "@/lib/dreamdex/coop";
 import * as book from "@/lib/dreamdex/book";
 import * as wallet from "@/lib/dreamdex/wallet";
@@ -42,14 +49,20 @@ import { useUser } from "@/lib/api/hooks";
 
 const STEPS = 5;
 const SIZE = 1;
-const FIVE_MINUTES = 300;
 
 export default function DuelPage() {
-  const round = useMinuteRound(FIVE_MINUTES);
+  const [escrowIdx, setEscrowIdx] = useState(0);
+  const escrow = coop.ESCROW_OPTIONS[escrowIdx];
+  // The window has to outlast the offer, whichever series that turns out to be.
+  const round = useMinuteRound(null, escrow.secs);
   const toast = useToast();
   const user = useUser();
   const [priceIdx, setPriceIdx] = useState(2);
   const [side, setSide] = useState<Side>("up");
+  /** When the offer was posted, for the half-time revert. */
+  const [postedAt, setPostedAt] = useState<number | null>(null);
+  const [reverted, setReverted] = useState<string | null>(null);
+  const now = useNow(500);
   /** The price actually posted. The live ladder keeps moving; this must not. */
   const [posted_, setPosted] = useState<number | null>(null);
   const me = useSyncExternalStore(
@@ -94,10 +107,33 @@ export default function DuelPage() {
     setSide(s);
     if (!round.canEnter || price == null) return;
     setPosted(price);
+    setPostedAt(Date.now());
+    setReverted(null);
     // `price` is the YES price whichever side is bought, so it is sent as-is;
     // going *down* the ladder makes a short more aggressive, not less.
-    round.rest(s, price, SIZE);
+    round.rest(s, price, SIZE, {
+      expireNs: BigInt(Math.floor(Date.now() / 1000) + escrow.secs) * 1_000_000_000n,
+      userData: coop.DUEL_TAG,
+    });
   };
+
+  // Nobody came. Pull the order and hand the collateral back rather than let it
+  // sit for the rest of the offer's life. The watcher lives outside React so it
+  // survives leaving this screen; the offer's own on-chain expiry is the
+  // backstop if the tab is closed entirely.
+  useEffect(() => {
+    if (!posted || !round.window || round.restingOrderId == null) return;
+    return coop.revertIfUnclaimed(
+      round.window.poolAddress,
+      round.restingOrderId,
+      escrow.secs,
+      () => {
+        void wallet.refresh();
+        setReverted(`No takers — escrow returned after ${escrow.label} / 2`);
+        round.reset();
+      },
+    );
+  }, [posted, round, escrow]);
 
   const share = async () => {
     if (!challenge) return;
@@ -149,6 +185,15 @@ export default function DuelPage() {
       },
       onChange: (v) => !live && !posted && setPriceIdx(v),
     },
+    numberWheel: {
+      min: 0,
+      max: coop.ESCROW_OPTIONS.length - 1,
+      step: 1,
+      value: escrowIdx,
+      label: "OFFER",
+      format: (v) => coop.ESCROW_OPTIONS[v].label,
+      onChange: (v) => !live && !posted && setEscrowIdx(v),
+    },
     status: {
       left: round.window
         ? `${round.window.asset} ${round.secsLeft.toFixed(0)}s`
@@ -197,7 +242,7 @@ export default function DuelPage() {
           right={`${round.secsLeft.toFixed(0)}s`}
         />
         <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-up">
-          Challenge taken
+          {round.filledOnArrival ? "Filled on arrival" : "Challenge taken"}
         </div>
         <BigNumber value={`$${(Number(round.held) / 1e6).toFixed(2)}`} tone="up" />
         <ScreenRow
@@ -215,6 +260,11 @@ export default function DuelPage() {
               : 0
           }
         />
+        {round.filledOnArrival && (
+          <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
+            the book moved · you took the market, not a challenger
+          </div>
+        )}
       </ScreenRoot>
     );
   }
@@ -239,15 +289,21 @@ export default function DuelPage() {
           label="They pay"
           value={postedCost == null ? "—" : `$${(1 - postedCost).toFixed(2)}`}
         />
+        <ScreenRow
+          label="Offer expires in"
+          value={
+            postedAt == null
+              ? escrow.label
+              : `${Math.max(0, Math.ceil((postedAt + escrow.secs * 1000 - now) / 1000))}s`
+          }
+        />
         <ScreenBar
           progress={
-            round.window.intervalSec
-              ? 1 - round.secsLeft / round.window.intervalSec
-              : 0
+            postedAt == null ? 0 : Math.min(1, (now - postedAt) / (escrow.secs * 1000))
           }
         />
         <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
-          on the book · anyone can take it
+          on the public board · anyone can take it
         </div>
       </ScreenRoot>
     );
@@ -278,6 +334,14 @@ export default function DuelPage() {
         value={theirCost == null ? "—" : `$${theirCost.toFixed(2)}`}
       />
       <ScreenRow
+        label="Offer stands"
+        value={
+          round.window
+            ? `${escrow.label} · settles in ${Math.round(round.secsLeft / 60)}m`
+            : escrow.label
+        }
+      />
+      <ScreenRow
         label={side === "up" ? "Market up" : "Market down"}
         value={ask ? ask.price.toFixed(3) : "—"}
       />
@@ -285,13 +349,15 @@ export default function DuelPage() {
       <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
         {round.message
           ? round.message
-          : !round.window
-            ? "finding a 5m window"
-            : round.balance === 0n
-              ? "fund your wallet"
-              : price == null
-                ? "spread too tight to post inside"
-                : "first in line · share the link"}
+          : reverted
+            ? reverted
+            : !round.window
+              ? `finding a window that outlasts ${escrow.label}`
+              : round.balance === 0n
+                ? "fund your wallet"
+                : price == null
+                  ? "spread too tight to post inside"
+                  : "first in line · listed for anyone"}
       </div>
     </ScreenRoot>
   );

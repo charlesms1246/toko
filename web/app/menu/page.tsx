@@ -99,6 +99,11 @@ export default function MenuHub() {
           label="Positions"
           href="/menu/positions"
         />
+        <MenuRow
+          icon="/assets/icons/icon-plays.webp"
+          label="Open duels"
+          href="/menu/duels"
+        />
       </MenuSection>
 
       <MenuSection title="Play">

@@ -59,6 +59,13 @@ export interface MinuteRound {
   held: bigint;
   /** The id a resting bid is sitting under. Co-op's link points at this. */
   restingOrderId: bigint | null;
+  /**
+   * True when a bid crossed the moment it landed instead of resting. The
+   * position is real either way, but nobody *took* anything — the book had
+   * simply moved during the round trip — and a screen that says otherwise is
+   * telling the player something that did not happen.
+   */
+  filledOnArrival: boolean;
   side: Side | null;
   status: RoundStatus;
   /** Real tUSDC balance, raw. */
@@ -71,12 +78,22 @@ export interface MinuteRound {
   message: string | null;
   buy: (side: Side, limitPrice: number, contracts: number) => void;
   /** Place a bid that waits for the market instead of taking it. */
-  rest: (side: Side, limitPrice: number, contracts: number) => void;
+  rest: (
+    side: Side,
+    limitPrice: number,
+    contracts: number,
+    options?: orders.RestOptions,
+  ) => void;
   sell: () => void;
   reset: () => void;
 }
 
-function useNow(everyMs = 200) {
+/**
+ * A ticking clock. Exported because screens that show their own countdown need
+ * one too, and reading `Date.now()` during render is what the React Compiler's
+ * purity rule rejects.
+ */
+export function useNow(everyMs = 200) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), everyMs);
@@ -88,9 +105,16 @@ function useNow(everyMs = 200) {
 /**
  * @param intervalSec Which series to play. 60 is the arcade round; the 5m series
  *   (300) suits the maker games, where a resting bid needs time for the market
- *   to travel to it.
+ *   to travel to it. Pass `null` to take whichever series fits — not `undefined`,
+ *   which a default parameter would quietly turn back into 60.
+ * @param minSecsLeft Only use a window with at least this long to run. A
+ *   challenge whose offer stands for half an hour needs a window that outlasts
+ *   it, and which series that turns out to be is not worth the caller deciding.
  */
-export function useMinuteRound(intervalSec = 60): MinuteRound {
+export function useMinuteRound(
+  intervalSec: number | null = 60,
+  minSecsLeft = 0,
+): MinuteRound {
   const now = useNow();
 
   const { windows } = useSyncExternalStore(
@@ -116,6 +140,7 @@ export function useMinuteRound(intervalSec = 60): MinuteRound {
   const [payout, setPayout] = useState<bigint | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [restingOrderId, setRestingOrderId] = useState<bigint | null>(null);
+  const [filledOnArrival, setFilledOnArrival] = useState(false);
   /** The window the open position belongs to — not necessarily the live one. */
   const [playing, setPlaying] = useState<markets.Window | null>(null);
 
@@ -127,7 +152,7 @@ export function useMinuteRound(intervalSec = 60): MinuteRound {
 
   // The window to trade is the next 1m to close; once a position is open the
   // round stays with the window it was opened in, even as the next one rolls.
-  const live = markets.nextToClose(windows, intervalSec);
+  const live = markets.nextToClose(windows, intervalSec ?? undefined, minSecsLeft);
   const window = playing ?? live;
   const pool = window?.poolAddress;
 
@@ -227,7 +252,11 @@ export function useMinuteRound(intervalSec = 60): MinuteRound {
 
   const buy = useCallback(
     (nextSide: Side, limitPrice: number, contracts: number) => {
-      const target = markets.nextToClose(markets.getSnapshot().windows, intervalSec);
+      const target = markets.nextToClose(
+        markets.getSnapshot().windows,
+        intervalSec ?? undefined,
+        minSecsLeft,
+      );
       if (!target) {
         setMessage("No live window");
         return;
@@ -260,12 +289,21 @@ export function useMinuteRound(intervalSec = 60): MinuteRound {
         setStatus("open");
       })();
     },
-    [intervalSec],
+    [intervalSec, minSecsLeft],
   );
 
   const rest = useCallback(
-    (nextSide: Side, limitPrice: number, contracts: number) => {
-      const target = markets.nextToClose(markets.getSnapshot().windows, intervalSec);
+    (
+      nextSide: Side,
+      limitPrice: number,
+      contracts: number,
+      options?: orders.RestOptions,
+    ) => {
+      const target = markets.nextToClose(
+        markets.getSnapshot().windows,
+        intervalSec ?? undefined,
+        minSecsLeft,
+      );
       if (!target) {
         setMessage("No live window");
         return;
@@ -282,6 +320,7 @@ export function useMinuteRound(intervalSec = 60): MinuteRound {
           nextSide,
           orders.toRawPrice(limitPrice),
           orders.toRawSize(contracts),
+          options,
         );
         if (!result.ok) {
           setStatus("idle");
@@ -294,6 +333,7 @@ export function useMinuteRound(intervalSec = 60): MinuteRound {
         setPlaying(target);
         setRestingOrderId(result.orderId ?? null);
         // It may have crossed on arrival if the book moved to meet it.
+        setFilledOnArrival(result.filled > 0n);
         if (result.filled > 0n) {
           setHeld(result.filled);
           setStatus("open");
@@ -302,7 +342,7 @@ export function useMinuteRound(intervalSec = 60): MinuteRound {
         }
       })();
     },
-    [intervalSec],
+    [intervalSec, minSecsLeft],
   );
 
   // While a bid rests, the only thing that tells us it was taken is the
@@ -364,6 +404,7 @@ export function useMinuteRound(intervalSec = 60): MinuteRound {
     setPlaying(null);
     setMessage(null);
     setRestingOrderId(null);
+    setFilledOnArrival(false);
     void positions.refresh();
   }, []);
 
@@ -381,6 +422,7 @@ export function useMinuteRound(intervalSec = 60): MinuteRound {
     impliedUp,
     held,
     restingOrderId,
+    filledOnArrival,
     side,
     status: settling ? "settling" : restingExpired ? "idle" : status,
     balance: walletState.collateral,
