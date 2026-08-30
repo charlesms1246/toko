@@ -164,6 +164,7 @@ export async function buy(
   side: Side,
   yesPrice: bigint,
   size: bigint,
+  gas: bigint = GAS_LIMIT,
 ): Promise<OrderOutcome> {
   const t = getTrader();
   if (!t) return { ok: false, filled: 0n, error: "No wallet" };
@@ -183,6 +184,7 @@ export async function buy(
       quantity,
       orderType: ORDER_TYPE.IOC,
       expireTimestampNs: expiryNs(window),
+      gas,
       // Passing the pool's own metadata skips the pre-send reads that otherwise
       // run on every order.
       outcomeToken: OUTCOME_TOKEN,
@@ -262,12 +264,22 @@ export async function cancel(pool: string, orderId: bigint): Promise<OrderOutcom
 
 /** Order ids this wallet has resting on a pool, straight from the pool. */
 export async function ownOpenOrders(pool: string): Promise<bigint[]> {
-  const client = getClient();
   const key = exportKey();
-  if (!client || !key) return [];
+  if (!key) return [];
+  return openOrdersOf(pool, privateKeyToAccount(key).address);
+}
+
+/**
+ * Order ids *any* address has resting on a pool.
+ *
+ * Co-op needs this: the person opening a challenge link has to know whether the
+ * challenger's bid is still on the book, and that is somebody else's order.
+ */
+export async function openOrdersOf(pool: string, address: Address): Promise<bigint[]> {
+  const client = getClient();
+  if (!client) return [];
   try {
-    const account = privateKeyToAccount(key);
-    return (await client.getOwnOpenOrdersOnchain(pool, account.address)) as bigint[];
+    return (await client.getOwnOpenOrdersOnchain(pool, address)) as bigint[];
   } catch {
     return [];
   }
