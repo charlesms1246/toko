@@ -3,7 +3,7 @@
 /**
  * The roll ladder — Press and Breakout.
  *
- * A rung is one real Minute round. Win it and the payout becomes the stake for
+ * A rung is one real Round. Win it and the payout becomes the stake for
  * the next rung, so the multiple compounds across consecutive windows; lose a
  * rung and the ladder ends with it. Folding stops and keeps what the last rung
  * paid.
@@ -23,7 +23,7 @@
  */
 
 import { useCallback, useState } from "react";
-import { useMinuteRound, type MinuteRound, type Side } from "./useMinuteRound";
+import { useRound, type Round, type Side } from "./useRound";
 
 export interface Rung {
   /** Contracts staked into this rung. */
@@ -33,7 +33,7 @@ export interface Rung {
 }
 
 export interface RollLadder {
-  round: MinuteRound;
+  round: Round;
   /** Rungs already won and pressed on, oldest first. */
   banked: Rung[];
   /** Rungs won back to back, including the one just settled. */
@@ -65,7 +65,7 @@ const SLIPPAGE = 0.02;
  *   makes it a call on continuation rather than a fresh bet each time.
  */
 export function useRollLadder(lockSide: boolean): RollLadder {
-  const round = useMinuteRound();
+  const round = useRound();
   const [banked, setBanked] = useState<Rung[]>([]);
   const [stake, setStake] = useState(BASE_CONTRACTS);
   const [lockedSide, setLockedSide] = useState<Side | null>(null);

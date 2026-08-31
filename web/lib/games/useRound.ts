@@ -1,10 +1,13 @@
 "use client";
 
 /**
- * The Minute — one 1-minute window is one round.
+ * The Round — one live Event Contract window is one round.
  *
  * Enter at any point in a live window, hold to expiry, and the real oracle
- * resolves it the moment it closes. A winning contract redeems for exactly 1
+ * resolves it the moment it closes. Which window that is depends on what the
+ * venue is rolling: the console asks for the shortest one with runway rather
+ * than naming a cadence, because the series it was designed around (one minute)
+ * stopped being offered while this was being built. A winning contract redeems for exactly 1
  * tUSDC; a losing one for nothing.
  *
  * The lifecycle this owns:
@@ -53,7 +56,7 @@ export type Side = "up" | "down";
 /** Leave room for the ~3s round trip plus a margin before the maker withdraws. */
 export const ENTRY_CUTOFF_SECONDS = 6;
 
-export interface MinuteRound {
+export interface Round {
   window: markets.Window | null;
   secsLeft: number;
   book: book.Book;
@@ -104,6 +107,14 @@ export interface MinuteRound {
  * one too, and reading `Date.now()` during render is what the React Compiler's
  * purity rule rejects.
  */
+export /** The same choice the hook renders from, made at press time. */
+function pickWindow(intervalSec: number | null, minSecsLeft: number) {
+  const windows = markets.getSnapshot().windows;
+  return intervalSec == null
+    ? markets.shortestRound(windows, minSecsLeft)
+    : markets.nextToClose(windows, intervalSec, minSecsLeft);
+}
+
 export function useNow(everyMs = 200) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -114,18 +125,19 @@ export function useNow(everyMs = 200) {
 }
 
 /**
- * @param intervalSec Which series to play. 60 is the arcade round; the 5m series
- *   (300) suits the maker games, where a resting bid needs time for the market
- *   to travel to it. Pass `null` to take whichever series fits — not `undefined`,
- *   which a default parameter would quietly turn back into 60.
+ * @param intervalSec Which series to play, or `null` — the usual choice — for
+ *   **whatever the shortest live series is**. Naming a cadence looks tidier and
+ *   is a trap: Shannon stopped rolling its 1-minute windows, then its 5-minute
+ *   ones, and anything pinned to `60` simply stopped finding a market. Pass
+ *   `null`, not `undefined`, which a default parameter turns back into 60.
  * @param minSecsLeft Only use a window with at least this long to run. A
  *   challenge whose offer stands for half an hour needs a window that outlasts
  *   it, and which series that turns out to be is not worth the caller deciding.
  */
-export function useMinuteRound(
-  intervalSec: number | null = 60,
+export function useRound(
+  intervalSec: number | null = null,
   minSecsLeft = 0,
-): MinuteRound {
+): Round {
   const now = useNow();
 
   const { windows } = useSyncExternalStore(
@@ -166,7 +178,10 @@ export function useMinuteRound(
 
   // The window to trade is the next 1m to close; once a position is open the
   // round stays with the window it was opened in, even as the next one rolls.
-  const live = markets.nextToClose(windows, intervalSec ?? undefined, minSecsLeft);
+  const live =
+    intervalSec == null
+      ? markets.shortestRound(windows, minSecsLeft)
+      : markets.nextToClose(windows, intervalSec, minSecsLeft);
   const window = playing ?? live;
   const pool = window?.poolAddress;
 
@@ -265,11 +280,7 @@ export function useMinuteRound(
 
   const buy = useCallback(
     (nextSide: Side, limitPrice: number, contracts: number) => {
-      const target = markets.nextToClose(
-        markets.getSnapshot().windows,
-        intervalSec ?? undefined,
-        minSecsLeft,
-      );
+      const target = pickWindow(intervalSec, minSecsLeft);
       if (!target) {
         setMessage("No live window");
         return;
@@ -313,11 +324,7 @@ export function useMinuteRound(
       contracts: number,
       options?: orders.RestOptions,
     ) => {
-      const target = markets.nextToClose(
-        markets.getSnapshot().windows,
-        intervalSec ?? undefined,
-        minSecsLeft,
-      );
+      const target = pickWindow(intervalSec, minSecsLeft);
       if (!target) {
         setMessage("No live window");
         return;
