@@ -34,6 +34,7 @@
  */
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 import { useProgramConsole } from "@/lib/console/controls";
 import {
   BigNumber,
@@ -46,6 +47,7 @@ import { useMinuteRound, useNow, type Side } from "@/lib/games/useMinuteRound";
 import * as coop from "@/lib/dreamdex/coop";
 import * as book from "@/lib/dreamdex/book";
 import * as wallet from "@/lib/dreamdex/wallet";
+import * as demo from "@/lib/demo";
 import { useToast } from "@/components/ui/Toast";
 import { useUser } from "@/lib/api/hooks";
 
@@ -57,6 +59,12 @@ const FIVE_MINUTES = 300;
 const ROLL_FLOOR_S = 90;
 
 export default function DuelPage() {
+  const router = useRouter();
+  const demoing = useSyncExternalStore(
+    demo.subscribe,
+    demo.isActive,
+    () => false,
+  );
   const [escrowIdx, setEscrowIdx] = useState(0);
   const escrow = coop.ESCROW_OPTIONS[escrowIdx];
   /**
@@ -211,7 +219,16 @@ export default function DuelPage() {
   };
 
   useProgramConsole({
-    main: live
+    main: demoing
+      ? {
+          label: "SET UP",
+          pulse: true,
+          onPress: () => {
+            demo.end();
+            router.push("/");
+          },
+        }
+      : live
       ? { label: "RIDING", disabled: true }
       : posted
         ? { label: "SHARE", pulse: true, onPress: () => void share() }
@@ -263,6 +280,24 @@ export default function DuelPage() {
     },
     lightShow: round.status === "settling" || settled,
   });
+
+  // A duel is two real orders crossing each other. A paper bid has nothing to
+  // cross with and no order for anyone to find, so this is the one game that
+  // cannot be demoed — it says so rather than pretending.
+  if (demoing) {
+    return (
+      <ScreenRoot className="items-center justify-center gap-1.5">
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
+          Needs a wallet
+        </div>
+        <BigNumber value="DUEL" tone="brand" />
+        <p className="px-3 text-center text-[10px] leading-snug text-text-3">
+          A duel is your real order crossing somebody else&apos;s. A pretend one
+          has nothing to cross with. Set up a wallet and it takes seconds.
+        </p>
+      </ScreenRoot>
+    );
+  }
 
   if (settled) {
     const won = round.status === "won";

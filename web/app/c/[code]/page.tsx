@@ -29,6 +29,7 @@ import * as coop from "@/lib/dreamdex/coop";
 import * as markets from "@/lib/dreamdex/markets";
 import * as wallet from "@/lib/dreamdex/wallet";
 import * as onboarding from "@/lib/onboarding";
+import * as demo from "@/lib/demo";
 
 type Phase = "reading" | "ready" | "taking" | "took" | "failed";
 
@@ -47,6 +48,7 @@ export default function ChallengePage({
   /** Who the fill was actually against — not always the link's challenger. */
   const [maker, setMaker] = useState<`0x${string}` | null>(null);
 
+  const demoing = useSyncExternalStore(demo.subscribe, demo.isActive, () => false);
   const gates = useSyncExternalStore(
     onboarding.subscribe,
     onboarding.getSnapshot,
@@ -60,6 +62,7 @@ export default function ChallengePage({
 
   useEffect(() => {
     onboarding.hydrate();
+    demo.hydrate();
     wallet.ensureWallet();
     void wallet.refresh();
     return markets.startPolling(3000);
@@ -111,13 +114,20 @@ export default function ChallengePage({
     })();
   }, [challenge, status]);
 
-  const onboarded = gates.onboarded;
+  const onboarded = gates.onboarded && !demoing;
   const takeable = phase === "ready" && status?.state === "open";
   const funded = me.collateral > 0n;
 
   useProgramConsole({
     main: !onboarded
-      ? { label: "SET UP", pulse: true, onPress: () => router.push("/") }
+      ? {
+          label: "SET UP",
+          pulse: true,
+          onPress: () => {
+            demo.end();
+            router.push("/");
+          },
+        }
       : phase === "took"
         ? { label: "WATCH", pulse: true, onPress: () => router.push("/menu/positions") }
         : {
