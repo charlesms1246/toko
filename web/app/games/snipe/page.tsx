@@ -89,7 +89,13 @@ export default function SnipePage() {
     return (
       <ScreenRoot className="items-center justify-center gap-1">
         <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          {round.status === "void" ? "Voided" : won ? "Sniped" : "Missed"}
+          {round.status === "void"
+            ? "Voided"
+            : round.cashedOut
+              ? "Cashed out"
+              : won
+                ? "Sniped"
+                : "Missed"}
         </div>
         <BigNumber
           value={net == null ? "—" : `${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(2)}`}

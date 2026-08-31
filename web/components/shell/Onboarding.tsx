@@ -26,6 +26,7 @@ import { useStoreActions } from "@/lib/api/hooks";
 import { APP } from "@/lib/api/fixtures";
 import { resumeAudio } from "@/lib/sound";
 import { COLLATERAL, GAS, STT_FAUCETS } from "@/lib/dreamdex/config";
+import * as demo from "@/lib/demo";
 import * as wallet from "@/lib/dreamdex/wallet";
 
 type Step = "landing" | "starting" | "username" | "funding" | "customize";
@@ -41,6 +42,8 @@ export default function Onboarding({
   const [step, setStep] = useState<Step>("landing");
   const [handle, setHandle] = useState("");
   const [stage, setStage] = useState<wallet.FundingStage | null>(null);
+  /** What they did in demo, if they came that way. Read once, on mount. */
+  const [past] = useState(() => demo.pastRun());
   const [fundError, setFundError] = useState<string | null>(null);
   const { setUsername } = useStoreActions();
   const { custom, set } = useConsoleTheme();
@@ -178,6 +181,19 @@ export default function Onboarding({
                 Real testnet collateral, in a wallet only this browser holds. Gas
                 is on us — every round you play settles on chain.
               </p>
+              {past && past.rounds > 0 && (
+                <p className="mt-3 text-[11px] leading-relaxed text-text-3">
+                  You played{" "}
+                  <span className="font-bold text-text-2">
+                    {past.rounds} {past.rounds === 1 ? "round" : "rounds"}
+                  </span>{" "}
+                  in demo and finished on{" "}
+                  <span className="font-bold text-text-2">
+                    ${(Number(past.balance) / 1e6).toFixed(2)}
+                  </span>
+                  . From here it counts.
+                </p>
+              )}
               <TapTarget
                 className="mt-8 w-full rounded-full bg-brand-500 px-8 py-4 text-base font-extrabold text-black"
                 haptic="high"

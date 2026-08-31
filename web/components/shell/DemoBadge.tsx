@@ -11,11 +11,12 @@
  */
 
 import { useRouter } from "next/navigation";
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import * as demo from "@/lib/demo";
 
 export default function DemoBadge() {
   const router = useRouter();
+  const [held, setHeld] = useState(false);
   const { active, ledger } = useSyncExternalStore(
     demo.subscribe,
     demo.getSnapshot,
@@ -26,11 +27,18 @@ export default function DemoBadge() {
   // Once a round has actually settled, the invitation can be specific about
   // what it is offering instead of generic.
   const settled = ledger.rounds > 0;
+  // Leaving throws the paper ledger away, so it must not happen on top of a
+  // round that has not finished — that would discard a position silently.
+  const busy = demo.hasOpenPlay();
 
   return (
     <button
       type="button"
       onClick={() => {
+        if (busy) {
+          setHeld(true);
+          return;
+        }
         demo.end();
         router.push("/");
       }}
@@ -38,7 +46,11 @@ export default function DemoBadge() {
     >
       Demo · fills are pretend
       <span className="ml-2 font-extrabold text-brand-500">
-        {settled ? `${ledger.rounds} played — go real` : "go real"}
+        {busy && held
+          ? "finish your round first"
+          : settled
+            ? `${ledger.rounds} played — go real`
+            : "go real"}
       </span>
     </button>
   );

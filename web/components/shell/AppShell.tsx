@@ -36,6 +36,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const finishOnboarding = useCallback(() => {
     // A funded wallet and a paper ledger must never be live together.
     demo.end();
+    // The demo summary has done its job on the funding screen by now.
+    demo.clearPastRun();
     onboarding.completeOnboarding();
     resumeAudio();
     router.push("/games");

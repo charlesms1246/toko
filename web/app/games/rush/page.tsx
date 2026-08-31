@@ -79,7 +79,13 @@ export default function RushPage() {
     return (
       <ScreenRoot className="items-center justify-center gap-1">
         <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          {round.status === "void" ? "Voided" : won ? "Pushed and won" : "Busted"}
+          {round.status === "void"
+            ? "Voided"
+            : round.cashedOut
+              ? "Took the deal"
+              : won
+                ? "Pushed and won"
+                : "Busted"}
         </div>
         <BigNumber
           value={net == null ? "—" : `${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(2)}`}
