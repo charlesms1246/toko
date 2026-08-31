@@ -70,5 +70,5 @@ export const APP = {
   name: "TOKO",
   tagline: "Built for fun and money.",
   description:
-    "The simplest, most fun way to trade. A gamified trading console on Somnia.",
+    "The simplest, most fun way to trade. A gamified trading console on Somnia, playing real DreamDEX Event Contracts.",
 };

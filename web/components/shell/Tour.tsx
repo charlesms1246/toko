@@ -15,7 +15,7 @@ const STOPS: Stop[] = [
   { tag: "The screen", copy: "Live price, your play, your result. All on this screen." },
   { tag: "Main button", copy: "This fires your play. The big one. Tap it to play." },
   { tag: "Play amount", copy: "Roll this to size how much each play costs." },
-  { tag: "The dial", copy: "Leverage, target, zone. It changes per game." },
+  { tag: "The dial", copy: "The payout you are asking for — which is really a price." },
   { tag: "The menu", copy: "Stats, history, cash out, customize." },
   { tag: "You're set", copy: "Pick a game, hit play, see what you get." },
 ];

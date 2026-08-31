@@ -7,9 +7,9 @@ import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "TOKO · World's First Virtual Gamified Trading Console",
+  title: "TOKO · Virtual Gamified Trading Console",
   description:
-    "The simplest, most fun way to trade. A gamified trading console on Somnia.",
+    "The simplest, most fun way to trade. A gamified trading console on Somnia, playing real DreamDEX Event Contracts.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
   },
   openGraph: {
-    title: "TOKO · World's First Virtual Gamified Trading Console",
+    title: "TOKO · Virtual Gamified Trading Console",
     description: "Built for fun and money.",
     url: SITE_URL,
     images: ["/toko-og.jpg"],
