@@ -34,23 +34,36 @@ export const ACHIEVEMENTS: AchievementDef[] = [
 export const achievementImage = (slug: string) =>
   `/assets/achievements/achievement-${slug.replace(/_/g, "-")}.webp`;
 
+/**
+ * One line each, describing what the game actually does now.
+ *
+ * Four of these still described the pre-integration mechanics — Pin paying for
+ * the closest call, Press tightening a *band* (that was Range, which no longer
+ * exists) — which is a promise the game does not keep.
+ */
 export const GAME_TAGLINES: Record<GameId, string> = {
   lucky: "Pick a side. Pick a payout.",
   moonshot: "Aim far. Get paid far.",
-  pin: "Name the price. Closest call wins.",
-  snipe: "The wall drifts in. Press when it is close.",
-  press: "Tighten your winning band, or fold.",
-  rush: "Take the deal, or push for a better one.",
-  breakout: "Call the break before it happens.",
+  pin: "Name your price. Wait for the market to come to you.",
+  snipe: "The offer slides toward zero. Take it before it is pulled.",
+  press: "Roll a win into the next window, or fold.",
+  rush: "Take the deal, or hold it to the buzzer.",
+  breakout: "Call the move continuing, window after window.",
   duel: "Post your odds. Someone takes the other side.",
 };
 
-// Placeholders — point these at the real TOKO accounts when they exist.
+/**
+ * Only links that go somewhere real.
+ *
+ * There were four here, two of them invented — an X account and a Telegram that
+ * have never existed. A dead link presented as ours is the same kind of untruth
+ * as a fabricated balance, so they are gone rather than waiting to be filled in.
+ * Add them back when the accounts do.
+ */
 export const LINKS = {
-  twitter: "https://x.com/tokoconsole",
-  github: "https://github.com/tokoconsole",
-  docs: "https://docs.somnia.network",
-  support: "https://t.me/tokoconsole",
+  github: "https://github.com/charlesms1246/toko",
+  somnia: "https://docs.somnia.network",
+  dreamdex: "https://dreamdex.io",
 };
 
 export const APP = {

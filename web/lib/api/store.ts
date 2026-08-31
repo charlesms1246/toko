@@ -15,16 +15,12 @@ import type { MinigameId, Settings } from "./types";
 // ── Account state ────────────────────────────────────────────────────────────
 
 interface State {
-  balance: number;
   username: string;
   displayName: string;
   avatarUrl: string | null;
   settings: Settings;
   minigameScores: Record<MinigameId, number>;
-  referralCode: string;
-  referralClaimed: number;
   admin: boolean;
-  lastFaucetMs: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -35,20 +31,30 @@ const DEFAULT_SETTINGS: Settings = {
   reduceMotion: false,
 };
 
-const STORAGE_KEY = "toko_demo_state";
+/**
+ * Preferences. Named `toko_demo_state` until Demo Mode became a real feature
+ * with its own `toko_demo_*` keys, at which point the name meant the opposite of
+ * what it holds. The old key is read once so nobody loses their settings.
+ */
+const STORAGE_KEY = "toko_prefs_v1";
+const LEGACY_KEY = "toko_demo_state";
 
+/**
+ * A new player has no name and no high scores.
+ *
+ * This used to open with a `toko_demo` identity, a 250 chip balance and
+ * `line-rider: 1240` — a personal best nobody had set. Seeded state on a screen
+ * labelled "your best" is a small lie that survives a long time, so the defaults
+ * are now genuinely empty and callers fall back to the wallet address.
+ */
 function initialState(): State {
   return {
-    balance: 250,
-    username: "toko_demo",
-    displayName: "TOKO Demo",
+    username: "",
+    displayName: "",
     avatarUrl: null,
     settings: { ...DEFAULT_SETTINGS },
-    minigameScores: { "line-rider": 1240, "flappy-piper": 14 },
-    referralCode: "TOKO-DEMO",
-    referralClaimed: 0,
+    minigameScores: { "line-rider": 0, "flappy-piper": 0 },
     admin: false,
-    lastFaucetMs: 0,
   };
 }
 
@@ -63,13 +69,11 @@ function persist() {
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        balance: state.balance,
         username: state.username,
         displayName: state.displayName,
         avatarUrl: state.avatarUrl,
         settings: state.settings,
         minigameScores: state.minigameScores,
-        referralClaimed: state.referralClaimed,
         admin: state.admin,
       }),
     );
@@ -87,7 +91,9 @@ export function hydrate() {
   if (typeof window === "undefined" || hydrated) return;
   hydrated = true;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw =
+      window.localStorage.getItem(STORAGE_KEY) ??
+      window.localStorage.getItem(LEGACY_KEY);
     if (!raw) return;
     const saved = JSON.parse(raw) as Partial<State>;
     state = {
@@ -175,12 +181,13 @@ export function submitMinigameScore(game: MinigameId, score: number) {
  * The player's own share link. There is no referral backend, so there are no
  * invite counts or earnings to report — inventing them is exactly what rule 0.5
  * forbids. Attribution would need a real indexer keyed on the referral code.
+ *
+ * The URL is built from wherever the app is actually served. It used to be
+ * hardcoded to `toko.app`, a domain that does not exist — so the one thing on
+ * the screen the player was meant to send someone was a dead link.
  */
-export function getReferral() {
-  return {
-    code: state.referralCode || state.username,
-    handle: state.username,
-    url: `https://toko.app/@${state.username}`,
-  };
+export function getReferral(handle: string) {
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  return { handle, url: handle ? `${origin}/@${handle}` : origin };
 }
 

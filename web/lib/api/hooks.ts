@@ -28,7 +28,12 @@ function useSnapshot<T>(get: () => T): T {
 }
 
 export const useSettings = () => useSnapshot(() => snapshot("settings", store.getSettings));
-export const useReferral = () => useSnapshot(() => snapshot("referral", store.getReferral));
+/** The player's share link, built from wherever the app is actually served. */
+export function useReferral() {
+  const { username, address } = useUser();
+  const handle = username || shortAddress(address);
+  return store.getReferral(handle);
+}
 export const useIsAdmin = () => useSnapshot(() => snapshot("admin", store.isAdmin));
 
 /** False until persisted preferences have been read on the client. */
@@ -36,8 +41,21 @@ export const useStoreHydrated = () =>
   useSnapshot(() => snapshot("hydrated", store.isHydrated));
 
 /**
+ * A name for someone who has not chosen one.
+ *
+ * Their own address, shortened — real data rather than an invented handle. Demo
+ * players never pass through the naming step, so this is the normal case for
+ * them, not an edge one.
+ */
+export const shortAddress = (address: string) =>
+  address ? `${address.slice(2, 6)}${address.slice(-4)}`.toLowerCase() : "";
+
+/**
  * The player: their chosen name plus their real on-chain address. There is no
  * account beyond the wallet.
+ *
+ * `username` is what they typed; `handle` is what to show, which falls back to
+ * their address when they have not named themselves.
  */
 export function useUser() {
   const local = useSnapshot(() =>
@@ -52,7 +70,12 @@ export function useUser() {
     wallet.getSnapshot,
     wallet.getServerSnapshot,
   );
-  return { ...local, address: walletState.address ?? "" };
+  const address = walletState.address ?? "";
+  return {
+    ...local,
+    address,
+    handle: local.username || shortAddress(address),
+  };
 }
 
 /** The real tUSDC balance, raw. Format with `wallet.formatCollateral`. */
