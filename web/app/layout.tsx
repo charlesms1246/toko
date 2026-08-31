@@ -30,6 +30,9 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
+  // A focused input should shrink the viewport rather than float over the
+  // console, so the device keeps fitting the space it is actually given.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

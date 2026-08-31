@@ -99,6 +99,18 @@ html {
   background: #000;
 }
 
+/*
+ * Phones size `100%` against the *large* viewport, so the console was being
+ * measured against a height that includes browser chrome which is actually
+ * covering it — the chin, and the status caption on it, ended up under the
+ * toolbar. `dvh` tracks the viewport that is really visible.
+ */
+html,
+body {
+  height: 100%;
+  height: 100dvh;
+}
+
 body {
   margin: 0;
   overscroll-behavior: none;
@@ -118,6 +130,19 @@ body {
   position: absolute;
   inset: 0;
   top: env(safe-area-inset-top);
+  bottom: env(safe-area-inset-bottom);
+}
+
+/*
+ * Touch devices: the device should own the screen. Trim the framing margin the
+ * camera leaves so the console fills a phone rather than floating in it, and
+ * stop the browser treating a drag on the knob as a page gesture.
+ */
+@media (pointer: coarse) {
+  .console-stage {
+    touch-action: none;
+    overscroll-behavior: none;
+  }
 }
 
 .toko-surround {
