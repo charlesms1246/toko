@@ -287,6 +287,9 @@ Stated plainly, because a README that only lists strengths is not much use.
   arrived with and counts the wallets it funded. There is no earnings figure,
   because there are no referral earnings.
 
+**[HOW_TO_PLAY.md](HOW_TO_PLAY.md)** explains every game and its controls, for
+players rather than developers.
+
 More detail lives in `claude-docs/` — `TESTNET_FACTS.md` for every measurement
 and the traps behind it, `INTEGRATION_PLAN.md` for why each decision went the way
 it did, `ERRORS.md` for the bugs that are easy to reintroduce.
