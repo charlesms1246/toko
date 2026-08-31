@@ -53,6 +53,9 @@ import { Theme, glowFor } from "@/lib/console/themes";
 // ── Shape helpers ────────────────────────────────────────────────────────────
 
 /** Rounded rectangle as a Shape, centred on the origin. */
+/** The brand mark's own background tile — skipped when it is put on a key. */
+const MARK_TILE_FILL = "#ffc016";
+
 function roundedRect(w: number, h: number, r: number): THREE.Shape {
   const shape = new THREE.Shape();
   const x = -w / 2;
@@ -948,6 +951,85 @@ export default function ConsoleCanvas({
     device.add(glass);
     disposables.push(glassGeo, glassMat, sheenTex);
 
+    // ── TOKO mark on the main key ───────────────────────────────────────────
+    // Added as a *child* of the cap so it travels with the key on every press
+    // rather than floating above a moving surface. The mark's own yellow
+    // backing plate is skipped — here the key is the plate — leaving the glyph
+    // and its eyes, which is the same fill convention the carved back logo
+    // reads: near-black letters, white eyes.
+    let markDisposed = false;
+    const playCap = keys.find((k) => k.userData.key === "play");
+    if (playCap) {
+      new SVGLoader().load(
+        "/assets/logos/toko-mark.svg",
+        (data) => {
+          if (markDisposed) return;
+          const SRC = 512;
+          const playSpec = BUTTON_SPECS[BUTTON_KEYS.indexOf("play")];
+          // Wide enough to read at a glance, small enough to leave the cap's
+          // bevel and highlight visible.
+          const scale = (playSpec.w * 0.46) / SRC;
+
+          const group = new THREE.Group();
+          // SVG's y axis runs the other way; z is scaled too so the relief
+          // depth below stays in source units like everything else here.
+          group.scale.set(scale, -scale, scale);
+
+          // Colours come from the mark's own fills rather than the hardware
+          // palette, so the key always carries the real brand mark — and stays
+          // right if the asset is ever redrawn.
+          const markMats = new Map<string, THREE.MeshStandardMaterial>();
+          const matFor = (fill: string, isEye: boolean) => {
+            let mat = markMats.get(fill);
+            if (!mat) {
+              mat = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(fill),
+                roughness: isEye ? 0.55 : 0.72,
+                metalness: 0,
+              });
+              markMats.set(fill, mat);
+              disposables.push(mat);
+            }
+            return mat;
+          };
+
+          for (const path of data.paths) {
+            const style = path.userData?.style as { fill?: string } | undefined;
+            const fill = (style?.fill ?? "").toLowerCase();
+            if (!fill || fill === "none") continue;
+            // The mark ships on its own rounded tile; here the key *is* the tile.
+            if (fill === MARK_TILE_FILL) continue;
+            const isEye = fill === "#ffffff" || fill === "#fff";
+            for (const shape of SVGLoader.createShapes(path)) {
+              const geo = new THREE.ExtrudeGeometry(shape, {
+                depth: 10,
+                bevelEnabled: false,
+              });
+              const mesh = new THREE.Mesh(geo, matFor(fill, isEye));
+              // Eyes sit a hair proud of the glyph so they never z-fight it.
+              if (isEye) mesh.position.z = 1.5;
+              group.add(mesh);
+              disposables.push(geo);
+            }
+          }
+
+          // Centre the glyph on the cap's top face.
+          const bounds = new THREE.Box3().setFromObject(group);
+          const centre = bounds.getCenter(new THREE.Vector3());
+          playCap.geometry.computeBoundingBox();
+          const topZ = playCap.geometry.boundingBox?.max.z ?? playSpec.depth;
+          group.position.set(-centre.x, -centre.y, topZ);
+
+          playCap.add(group);
+          invalidate();
+        },
+        undefined,
+        () => {
+          // A missing mark just leaves a plain key.
+        },
+      );
+    }
+
     // ── Carved back logo ────────────────────────────────────────────────────
     const logoMats: THREE.MeshStandardMaterial[] = [];
     const logoEyeMats: THREE.MeshStandardMaterial[] = [];
@@ -1345,6 +1427,7 @@ export default function ConsoleCanvas({
 
     return () => {
       logoDisposed = true;
+      markDisposed = true;
       cancelAnimationFrame(raf);
       observer.disconnect();
       canvas.removeEventListener("pointerdown", onPointerDown);
