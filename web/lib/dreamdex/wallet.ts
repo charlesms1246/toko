@@ -27,7 +27,15 @@ import {
   type Hash,
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { CHAIN, COLLATERAL, HTTP_RPC_URL, TOPUP_THRESHOLD_STT } from "./config";
+import {
+  CHAIN,
+  COLLATERAL,
+  GRANT_INTERVAL_MS,
+  HTTP_RPC_URL,
+  SIGNUP_GRANT,
+  TOPUP_THRESHOLD_STT,
+  WEEKLY_GRANT,
+} from "./config";
 
 const KEY_STORAGE = "toko_wallet_key_v1";
 
@@ -192,13 +200,74 @@ export async function requestGas(): Promise<FundingResult> {
   }
 }
 
-/** 10,000 tUSDC from the collateral contract's own faucet. Needs gas first. */
-export const COLLATERAL_FAUCET_AMOUNT = 10_000n * 10n ** BigInt(COLLATERAL.decimals);
+/** Where the player's own claim schedule is kept. */
+const GRANT_KEY = "toko_grant_last_v1";
 
-export async function requestCollateral(): Promise<FundingResult> {
+export interface GrantResult extends FundingResult {
+  /** tUSDC minted, in whole units. */
+  amount?: number;
+  kind?: "signup" | "weekly";
+  /** When the next claim becomes available, ms since epoch. */
+  nextAt?: number;
+}
+
+const lastClaim = (): number => {
+  try {
+    return Number(window.localStorage.getItem(GRANT_KEY) ?? 0);
+  } catch {
+    return 0;
+  }
+};
+
+/**
+ * What the next claim would be, and when it unlocks.
+ *
+ * `nextAt` of 0 means there is nothing to wait for. Deliberately free of
+ * `Date.now()` so a screen can call it while rendering — reading the clock
+ * during render is what the React Compiler's purity rule rejects, so the caller
+ * compares against its own ticking clock.
+ */
+export function grantStatus(): {
+  amount: number;
+  kind: "signup" | "weekly";
+  nextAt: number;
+} {
+  const last = typeof window === "undefined" ? 0 : lastClaim();
+  return {
+    amount: last ? WEEKLY_GRANT : SIGNUP_GRANT,
+    kind: last ? "weekly" : "signup",
+    nextAt: last ? last + GRANT_INTERVAL_MS : 0,
+  };
+}
+
+/**
+ * Mint the player's collateral: `SIGNUP_GRANT` the first time, `WEEKLY_GRANT`
+ * once a week after that.
+ *
+ * The tokens are minted by the collateral contract's own `faucet`, from the
+ * player's wallet — so the balance is genuinely theirs and genuinely on chain.
+ *
+ * **The weekly cadence is a schedule, not a lock.** That faucet is public and
+ * will mint anyone any amount, so nothing here could stop a determined person
+ * on a testnet, and pretending otherwise would be the dishonest part. What the
+ * schedule does is give starting out a shape: a stake worth a few hundred
+ * rounds, refilled weekly, rather than an infinite pile that makes nothing
+ * count. The claim time is kept locally because it is the player's own record.
+ */
+export async function requestCollateral(): Promise<GrantResult> {
   const address = ensureWallet();
   if (!account || !address) return { ok: false, reason: "No wallet yet" };
   if (needsGas(state.gas)) return { ok: false, reason: "Needs STT for gas first" };
+
+  const status = grantStatus();
+  if (Date.now() < status.nextAt) {
+    const days = Math.ceil((status.nextAt - Date.now()) / (24 * 60 * 60 * 1000));
+    return {
+      ok: false,
+      reason: `Next ${WEEKLY_GRANT} ${COLLATERAL.symbol} in ${days} day${days === 1 ? "" : "s"}`,
+      nextAt: status.nextAt,
+    };
+  }
 
   try {
     const { createWalletClient } = await import("viem");
@@ -211,11 +280,24 @@ export async function requestCollateral(): Promise<FundingResult> {
       address: COLLATERAL.address,
       abi: erc20,
       functionName: "faucet",
-      args: [COLLATERAL_FAUCET_AMOUNT],
+      args: [
+        BigInt(status.amount) * 10n ** BigInt(COLLATERAL.decimals),
+      ],
     });
     await publicClient.waitForTransactionReceipt({ hash });
+    try {
+      window.localStorage.setItem(GRANT_KEY, String(Date.now()));
+    } catch {
+      // not persisted — the schedule restarts, which only ever helps the player
+    }
     await refresh();
-    return { ok: true, hash };
+    return {
+      ok: true,
+      hash,
+      amount: status.amount,
+      kind: status.kind,
+      nextAt: Date.now() + GRANT_INTERVAL_MS,
+    };
   } catch (err) {
     return {
       ok: false,

@@ -91,6 +91,24 @@ export const MAKER_GAS_LIMIT = 8_000_000n;
  * wallet and still be unable to rest an order.
  */
 export const TOPUP_AMOUNT_STT = "1.5";
+// ── Collateral grants ───────────────────────────────────────────────────────
+
+/**
+ * What a new player starts with, in tUSDC.
+ *
+ * Small on purpose. The token's own faucet will mint anyone any amount, so the
+ * number is not a scarcity mechanism — it is the shape of the game. A stake is
+ * about $0.50, so 500 is a few hundred rounds: enough to learn the console and
+ * feel a streak, not so much that nothing counts.
+ */
+export const SIGNUP_GRANT = 500;
+
+/** Topped up by this much once a week, on request. */
+export const WEEKLY_GRANT = 100;
+
+/** How long between grants. */
+export const GRANT_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+
 /**
  * Below this, the wallet is topped up on sight.
  *
