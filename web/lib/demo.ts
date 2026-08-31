@@ -24,6 +24,8 @@
 
 const MODE_KEY = "toko_demo_mode_v1";
 const LEDGER_KEY = "toko_demo_ledger_v1";
+/** What a finished demo run left behind, for the conversion moment. */
+const PAST_KEY = "toko_demo_past_v1";
 
 /** Hypothetical opening balance, in collateral units. Labelled everywhere. */
 export const OPENING_BALANCE = 100n * 1_000_000n;
@@ -152,20 +154,82 @@ export function start() {
   emit();
 }
 
+export interface PastRun {
+  rounds: number;
+  /** Best single round, raw and signed. */
+  bestRound: bigint;
+  /** Closing paper balance, against `OPENING_BALANCE`. */
+  balance: bigint;
+}
+
 /**
  * Leave the demo. Onboarding calls this, because a funded wallet and a paper
  * ledger must never be live at the same time — that is how a demo turns into a
  * general-purpose simulator.
+ *
+ * The *ledger* goes; a short **summary** of the run is kept. Someone who just
+ * played ten rounds and then funded a wallet should not arrive at an app that
+ * has forgotten all of it — that is the moment the conversion was earned. It is
+ * a record of what they did in demo and is never mixed into real stats.
  */
 export function end() {
+  const { rounds, bestRound, balance } = state.ledger;
   state = { active: false, ledger: emptyLedger() };
   try {
+    if (rounds > 0) {
+      window.localStorage.setItem(
+        PAST_KEY,
+        JSON.stringify({
+          rounds,
+          bestRound: bestRound.toString(),
+          balance: balance.toString(),
+        }),
+      );
+    }
     window.localStorage.removeItem(MODE_KEY);
     window.localStorage.removeItem(LEDGER_KEY);
   } catch {
     // nothing to clear
   }
   emit();
+}
+
+/** The last demo run, if there was one. Display only. */
+export function pastRun(): PastRun | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(PAST_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    return {
+      rounds: Number(saved.rounds ?? 0),
+      bestRound: BigInt(saved.bestRound ?? 0),
+      balance: BigInt(saved.balance ?? OPENING_BALANCE),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearPastRun() {
+  try {
+    window.localStorage.removeItem(PAST_KEY);
+  } catch {
+    // nothing to clear
+  }
+}
+
+/**
+ * True while something is still riding — an open position or a bid on the book.
+ *
+ * Leaving demo throws the ledger away, so the way out has to refuse while a
+ * round is unfinished rather than quietly discard it.
+ */
+export function hasOpenPlay(): boolean {
+  return (
+    Object.values(state.ledger.positions).some((v) => v > 0n) ||
+    Object.keys(state.ledger.resting).length > 0
+  );
 }
 
 // ── The ledger ──────────────────────────────────────────────────────────────
@@ -239,4 +303,25 @@ export function unrest(marketId: string, refund: bigint) {
     l.balance += refund;
     delete l.resting[marketId];
   });
+}
+
+/**
+ * A resting bid whose window closed without anyone coming to it.
+ *
+ * On chain the order ages off and the escrow returns by itself, which is why
+ * the real path needs no equivalent. In paper it has to be done explicitly —
+ * and forgetting it meant an unfilled bid silently ate the balance, which is
+ * the wrong kind of unflattering.
+ */
+export function expireRest(marketId: string) {
+  const pending = state.ledger.resting[marketId];
+  if (!pending) return;
+  const escrow = BigInt(
+    Math.round(
+      (Number(pending.size) / 1e6) *
+        (pending.side === "up" ? pending.yesPrice : 1 - pending.yesPrice) *
+        1e6,
+    ),
+  );
+  unrest(marketId, escrow);
 }

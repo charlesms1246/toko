@@ -63,6 +63,14 @@ export interface MinuteRound {
   /** The id a resting bid is sitting under. Co-op's link points at this. */
   restingOrderId: bigint | null;
   /**
+   * True when the round ended by selling out early rather than at expiry.
+   *
+   * A cash-out is not a settlement: it can end below what the position cost, so
+   * a screen that reports every successful sell as a win is telling the player
+   * something untrue about their own money.
+   */
+  cashedOut: boolean;
+  /**
    * True when a bid crossed the moment it landed instead of resting. The
    * position is real either way, but nobody *took* anything — the book had
    * simply moved during the round trip — and a screen that says otherwise is
@@ -145,6 +153,7 @@ export function useMinuteRound(
   const [message, setMessage] = useState<string | null>(null);
   const [restingOrderId, setRestingOrderId] = useState<bigint | null>(null);
   const [filledOnArrival, setFilledOnArrival] = useState(false);
+  const [cashedOut, setCashedOut] = useState(false);
   /** The window the open position belongs to — not necessarily the live one. */
   const [playing, setPlaying] = useState<markets.Window | null>(null);
 
@@ -357,12 +366,24 @@ export function useMinuteRound(
     if (status !== "resting" || !playing) return;
     let cancelled = false;
     const check = async () => {
-      const holding = await execution.current().holding(playing);
+      const active = execution.current();
+      // Fills a paper bid the market has come to, or releases one whose window
+      // closed. On chain both happen without us, so this is a no-op there.
+      await active.pumpResting(playing);
+      const holding = await active.holding(playing);
       if (cancelled) return;
       const mine = side === "up" ? holding.up : holding.down;
       if (mine > 0n) {
         setHeld(mine);
         setStatus("open");
+        return;
+      }
+      // The window closed with nobody coming: the offer is done either way, and
+      // the escrow is back.
+      if (markets.secondsLeft(playing) <= 0) {
+        setStatus("idle");
+        setPlaying(null);
+        setRestingOrderId(null);
       }
     };
     void check();
@@ -396,11 +417,15 @@ export function useMinuteRound(
         return;
       }
       await active.refresh();
-      setPayout(active.balance() - before);
+      const proceeds = active.balance() - before;
+      setPayout(proceeds);
       setHeld(0n);
-      setStatus(result.ok ? "won" : "lost");
+      setCashedOut(true);
+      // Won or lost is decided by whether the sale beat what the position cost,
+      // not by whether the sale itself succeeded.
+      setStatus(entryCost != null && proceeds > entryCost ? "won" : "lost");
     })();
-  }, [playing, side, held, bookState.book]);
+  }, [playing, side, held, bookState.book, entryCost]);
 
   const reset = useCallback(() => {
     setStatus("idle");
@@ -412,6 +437,7 @@ export function useMinuteRound(
     setMessage(null);
     setRestingOrderId(null);
     setFilledOnArrival(false);
+    setCashedOut(false);
     // Paper play has no on-chain positions to re-read.
     if (!execution.current().paper) void positions.refresh();
   }, []);
@@ -431,6 +457,7 @@ export function useMinuteRound(
     held,
     restingOrderId,
     filledOnArrival,
+    cashedOut,
     side,
     status: settling ? "settling" : restingExpired ? "idle" : status,
     balance,

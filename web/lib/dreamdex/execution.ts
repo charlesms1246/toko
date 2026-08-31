@@ -22,6 +22,7 @@ import * as positions from "./positions";
 import * as redeem from "./redeem";
 import * as wallet from "./wallet";
 import * as demo from "@/lib/demo";
+import * as markets from "./markets";
 import { COLLATERAL } from "./config";
 import type { Window } from "./markets";
 import type { Position } from "./portfolio";
@@ -48,7 +49,14 @@ export interface Executor {
     size: bigint,
     options?: orders.RestOptions,
   ): Promise<OrderOutcome>;
+  /** Positions only. A read, with no side effects. */
   holding(w: Window): Promise<{ up: bigint; down: bigint }>;
+  /**
+   * Advance a resting bid: fill it if the market has come to it, or release it
+   * if its window has closed. On chain both happen by themselves, so this is a
+   * no-op there; in paper it is the only thing that moves them.
+   */
+  pumpResting(w: Window): Promise<void>;
   /** Collect a settled position. Returns what it paid. */
   claim(p: Position): Promise<{ ok: boolean; paid: bigint; error?: string }>;
 }
@@ -65,6 +73,7 @@ const chain: Executor = {
   sell: (w, side, yesPrice, size) => orders.sell(w, side, yesPrice, size),
   rest: (w, side, yesPrice, size, options) => orders.rest(w, side, yesPrice, size, options),
   holding: (w) => positions.readHolding(w),
+  pumpResting: async () => {},
   async claim(p) {
     const result = await redeem.redeem(p);
     await wallet.refresh();
@@ -104,6 +113,9 @@ const bidsFor = (b: book.Book, side: Side) => (side === "up" ? b.yesBids : b.noB
 const ownTerms = (side: Side, yesPrice: bigint) =>
   side === "up" ? Number(yesPrice) / Number(ONE) : 1 - Number(yesPrice) / Number(ONE);
 
+/** Markets currently being advanced, so overlapping polls cannot double-fill. */
+const pumping = new Set<string>();
+
 const paper: Executor = {
   paper: true,
   balance: () => demo.getBalance(),
@@ -128,16 +140,30 @@ const paper: Executor = {
   async sell(w, side, yesPrice, size) {
     const b = await book.readBook(w.poolAddress);
     const want = Number(size) / Number(ONE);
-    // Selling wants the *highest* bids first, and a limit that is a floor
-    // rather than a ceiling — so the ladder is walked against a mirrored price.
     const floor = ownTerms(side, yesPrice);
-    const bids = bidsFor(b, side).map((l) => ({ ...l, price: 1 - l.price }));
-    const { filled, spent } = sweep(bids, 1 - floor, want);
+
+    // Selling walks the bids, best (highest) first, and stops at the limit —
+    // which is a floor here rather than a ceiling. Written out rather than
+    // mirrored through the buy-side walker: the arithmetic of `1 - price` was
+    // correct but unreadable, and this is the one file that has to be obviously
+    // right.
+    let filled = 0;
+    let proceeds = 0;
+    for (const level of bidsFor(b, side)) {
+      if (filled >= want) break;
+      if (level.price < floor) break;
+      const take = Math.min(level.size, want - filled);
+      filled += take;
+      proceeds += take * level.price;
+    }
     if (filled <= 0) return { ok: false, filled: 0n, noLiquidity: true };
 
-    const proceeds = raw(filled - spent);
-    demo.close(w.marketId, side, proceeds, raw(filled));
-    return { ok: true, filled: raw(filled), fillPrice: raw((filled - spent) / filled) };
+    demo.close(w.marketId, side, raw(proceeds), raw(filled));
+    return {
+      ok: true,
+      filled: raw(filled),
+      fillPrice: raw(proceeds / filled),
+    };
   },
 
   async rest(w, side, yesPrice, size) {
@@ -152,30 +178,50 @@ const paper: Executor = {
     return { ok: true, filled: 0n };
   },
 
-  /**
-   * What the player holds — and, for a resting paper bid, whether the real
-   * market has come to it yet.
-   *
-   * The honest test is the one the real book would apply: a bid fills when
-   * somebody would have sold into it, so it fills the moment the live best
-   * offer on that side drops to the called price.
-   */
   async holding(w) {
-    const pending = demo.restingIn(w.marketId);
-    if (pending) {
-      const b = await book.readBook(w.poolAddress);
-      const offer = book.best(asksFor(b, pending.side));
-      const price = ownTerms(pending.side, raw(pending.yesPrice));
-      if (offer && offer.price <= price) {
-        const size = pending.size;
-        demo.unrest(w.marketId, 0n); // escrow was already taken at rest time
-        demo.fill(w.marketId, pending.side, 0n, size);
-      }
-    }
     return {
       up: demo.held(w.marketId, "up"),
       down: demo.held(w.marketId, "down"),
     };
+  },
+
+  /**
+   * Move a resting paper bid along.
+   *
+   * Two transitions, and both used to be missing or wrong. It **fills** when
+   * the live best offer on that side reaches the called price — the same test
+   * the real game relies on, since that is the moment somebody would have sold
+   * into the bid. It **releases** when the window closes without that
+   * happening; on chain the order simply ages off and the escrow returns, and
+   * not doing the equivalent here meant an unfilled bid quietly ate the balance.
+   *
+   * The guard matters: this is polled every couple of seconds and awaits a book
+   * read in the middle, so two passes can overlap and fill the same bid twice.
+   */
+  async pumpResting(w) {
+    if (pumping.has(w.marketId)) return;
+    const pending = demo.restingIn(w.marketId);
+    if (!pending) return;
+
+    pumping.add(w.marketId);
+    try {
+      if (markets.secondsLeft(w) <= 0) {
+        demo.expireRest(w.marketId);
+        return;
+      }
+      const b = await book.readBook(w.poolAddress);
+      if (!demo.restingIn(w.marketId)) return; // filled while we were reading
+      const offer = book.best(asksFor(b, pending.side));
+      const price = ownTerms(pending.side, raw(pending.yesPrice));
+      if (offer && offer.price <= price) {
+        // The escrow was taken when the bid was placed, so the fill itself is
+        // free — this is delivery, not a second payment.
+        demo.unrest(w.marketId, 0n);
+        demo.fill(w.marketId, pending.side, 0n, pending.size);
+      }
+    } finally {
+      pumping.delete(w.marketId);
+    }
   },
 
   async claim(p) {
