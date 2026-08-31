@@ -278,3 +278,315 @@ o.append(text(38, H - 22,
   "REAL BOOK · REAL WINDOWS · REAL ORACLE — ONLY YOUR OWN FILL IS HYPOTHETICAL, AND IT NEVER BEATS THE BOOK.",
   9.5, LABEL, track=1.2))
 write("the-seam", W, H, o)
+
+# ════════════════════════════════════════════════════════════════════════════
+# HOW_TO_PLAY.md — the player's guide. Same device vocabulary, but these carry
+# what prose does badly: where a control physically is, and how a number moves
+# while a window runs down.
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── 5. The console, labelled ────────────────────────────────────────────────
+# Drawn from lib/console/geometry.ts, so the map matches the hardware exactly.
+SRC_W, SRC_H = 1170, 2532
+SCALE, OX, OY = 0.232, 62, 76
+def sx(x): return OX + x * SCALE
+def sy(y): return OY + y * SCALE
+def sw(world): return world * 200 * SCALE          # world units -> diagram px
+
+W, H = 900, 748
+o = panel(W, H, "The console", "every game uses the same hardware")
+
+dev_x0, dev_x1 = sx(-35), sx(1205)
+o.append(rect(dev_x0, sy(0), dev_x1 - dev_x0, sy(SRC_H) - sy(0), 26,
+              fill=CREAM, op=0.10, stroke=CREAM, sw=1.25, sop=0.4))
+
+# The screen is an L — the bottom right is notched out for the big key.
+pts = [(0, 30), (1170, 30), (1170, 1325), (760, 1325), (760, 1680), (0, 1680)]
+o.append(path("M " + " L ".join(f"{sx(x)} {sy(y)}" for x, y in pts) + " Z",
+              AMBER, 1, 0.3, fill=GLASS))
+yy = 40
+while yy < 1670:
+    xr = 1170 if yy < 1325 else 760
+    o.append(line(sx(6), sy(yy), sx(xr - 6), sy(yy), AMBER, 1, 0.05))
+    yy += 26
+o.append(line(sx(6), sy(1560), sx(754), sy(1560), AMBER, 1, 0.22))
+o.append(text(sx(380), sy(1640), "BTC · 0:47 · $500.00", 9, AMBER, "400", "middle", 0.6, op=0.75))
+
+def key(cx, cy, ww, hh, colour, label, size=9):
+    x, y = sx(cx) - sw(ww) / 2, sy(cy) - sw(hh) / 2
+    out = [rect(x, y + 2, sw(ww), sw(hh), 5, fill="#000", op=0.45),
+           rect(x, y, sw(ww), sw(hh), 5, fill=colour),
+           rect(x + 1.5, y + 1.5, sw(ww) - 3, sw(hh) * 0.4, 4, fill="#ffffff", op=0.16)]
+    ink = "#241008" if colour in (AMBER, BRAND, CREAM, UP) else "#fff6ea"
+    out.append(text(sx(cx), sy(cy) + 3.2, label, size, ink, "700", "middle", 0.7))
+    return out
+
+o += key(965, 1490, 1.6, 1.5, RED, "PLAY")
+o += key(200, 1840, 1.72, 1.62, BLUE, "LONG")
+o += key(589, 1840, 1.72, 1.62, BLUE, "SHORT")
+o += key(150, 2150, 0.98, 0.31, "#c1c1c1", "MENU", 6.5)
+o += key(425, 2150, 1.02, 0.31, "#c1c1c1", "HOME", 6.5)
+
+# Knob: a ridged column. Wheel: a detented drum.
+kx, ky, kw, kh = sx(975), sy(1960), sw(1.0), sw(2.4)
+o.append(rect(kx - kw / 2, ky - kh / 2, kw, kh, kw / 2, fill=BRAND))
+for i in range(9):
+    ry = ky - kh / 2 + 8 + i * (kh - 16) / 8
+    o.append(line(kx - kw / 2 + 3, ry, kx + kw / 2 - 3, ry, "#241008", 1.1, 0.35))
+wx, wy, ww_, wh_ = sx(690), sy(2140), sw(0.86), sw(0.82)
+o.append(rect(wx - ww_ / 2, wy - wh_ / 2, ww_, wh_, 3, fill="#080808"))
+for i in range(4):
+    o.append(line(wx - ww_ / 2 + 2, wy - wh_ / 2 + 4 + i * (wh_ - 8) / 3,
+                  wx + ww_ / 2 - 2, wy - wh_ / 2 + 4 + i * (wh_ - 8) / 3, CREAM, 1, 0.28))
+
+CALLOUTS = [
+    (585, 700, 118, "SCREEN", "the game, the countdown, what you hold"),
+    (585, 1600, 214, "STATUS STRIP", "asset · seconds left in the window · your balance"),
+    (965, 1490, 300, "BIG KEY", "the main action — PLAY, TAKE, PRESS, CASH OUT"),
+    (0, 0, 332, "", "the label always says which  ·  Enter or Space"),
+    (200, 1840, 396, "LONG", "call it up  ·  keyboard ↑"),
+    (589, 1840, 452, "SHORT", "call it down  ·  keyboard ↓"),
+    (975, 1960, 520, "KNOB", "the payout you are asking for — drag it"),
+    (690, 2140, 588, "WHEEL", "how many contracts"),
+    (287, 2150, 652, "MENU · HOME", "always navigate, whatever the game is doing"),
+]
+LX = 430
+for cx, cy, ly, head, sub in CALLOUTS:
+    if head:
+        o.append(line(sx(cx), sy(cy), LX - 14, ly - 4, AMBER, 1, 0.3))
+        o.append(tick(sx(cx), sy(cy), AMBER, 3, 0.8))
+        o.append(text(LX, ly, head, 11.5, BRAND, "700", track=1.6))
+        o.append(text(LX, ly + 16, sub, 10, LABEL, "400", track=0.4))
+    else:
+        o.append(text(LX, ly, sub, 10, LABEL, "400", track=0.4))
+
+o.append(text(38, H - 22,
+  "YOU ARE HOLDING A DEVICE, NOT FILLING IN A FORM. ESC OPENS THE MENU FROM ANYWHERE.",
+  9.5, LABEL, track=1.3))
+write("play-console", W, H, o)
+
+# ── 6. What a contract pays ─────────────────────────────────────────────────
+W, H = 900, 372
+o = panel(W, H, "What a contract pays", "the one idea behind every game")
+o += screen(38, 62, W - 76, H - 104)
+
+BAR_X, BAR_W = 268, 440
+rows = [(0.50, "2x", "a coin flip"), (0.33, "3x", "you are the underdog"),
+        (0.10, "10x", "a long shot"), (0.02, "50x", "almost certainly wrong")]
+o.append(text(BAR_X, 106, "WHAT YOU PAY", 9, LABEL, "700", track=1.8))
+o.append(text(BAR_X + BAR_W, 106, "WHAT IT PAYS IF YOU ARE RIGHT", 9, LABEL, "700", "end", 1.8))
+
+for i, (price, mult, gloss) in enumerate(rows):
+    y = 128 + i * 48
+    o.append(rect(BAR_X, y, BAR_W, 26, 4, fill=UP, op=0.13, stroke=UP, sw=1, sop=0.4))
+    o.append(rect(BAR_X, y, BAR_W * price, 26, 4, fill=BRAND, op=0.9))
+    o.append(text(BAR_X - 14, y + 18, f"${price:.2f}", 12.5, BRAND, "700", "end", 0.6))
+    o.append(text(BAR_X + BAR_W + 14, y + 18, "$1.00", 12, UP, "700", track=0.6))
+    o.append(text(BAR_X + BAR_W + 74, y + 18, mult, 13, INK, "700", track=0.8))
+    o.append(text(BAR_X - 78, y + 18, gloss, 10, LABEL, "400", "end", 0.4))
+
+o.append(text(38, H - 22,
+  "SO THE PRICE IS THE ODDS. ASKING FOR A BIG MULTIPLE IS ASKING TO PAY LITTLE — BECAUSE THE MARKET DOUBTS YOU.",
+  9.5, LABEL, track=1.1))
+write("play-payout", W, H, o)
+
+# ── 7. Snipe — the wall, and the cliff ──────────────────────────────────────
+W, H = 900, 360
+o = panel(W, H, "Snipe — the wall slides, then it is gone", "one button, one moment")
+o += screen(38, 62, W - 76, H - 104)
+
+gx0, gx1, gy0, gy1 = 100, 800, 100, 262
+o.append(line(gx0, gy1, gx1, gy1, AMBER, 1, 0.28))
+o.append(line(gx0, gy0, gx0, gy1, AMBER, 1, 0.28))
+
+import math as _m
+pts = []
+for i in range(61):
+    t = i / 60                              # 0 = window opens, 1 = it closes
+    price = 0.34 * (1 - t) ** 1.7 + 0.02    # the underdog's offer, decaying
+    pts.append((gx0 + t * (gx1 - gx0) * 0.93, gy1 - (price / 0.36) * (gy1 - gy0)))
+o.append(path("M " + " L ".join(f"{x:.1f} {y:.1f}" for x, y in pts), AMBER, 2, 0.85))
+
+cliff = gx0 + 0.93 * (gx1 - gx0)
+o.append(rect(cliff, gy0, gx1 - cliff, gy1 - gy0, 3, fill=DOWN, op=0.13,
+              stroke=DOWN, sw=1, sop=0.45, dash="3 3"))
+o.append(text((cliff + gx1) / 2, gy0 - 10, "QUOTES PULLED", 9, DOWN, "700", "middle", 1.2))
+o.append(text((cliff + gx1) / 2, (gy0 + gy1) / 2, "nothing", 9.5, DOWN, "400", "middle", 0.4))
+o.append(text((cliff + gx1) / 2, (gy0 + gy1) / 2 + 14, "left to take", 9.5, DOWN, "400", "middle", 0.4))
+
+for t, mult in ((0.10, "3x"), (0.45, "6x"), (0.80, "20x")):
+    x = gx0 + t * (gx1 - gx0) * 0.93
+    y = pts[int(t * 60)][1]
+    o.append(tick(x, y, BRAND, 6, 1.0))
+    o.append(text(x, y - 14, mult, 12, BRAND, "700", "middle", 0.8))
+
+o.append(text(gx0 - 12, gy0 + 6, "OFFER", 9, LABEL, "700", "end", 1.4))
+o.append(text(gx0 - 12, gy1, "0", 9, LABEL, "700", "end", 1.4))
+o.append(text(gx0, gy1 + 20, "WINDOW OPENS", 9, LABEL, "700", track=1.4))
+o.append(text(gx1, gy1 + 20, "IT CLOSES", 9, LABEL, "700", "end", 1.4))
+o.append(text(gx0, gy1 + 42, "PRESS TAKE ANYWHERE ALONG THE LINE — LATER IS CHEAPER, AND RISKIER.",
+              9.5, INK, "400", track=0.8))
+
+o.append(text(38, H - 22,
+  "THE LONGER YOU WAIT THE BIGGER THE MULTIPLE, UNTIL THE MARKET MAKER GOES HOME.",
+  9.5, LABEL, track=1.3))
+write("play-snipe", W, H, o)
+
+# ── 8. Rush — take the deal or hold ─────────────────────────────────────────
+W, H = 900, 360
+o = panel(W, H, "Rush — the book is the banker", "take the deal, or hold to the buzzer")
+o += screen(38, 62, W - 76, H - 104)
+
+gx0, gx1, gy0, gy1 = 120, 760, 104, 258
+o.append(line(gx0, gy1, gx1, gy1, AMBER, 1, 0.28))
+o.append(line(gx0, gy0, gx0, gy1, AMBER, 1, 0.28))
+o.append(text(gx0 - 12, gy0 + 5, "$1.00", 9.5, UP, "700", "end", 0.6))
+o.append(text(gx0 - 12, gy1 + 4, "$0", 9.5, DOWN, "700", "end", 0.6))
+o.append(line(gx0, gy0, gx1, gy0, UP, 1, 0.2, dash="3 4"))
+
+# The deal is the live bid on what you hold — it wanders with the market.
+walk = [0.42, 0.46, 0.44, 0.52, 0.58, 0.55, 0.63, 0.70, 0.66, 0.74, 0.81, 0.86]
+pts = [(gx0 + i * (gx1 - gx0) / (len(walk) - 1), gy1 - v * (gy1 - gy0)) for i, v in enumerate(walk)]
+o.append(path("M " + " L ".join(f"{x:.1f} {y:.1f}" for x, y in pts), BRAND, 2, 0.85))
+o.append(text(pts[0][0] + 6, pts[0][1] - 12, "what you paid", 9.5, LABEL, "400", track=0.4))
+o.append(tick(pts[0][0], pts[0][1], BRAND, 6, 1.0))
+
+mid = pts[7]
+o.append(tick(mid[0], mid[1], BRAND, 6, 1.0))
+o.append(path(f"M {mid[0]} {mid[1]} L {mid[0]} {mid[1]+30}", BLUE, 1.25, 0.55, dash="4 3"))
+o += node(mid[0] - 96, mid[1] + 34, 192, 36,
+          [("TAKE THE DEAL — bank it now", 10, INK, "400")], accent=BLUE, dash="4 3")
+
+end = pts[-1]
+o.append(tick(end[0], end[1], BRAND, 6, 1.0))
+o.append(path(f"M {end[0]} {end[1]} L {gx1 + 20} {end[1]}", AMBER, 1.25, 0.5))
+o += node(gx1 + 26, gy0 - 4, 106, 58, [("HOLD ON", 10, INK, "700"),
+                                       ("right → $1.00", 10, UP, "400"),
+                                       ("wrong → $0", 10, DOWN, "400")], accent=UP)
+
+o.append(text(gx0, gy1 + 22, "ANTE UP", 9, LABEL, "700", track=1.6))
+o.append(text(gx1, gy1 + 22, "THE BUZZER", 9, LABEL, "700", "end", 1.6))
+o.append(text(gx0, gy1 + 44,
+  "THE DEAL IS REAL: IT IS WHAT THE ORDER BOOK WILL PAY FOR YOUR POSITION RIGHT NOW.",
+  9.5, INK, "400", track=0.7))
+
+o.append(text(38, H - 22,
+  "THERE IS NO PUSH KEY — PUSHING IS DECLINING THE DEAL, SO A BUTTON FOR IT WOULD DO NOTHING.",
+  9.5, LABEL, track=1.2))
+write("play-rush", W, H, o)
+
+# ── 9. Press and Breakout — the ladder ──────────────────────────────────────
+W, H = 900, 372
+o = panel(W, H, "Press — the ladder", "a win stakes the next window")
+o += screen(38, 62, W - 76, H - 104)
+
+base_y, step = 268, 46
+stakes = ["$1", "$2", "$4", "$8"]
+for i, stake in enumerate(stakes):
+    x, y = 110 + i * 178, base_y - i * step
+    o += node(x, y - 30, 132, 44, [(f"RUNG {i+1}", 9, LABEL, "700"),
+                                   (f"{stake} at stake", 11.5, BRAND, "700")], accent=BRAND)
+    if i < len(stakes) - 1:
+        o.append(path(f"M {x+132} {y-8} L {x+160} {y-8} L {x+160} {y-8-step} L {x+178} {y-8-step}",
+                      UP, 1.25, 0.55))
+        o.append(tick(x + 178, y - 8 - step, UP))
+        o.append(text(x + 146, y - 20 - step / 2, "PRESS", 8.5, UP, "700", "middle", 1.0))
+    o.append(path(f"M {x+66} {y+14} L {x+66} {y+42}", DOWN, 1.25, 0.45, dash="4 3"))
+    o.append(text(x + 66, y + 58, "lose → it ends", 9, DOWN, "400", "middle", 0.4))
+
+o += node(90, 96, 268, 44, [("FOLD at any rung — stop and keep it", 10, INK, "400")],
+          accent=CREAM, dash="4 3")
+
+o.append(text(38, H - 22,
+  "YOU PICK A SIDE FRESH ON EVERY RUNG — IT NEVER ROLLS BY ITSELF. BREAKOUT IS THE SAME LADDER WITH THE SIDE LOCKED.",
+  9.5, LABEL, track=1.0))
+write("play-ladder", W, H, o)
+
+# ── 10. Pin — name your price and wait ──────────────────────────────────────
+W, H = 900, 400
+o = panel(W, H, "Pin — you make the offer", "your bid goes on the real book")
+o += screen(38, 62, W - 76, H - 104)
+
+lx, lw = 90, 200
+levels = [("0.68", "asks", 0.5), ("0.66", "", 0.5), ("0.64", "", 0.5)]
+for i, (p, tag, op_) in enumerate(levels):
+    y = 104 + i * 24
+    o.append(rect(lx, y, lw, 18, 3, fill=DOWN, op=0.10, stroke=DOWN, sw=1, sop=0.28))
+    o.append(text(lx + 12, y + 13, p, 10.5, DOWN, "400", track=0.6))
+o.append(text(lx + lw + 14, 117, "what sellers want", 9.5, LABEL, "400", track=0.4))
+
+o.append(line(lx - 10, 186, lx + lw + 10, 186, AMBER, 1.5, 0.7))
+o.append(text(lx + lw + 14, 190, "the market now", 9.5, AMBER, "400", track=0.4))
+
+for i, p in enumerate(["0.60", "0.58"]):
+    y = 200 + i * 24
+    o.append(rect(lx, y, lw, 18, 3, fill=UP, op=0.10, stroke=UP, sw=1, sop=0.28))
+    o.append(text(lx + 12, y + 13, p, 10.5, UP, "400", track=0.6))
+o.append(text(lx + lw + 14, 213, "what buyers offer", 9.5, LABEL, "400", track=0.4))
+
+o.append(rect(lx, 272, lw, 22, 3, fill=BRAND, op=0.16, stroke=BRAND, sw=1.25, sop=0.7))
+o.append(text(lx + 12, 287, "0.40  ← YOUR PIN", 11, BRAND, "700", track=0.6))
+o.append(path(f"M {lx + lw/2} 224 L {lx + lw/2} 268", BRAND, 1.25, 0.45, dash="4 3"))
+o.append(text(lx + lw / 2 + 10, 252, "how far it still has to travel", 9, LABEL, "400", track=0.4))
+
+o += node(500, 150, 320, 56, [
+    ("the market comes to you", 11.5, UP, "700"),
+    ("→ you are in the round, at your price", 10, LABEL, "400")], accent=UP)
+o += node(500, 236, 320, 56, [
+    ("the window closes first", 11.5, INK, "700"),
+    ("→ nothing happens, your money comes back", 10, LABEL, "400")], accent=CREAM, dash="4 3")
+o.append(path("M 300 283 L 470 283 L 470 178 L 500 178", UP, 1.25, 0.5))
+o.append(path("M 470 264 L 500 264", CREAM, 1.25, 0.4, dash="4 3"))
+o.append(tick(500, 178, UP)); o.append(tick(500, 264, CREAM))
+
+o.append(text(38, H - 22,
+  "PLAYING PIN IS PROVIDING LIQUIDITY — YOUR RESTING BID IS REAL DEPTH ANYONE CAN TRADE AGAINST.",
+  9.5, LABEL, track=1.2))
+write("play-pin", W, H, o)
+
+# ── 11. Duel — the player's view ────────────────────────────────────────────
+W, H = 900, 380
+o = panel(W, H, "Duel — play against a person", "a challenge is a real order")
+o += screen(38, 62, W - 76, H - 104)
+
+o += node(70, 100, 236, 74, [
+    ("YOU", 10, UP, "700"),
+    ("pick a side and the odds", 11, INK, "400"),
+    ("say how long it stands", 11, INK, "400"),
+    ("5m · 30m · 1h · 4h", 9.5, LABEL, "400")], accent=UP)
+
+o += node(332, 100, 236, 74, [
+    ("SHARE THE LINK", 10, BRAND, "700"),
+    ("or leave it on the board", 11, INK, "400"),
+    ("Menu → Open duels,", 9.5, LABEL, "400"),
+    ("where anyone can take it", 9.5, LABEL, "400")], accent=BRAND)
+
+o += node(594, 100, 236, 74, [
+    ("THEY TAKE IT", 10, DOWN, "700"),
+    ("the opposite side,", 11, INK, "400"),
+    ("at the odds you offered", 11, INK, "400")], accent=DOWN)
+
+for x in (306, 568):
+    o.append(line(x, 137, x + 26, 137, AMBER, 1.25, 0.5))
+    o.append(tick(x + 26, 137))
+
+o.append(path("M 450 174 L 450 206", AMBER, 1.4, 0.6))
+o.append(tick(450, 206))
+o += node(280, 212, 340, 50, [
+    ("you are now on opposite sides of one window", 11, BRAND, "700")],
+    accent=BRAND, fill=BRAND, op=0.07)
+
+o.append(path("M 450 262 L 450 288", AMBER, 1.25, 0.55))
+o.append(tick(450, 288))
+o += node(280, 294, 340, 44, [
+    ("the window closes — one of you is right", 10.5, INK, "400")], accent=AMBER)
+
+o.append(text(70, 272, "NEEDS A", 9, LABEL, "700", track=1.8))
+o.append(text(70, 288, "REAL WALLET", 10.5, DOWN, "700", track=0.8))
+o.append(text(70, 306, "a pretend order has", 9, LABEL, "400", track=0.3))
+o.append(text(70, 318, "nothing to trade against", 9, LABEL, "400", track=0.3))
+
+o.append(text(38, H - 22,
+  "WHILE IT WAITS THE CONSOLE KEEPS IT COMPETITIVE — AND HANDS YOUR MONEY BACK IF THE MARKET RUNS AWAY.",
+  9.5, LABEL, track=1.1))
+write("play-duel", W, H, o)
