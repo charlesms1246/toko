@@ -2,8 +2,8 @@
 
 A handheld trading console that trades **real DreamDEX Event Contracts on
 Somnia**. You pick a side and a price, the price *is* your multiple, and one
-1-minute window is one round — entered, settled by the oracle the moment it
-expires, and paid out at exactly 1 tUSDC per winning contract.
+live window is one round — entered, settled by the oracle the moment it expires,
+and paid out at exactly 1 tUSDC per winning contract.
 
 Nothing on screen is simulated. Every price, book, countdown, fill, settlement
 and payout comes from Shannon testnet. The single exception is **Demo Mode**,
@@ -11,6 +11,7 @@ which lets someone play before they have a wallet, is labelled everywhere, and
 is described honestly below.
 
 ```bash
+cd web
 npm install
 npm run dev        # http://localhost:3000
 ```
@@ -26,8 +27,7 @@ secret; see Configuration.
 1. Open `http://localhost:3000`.
 2. **"Try it first"** — no wallet, no signup, no configuration. You are trading
    a live BTC window against the real book within seconds.
-3. Play `/games/lucky`. A window is 60 seconds; hold to expiry and the real
-   oracle settles it.
+3. Play `/games/lucky`. Hold to expiry and the real oracle settles it.
 
 **START** instead does the same thing for real: a wallet is generated in your
 browser, gas is sponsored from the treasury, and **500 tUSDC** is minted to you.
@@ -167,6 +167,8 @@ rather than faking it.
 
 ## Layout
 
+Everything below is under `web/`.
+
 ```
 app/
   page.tsx                attract mode
@@ -226,6 +228,8 @@ Everything claimed above was measured, and the scripts are here. They import the
 app's **own modules** rather than reimplementing the calls, so they exercise the
 code the console runs.
 
+All of these run from `web/`.
+
 ```bash
 # Read-only recon: live windows, grids, books, oracle, settlement stats
 node --experimental-strip-types scripts/doctor.mts
@@ -261,23 +265,27 @@ Stated plainly, because a README that only lists strengths is not much use.
 - **Testnet only.** The wallet is a burner generated in the browser and kept in
   `localStorage`; it is fine for testnet STT and tUSDC and unacceptable for
   anything else. `wallet.ts` is the seam a managed wallet drops into.
-- **We cannot run our own venue.** `createMarketCreator` reverts for our key —
-  proven with three writes, burning ~98.5 % of whatever gas ceiling it is given.
-  So no series the venue does not already offer, and no escaping its market
-  maker.
+- **We cannot run our own venue, and the reason is not what it first looked
+  like.** `createMarketCreator` on the factory the SDK ships does revert for our
+  key. But that factory is **legacy**: it holds 6 creators, none of which produce
+  a single live market. Every creator actually running markets was **deployed
+  directly** by one of two Somnia-side addresses, never minted through a
+  factory — and Somnia's own `getSystemInfo` reports `factoryMismatch: true`.
+  So this is not a permission check we failed; there is no public creation path
+  in the live system at all. A venue is an ask, not a code change.
 - **Duels compete with that maker.** A challenge rests inside a ~3 ¢ spread while
   the maker re-quotes far faster, so many are taken quickly or priced out. The
   keep-alive re-posts to the front within a budget and then stops.
 - **Depth is thin and moves between venues.** The maker that quoted the 1m book
   is not necessarily quoting whichever series is live now, so a press can come
-  back "nobody on the other side" — an IOC that finds nothing *reverts* on this
-  venue, and the console reports that as the normal outcome it is rather than as
-  an error.
-- **Referral attribution is not built.** The share link is real; there are no
-  invite counts, because there is no indexer keyed on the code and inventing
-  them is exactly what this project does not do.
-- **`LINKS` in `lib/api/fixtures.ts` are placeholders.** Point them somewhere
-  real before shipping.
+  back "nobody on the other side" — an IOC that finds nothing *reverts* here, and
+  the console reports that as the normal outcome it is. It remembers which
+  windows turned it away and prefers others, but it cannot conjure a
+  counterparty.
+- **Referral counts are wallets, not revenue.** The number is real: we pay for
+  every new player's first gas, so the sponsorship route records the code they
+  arrived with and counts the wallets it funded. There is no earnings figure,
+  because there are no referral earnings.
 
 More detail lives in `claude-docs/` — `TESTNET_FACTS.md` for every measurement
 and the traps behind it, `INTEGRATION_PLAN.md` for why each decision went the way
