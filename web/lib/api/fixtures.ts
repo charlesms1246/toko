@@ -61,6 +61,7 @@ export const GAME_TAGLINES: Record<GameId, string> = {
  * Add them back when the accounts do.
  */
 export const LINKS = {
+  x: "https://x.com/sigma_coder12",
   github: "https://github.com/charlesms1246/toko",
   somnia: "https://docs.somnia.network",
   dreamdex: "https://dreamdex.io",

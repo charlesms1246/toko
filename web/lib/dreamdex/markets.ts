@@ -65,6 +65,9 @@ export const getServerSnapshot = () => SERVER_STATE;
 
 /** The oracle answers in 2 decimals — `7769330` is 77693.30. */
 export const STRIKE_DECIMALS = 2;
+/** The strike as a plain number, for plotting against the price feed. */
+export const strikePrice = (strike: number) => strike / 10 ** STRIKE_DECIMALS;
+
 export const formatStrike = (strike: number) =>
   (strike / 10 ** STRIKE_DECIMALS).toLocaleString(undefined, {
     maximumFractionDigits: 2,
