@@ -24,6 +24,8 @@ import { useRollLadder } from "@/lib/games/useRollLadder";
 import type { Side } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
+import PriceChart from "@/components/screen/PriceChart";
+import * as markets from "@/lib/dreamdex/markets";
 
 export default function LadderConsole({
   title,
@@ -172,6 +174,15 @@ export default function LadderConsole({
       <ScreenRow
         label="First rung"
         value={ask ? `$${ask.price.toFixed(2)}` : "—"}
+      />
+      <PriceChart
+        asset={round.window?.asset ?? "BTC"}
+        entry={
+          round.window?.strike != null
+            ? markets.strikePrice(round.window.strike)
+            : null
+        }
+        className="flex-1"
       />
       <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
         {round.message

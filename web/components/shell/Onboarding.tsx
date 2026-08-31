@@ -23,7 +23,7 @@ import TapTarget from "@/components/ui/TapTarget";
 import PresetCarousel from "@/components/customize/PresetCarousel";
 import { useConsoleTheme } from "@/lib/console/theme-context";
 import { useStoreActions } from "@/lib/api/hooks";
-import { APP } from "@/lib/api/fixtures";
+import { APP, LINKS } from "@/lib/api/fixtures";
 import { resumeAudio } from "@/lib/sound";
 import {
   COLLATERAL,
@@ -75,50 +75,88 @@ export default function Onboarding({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/92 px-6 backdrop-blur-md">
+    <div
+      className={`fixed inset-0 z-[60] flex flex-col items-center ${
+        step === "landing"
+          ? "pointer-events-none"
+          : "justify-center bg-black/92 px-6 backdrop-blur-md"
+      }`}
+    >
       {step === "landing" && (
-        <div className="flex max-w-sm flex-col items-center text-center">
+        <>
+          {/* The console is the pitch, so it stays visible. A scrim over the
+              lower half is all that is needed to seat the type on it. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-[66%]"
+            style={{
+              background:
+                "linear-gradient(to top, #000 34%, #000000f0 58%, #00000080 80%, #0000 100%)",
+            }}
+          />
           <Image
             src="/assets/logos/toko-mark.svg"
             alt="TOKO"
-            width={132}
-            height={132}
+            width={112}
+            height={112}
             unoptimized
-            className="mb-6 drop-shadow-[0_12px_32px_rgba(255,192,22,0.28)]"
+            className="relative z-10 mt-[max(28px,calc(env(safe-area-inset-top)+16px))] h-12 w-auto drop-shadow-[0_10px_30px_rgba(0,0,0,0.6)] sm:h-14"
             priority
           />
-          <h1 className="font-display text-4xl font-bold tracking-tight">
-            {APP.name}
-          </h1>
-          <p className="mt-2 text-lg font-semibold text-brand-500">
-            {APP.tagline}
-          </p>
-          <p className="mt-4 text-sm leading-relaxed text-text-2">
-            {APP.description}
-          </p>
-          <TapTarget
-            className="mt-8 w-full rounded-full bg-brand-500 px-8 py-4 text-base font-extrabold text-black transition active:scale-[0.98]"
-            haptic="high"
-            onClick={() => {
-              resumeAudio();
-              setStep("starting");
-              setTimeout(() => setStep("username"), 900);
-            }}
-          >
-            START
-          </TapTarget>
-          <TapTarget
-            className="mt-3 w-full rounded-full border border-[var(--color-line-strong)] px-8 py-4 text-base font-extrabold text-text-2 transition active:scale-[0.98]"
-            haptic="low"
-            onClick={onDemo}
-          >
-            Try it first
-          </TapTarget>
-          <p className="mt-3 px-2 text-[11px] leading-relaxed text-text-3">
-            Real markets, real prices, real settlement — only your fills are
-            pretend. No wallet needed.
-          </p>
-        </div>
+          <div className="flex-1" />
+          <div className="relative z-10 w-full max-w-sm px-6 pb-[max(28px,calc(env(safe-area-inset-bottom)+20px))] text-center">
+            <h1 className="text-balance text-3xl font-extrabold leading-tight tracking-tight text-text">
+              {APP.tagline}
+            </h1>
+            <p className="mx-auto mt-2 max-w-xs text-[15px] leading-snug text-text-2">
+              {APP.description}
+            </p>
+            <TapTarget
+              className="pointer-events-auto mt-6 h-14 w-full rounded-full bg-brand-500 text-lg font-extrabold text-black transition active:scale-[0.98]"
+              haptic="high"
+              onClick={() => {
+                resumeAudio();
+                setStep("starting");
+                setTimeout(() => setStep("username"), 900);
+              }}
+            >
+              START
+            </TapTarget>
+            <button
+              type="button"
+              onClick={onDemo}
+              className="pointer-events-auto mt-3.5 text-sm font-semibold text-text-3 underline underline-offset-4 transition-colors hover:text-text-2"
+            >
+              Just exploring? Try demo mode
+            </button>
+
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <a
+                href={LINKS.x}
+                target="_blank"
+                rel="noreferrer"
+                className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-[13px] font-bold text-black"
+              >
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden>
+                  <path d="M18.9 2H22l-7.1 8.1L23 22h-6.6l-5.2-6.8L5.3 22H2.2l7.6-8.7L1.7 2h6.8l4.7 6.2L18.9 2Zm-1.1 18h1.7L7.3 3.8H5.5L17.8 20Z" />
+                </svg>
+                Follow
+              </a>
+              <span className="h-4 w-px bg-[var(--color-line-strong)]" />
+              <span className="text-left text-[9px] font-bold uppercase leading-tight tracking-[0.16em] text-text-3">
+                Powered by
+                <span className="block text-[11px] tracking-[0.08em] text-text-2">
+                  DreamDEX
+                </span>
+              </span>
+            </div>
+
+            <p className="mt-5 text-[11px] leading-relaxed text-text-3">
+              <span className="font-bold text-text-2">TOKO has no token.</span>{" "}
+              Any coin claiming to be TOKO is a scam.
+            </p>
+          </div>
+        </>
       )}
 
       {step === "starting" && (

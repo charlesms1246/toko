@@ -59,9 +59,22 @@ export default function MenuDrawer({
   });
 
   const drawer = (
-    <div className="fixed inset-0 z-[45] flex justify-center bg-black/80 backdrop-blur-md">
+    <div
+      className="fixed z-[45] flex justify-center overflow-hidden bg-black/80 backdrop-blur-md"
+      style={{
+        // Seated on the device rather than on the page. It is portalled to
+        // <body> to escape the screen's clipping, so it takes the hardware's
+        // projected rect from the canvas instead of filling the viewport —
+        // otherwise the menu is the one part of the app that is not a console.
+        left: "var(--device-left, 0px)",
+        right: "var(--device-right, 0px)",
+        top: "var(--device-top, 0px)",
+        bottom: "var(--device-bottom, 0px)",
+        borderRadius: "clamp(12px, 3.5vw, 26px)",
+      }}
+    >
       <div
-        className="flex h-full w-full max-w-md flex-col border-x border-[var(--color-line)] bg-[#0d0d0f]"
+        className="flex h-full w-full max-w-md flex-col bg-[#0d0d0f]"
         style={{ animation: "drawer-rise .3s var(--ease-out-expo) both" }}
       >
         <header className="flex items-center justify-between border-b border-[var(--color-line)] px-3 py-3">

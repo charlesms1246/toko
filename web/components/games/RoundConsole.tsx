@@ -29,7 +29,9 @@ import {
   ScreenHeader,
   ScreenRoot,
   ScreenRow,
+  StatTile,
 } from "@/components/screen/Screen";
+import PriceChart from "@/components/screen/PriceChart";
 import CoinIcon from "@/components/games/CoinIcon";
 import { useRound, type Side } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
@@ -189,32 +191,36 @@ export default function RoundConsole({
     const pnl = markNow != null && cost != null ? markNow - cost : null;
 
     return (
-      <ScreenRoot className="gap-1.5">
+      <ScreenRoot className="gap-2">
         <ScreenHeader
           left={`${round.window.asset} ${round.side === "up" ? "UP" : "DOWN"}`}
           right={`${round.secsLeft.toFixed(0)}s`}
         />
-        <BigNumber
-          value={markNow == null ? "—" : `$${markNow.toFixed(2)}`}
-          tone={pnl != null && pnl >= 0 ? "up" : "down"}
-        />
-        <ScreenRow
-          label="Contracts"
-          value={(Number(round.held) / 1e6).toFixed(2)}
-        />
-        <ScreenRow label="Paid" value={cost != null ? `$${cost.toFixed(2)}` : "—"} />
-        <ScreenRow
-          label="To win"
-          value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
-          tone="brand"
-        />
-        <ScreenBar
-          progress={
-            round.window.intervalSec
-              ? 1 - round.secsLeft / round.window.intervalSec
-              : 0
-          }
-        />
+        <div className="flex min-h-0 flex-1 flex-col justify-center">
+          <BigNumber
+            value={markNow == null ? "—" : `$${markNow.toFixed(2)}`}
+            tone={pnl != null && pnl >= 0 ? "up" : "down"}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <ScreenRow
+            label="Contracts"
+            value={(Number(round.held) / 1e6).toFixed(2)}
+          />
+          <ScreenRow label="Paid" value={cost != null ? `$${cost.toFixed(2)}` : "—"} />
+          <ScreenRow
+            label="To win"
+            value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
+            tone="brand"
+          />
+          <ScreenBar
+            progress={
+              round.window.intervalSec
+                ? 1 - round.secsLeft / round.window.intervalSec
+                : 0
+            }
+          />
+        </div>
       </ScreenRoot>
     );
   }
@@ -224,27 +230,51 @@ export default function RoundConsole({
     <ScreenRoot className="gap-1.5">
       <ScreenHeader
         left={title}
-        right={round.window ? `${round.secsLeft.toFixed(0)}s` : "—"}
+        right={`${round.window?.asset ?? "—"} · ${
+          round.window ? `${round.secsLeft.toFixed(0)}s` : "—"
+        }`}
       />
 
-      <div className="flex items-baseline justify-between">
-        <span className="flex items-center gap-1.5 text-sm font-black tracking-tight text-text">
-          {round.window && <CoinIcon asset={round.window.asset} />}
-          {round.window?.asset ?? "…"}
-        </span>
-        <span className="text-sm font-bold tabular-nums text-text-2">
-          {round.window?.strike != null
-            ? `$${markets.formatStrike(round.window.strike)}`
-            : "—"}
-        </span>
+      <div className="flex gap-1.5">
+        <StatTile
+          label="Payout"
+          value={marketMultiple ? `${marketMultiple.toFixed(2)}x` : "—"}
+          tone="brand"
+        />
+        <StatTile
+          label="Asset"
+          value={
+            <span className="flex items-center gap-1.5">
+              {round.window && <CoinIcon asset={round.window.asset} />}
+              {round.window?.asset ?? "…"}
+            </span>
+          }
+        />
+        <StatTile
+          label="Side"
+          value={side === "up" ? "LONG" : "SHORT"}
+          tone={side === "up" ? "up" : "down"}
+        />
       </div>
 
-      <div className="flex items-center justify-center gap-1.5">
+      <PriceChart
+        asset={round.window?.asset ?? "BTC"}
+        entry={
+          round.window?.strike != null
+            ? markets.strikePrice(round.window.strike)
+            : null
+        }
+        className="flex-1"
+      />
+
+      <div className="flex items-center justify-center gap-1">
         {LADDER.map((rungOption, i) => (
           <span
             key={rungOption.label}
-            className={`rounded-md px-2 py-1 text-[11px] font-black tabular-nums ${
-              i === rung ? "bg-brand-500 text-black" : "text-text-3"
+            className={`flex-1 border px-1 py-1 text-center text-[11px] font-extrabold tabular-nums ${
+              i === rung
+                ? "border-brand-500 bg-brand-500 text-black"
+                : "border-white/10 text-text-3"
             }`}
           >
             {rungOption.label}
@@ -252,11 +282,6 @@ export default function RoundConsole({
         ))}
       </div>
 
-      <ScreenRow
-        label={side === "up" ? "Up pays" : "Down pays"}
-        value={marketMultiple ? `${marketMultiple.toFixed(2)}x` : "—"}
-        tone={side === "up" ? "up" : "down"}
-      />
       <ScreenRow
         label="Size"
         value={`${size} · $${ask ? (ask.price * size).toFixed(2) : "—"}`}

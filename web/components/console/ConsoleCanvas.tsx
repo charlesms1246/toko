@@ -296,6 +296,35 @@ function labelTexture(text: string): THREE.CanvasTexture {
   return texture;
 }
 
+/**
+ * The same silkscreen, but two-tone: white letters with a dark halo.
+ *
+ * An action cap can be any colour a preset or a game asks for, and a selected
+ * key blooms almost to white — so a single-tone caption disappears on one state
+ * or the other. Carrying both tones in the texture means the material is not
+ * tinted at all and the label reads on every cap.
+ */
+function capLabelTexture(text: string): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, 256, 64);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `800 34px ${SILKSCREEN_FONT}`;
+  ctx.letterSpacing = "3px";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(8,8,6,0.92)";
+  ctx.lineWidth = 7;
+  ctx.strokeText(text, 128, 34);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(text, 128, 34);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 /** A tiny studio scene baked to an environment map — no HDRI file. */
 function buildEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
   const scene = new THREE.Scene();
@@ -359,6 +388,12 @@ export interface ConsoleCanvasProps {
   screenElRef?: React.RefObject<HTMLElement | null>;
   /** Which keys should be lit, and how brightly. */
   keyGlow?: Partial<Record<ButtonKey, number>>;
+  /**
+   * Silkscreen under the two action keys. The pills are captioned MENU and
+   * HOME because they are fixed hardware; these two are not, so they say what
+   * the screen you are on has programmed them to do.
+   */
+  actionLabels?: { action1?: string; action2?: string };
   /** Attract mode — dims the device slightly behind the PRESS START marquee. */
   idle?: boolean;
   /**
@@ -388,6 +423,7 @@ export default function ConsoleCanvas({
   onWheelStep,
   screenElRef,
   keyGlow,
+  actionLabels,
   idle = false,
   exportMode = false,
   className,
@@ -414,6 +450,11 @@ export default function ConsoleCanvas({
     logoEyeMats: THREE.MeshStandardMaterial[];
     backPlateMat: THREE.MeshBasicMaterial;
     labelMats: THREE.MeshBasicMaterial[];
+    actionCaptions: {
+      mesh: THREE.Mesh;
+      mat: THREE.MeshBasicMaterial;
+      text: string;
+    }[];
     envMap: THREE.Texture;
     invalidate: () => void;
     setKeyColors: (theme: Theme) => void;
@@ -756,6 +797,33 @@ export default function ConsoleCanvas({
       disposables.push(glowPlane.geometry, glowMat);
     });
 
+    // Action-key captions. Same silkscreen treatment as the pills, but their
+    // text changes with the route, so the plane is kept and its texture swapped.
+    const actionCaptions: {
+      mesh: THREE.Mesh;
+      mat: THREE.MeshBasicMaterial;
+      text: string;
+    }[] = [];
+    ([1, 2] as const).forEach((i) => {
+      const spec = BUTTON_SPECS[i];
+      // White ink: the caption now sits on the cap, which is the action colour
+      // in every preset, not on the body the silkscreen palette was chosen for.
+      const mat = new THREE.MeshBasicMaterial({
+        map: capLabelTexture(""),
+        color: new THREE.Color("#ffffff"),
+        transparent: true,
+        opacity: 1,
+      });
+      // On the cap, not under it — and parented to the cap so it travels with
+      // the key on every press, the way the brand mark rides the Play key.
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(spec.w * 0.82, spec.w * 0.205), mat);
+      mesh.position.set(0, 0, spec.depth / 2 + 0.08);
+      const cap = keys.find((k) => k.userData.key === BUTTON_KEYS[i]);
+      (cap ?? device).add(mesh);
+      actionCaptions.push({ mesh, mat, text: "" });
+      disposables.push(mesh.geometry, mat);
+    });
+
     // Pill captions
     const labelMats: THREE.MeshBasicMaterial[] = [];
     (
@@ -968,7 +1036,7 @@ export default function ConsoleCanvas({
           const playSpec = BUTTON_SPECS[BUTTON_KEYS.indexOf("play")];
           // Wide enough to read at a glance, small enough to leave the cap's
           // bevel and highlight visible.
-          const scale = (playSpec.w * 0.46) / SRC;
+          const scale = (playSpec.w * 0.62) / SRC;
 
           const group = new THREE.Group();
           // SVG's y axis runs the other way; z is scaled too so the relief
@@ -1148,7 +1216,8 @@ export default function ConsoleCanvas({
       let minY = Infinity;
       let maxX = -Infinity;
       let maxY = -Infinity;
-      for (const p of screenPoints()) {
+      let stepY = Infinity;
+      screenPoints().forEach((p, i) => {
         projected
           .set(p.x, p.y, 0.06)
           .applyMatrix4(device.matrixWorld)
@@ -1159,7 +1228,9 @@ export default function ConsoleCanvas({
         if (sx > maxX) maxX = sx;
         if (sy < minY) minY = sy;
         if (sy > maxY) maxY = sy;
-      }
+        // Points 2 and 3 are the inner corner where the aperture steps up.
+        if ((i === 2 || i === 3) && sy < stepY) stepY = sy;
+      });
       const w = maxX - minX + 8;
       const h = maxY - minY + 8;
       el.style.left = `${minX - 4}px`;
@@ -1168,6 +1239,53 @@ export default function ConsoleCanvas({
       el.style.height = `${h}px`;
       const scale = Math.max(0.4, Math.min(1, w / 340));
       el.style.setProperty("--screen-content-scale", scale.toFixed(4));
+
+      // The aperture is an L: the bottom-right is notched out for the Play key.
+      // A page laying out against the bounding box would put content behind
+      // that key, so publish two more numbers and let the CSS respect them.
+      //
+      // `--screen-rim` is the inset the bevel overhangs, proportional to how
+      // big the device is drawn. `--screen-notch` is the height of the bottom
+      // band the key eats into. Both are divided by the content scale, because
+      // the content layer is scaled and these are consumed inside it.
+      const rim = Math.max(14, Math.round(0.06 * (maxX - minX))) + 4;
+      el.style.setProperty("--screen-rim", `${Math.round(rim / scale)}px`);
+      el.style.setProperty(
+        "--screen-notch",
+        `${Math.round(Math.max(0, maxY + 4 - stepY) / scale)}px`,
+      );
+
+      // On the document element, not the stage: the menu drawer is portalled to
+      // <body> so it can escape the screen's clipping, and it still needs to
+      // know where the hardware is.
+      const host = document.documentElement;
+      {
+        let dMinX = Infinity;
+        let dMinY = Infinity;
+        let dMaxX = -Infinity;
+        let dMaxY = -Infinity;
+        const half = BODY_W / 2;
+        const centre = bodyCenterY(0);
+        for (const [bx, by] of [
+          [-half, centre - BODY_H / 2],
+          [half, centre - BODY_H / 2],
+          [half, centre + BODY_H / 2],
+          [-half, centre + BODY_H / 2],
+        ]) {
+          projected.set(bx, by, 0).applyMatrix4(device.matrixWorld).project(camera);
+          const px = (projected.x * 0.5 + 0.5) * width;
+          const py = (-projected.y * 0.5 + 0.5) * height;
+          if (px < dMinX) dMinX = px;
+          if (px > dMaxX) dMaxX = px;
+          if (py < dMinY) dMinY = py;
+          if (py > dMaxY) dMaxY = py;
+        }
+        host.style.setProperty("--device-left", `${dMinX}px`);
+        host.style.setProperty("--device-right", `${width - dMaxX}px`);
+        host.style.setProperty("--device-top", `${dMinY}px`);
+        host.style.setProperty("--device-bottom", `${height - dMaxY}px`);
+        host.style.setProperty("--device-width", `${dMaxX - dMinX}px`);
+      }
     };
 
     let lastTime = performance.now();
@@ -1238,7 +1356,14 @@ export default function ConsoleCanvas({
     // ── Interaction ─────────────────────────────────────────────────────────
     const raycaster = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
-    let dragging: { kind: "knob" | "wheel"; lastY: number; accum: number } | null =
+    let dragging: {
+      kind: "knob" | "wheel";
+      lastY: number;
+      accum: number;
+      startY: number;
+      startStep: number;
+      emitted: number;
+    } | null =
       null;
     let heldKey: KeyMesh | null = null;
 
@@ -1284,6 +1409,9 @@ export default function ConsoleCanvas({
           kind: obj === knob ? "knob" : "wheel",
           lastY: event.clientY,
           accum: 0,
+          startY: event.clientY,
+          startStep: 0,
+          emitted: 0,
         };
         return;
       }
@@ -1297,31 +1425,29 @@ export default function ConsoleCanvas({
 
     const onPointerMove = (event: PointerEvent) => {
       if (dragging) {
-        const dy = event.clientY - dragging.lastY;
-        dragging.lastY = event.clientY;
-        dragging.accum += dy;
         const perDetent = dragging.kind === "knob" ? 14 : 18;
+        const travelled = event.clientY - dragging.startY;
+        // Absolute, like dragging a scrollbar thumb: the control sits wherever
+        // the pointer has carried it from the grab point, so overshooting and
+        // coming back returns you to where you started. Accumulating notches
+        // per move event drifts, and never comes home.
+        const wanted = Math.trunc(travelled / perDetent);
+        const steps = wanted - dragging.emitted;
+        dragging.lastY = event.clientY;
 
-        // Collect every detent this move crossed and report them as one step
-        // count. Reporting them one at a time would make a fast drag advance a
-        // single notch, because each call reads the same not-yet-rerendered
-        // control value.
-        let steps = 0;
-        while (Math.abs(dragging.accum) >= perDetent) {
-          const dir = dragging.accum > 0 ? 1 : -1;
-          dragging.accum -= dir * perDetent;
-          steps -= dir;
+        if (steps !== 0) {
+          dragging.emitted = wanted;
           const turn =
             dragging.kind === "knob"
               ? (Math.PI * 2) / KNOB.snapInterval
               : (Math.PI * 2) / 12;
-          if (dragging.kind === "knob") knobTarget.value += dir * turn;
-          else wheelTarget.value += dir * turn;
-        }
-
-        if (steps !== 0) {
-          if (dragging.kind === "knob") handlers.current.onKnobStep?.(steps);
-          else handlers.current.onWheelStep?.(steps);
+          if (dragging.kind === "knob") {
+            knobTarget.value += steps * turn;
+            handlers.current.onKnobStep?.(steps);
+          } else {
+            wheelTarget.value += steps * turn;
+            handlers.current.onWheelStep?.(steps);
+          }
         }
         dirty = true;
         return;
@@ -1420,6 +1546,7 @@ export default function ConsoleCanvas({
       logoEyeMats,
       backPlateMat,
       labelMats,
+      actionCaptions,
       envMap,
       invalidate,
       setKeyColors,
@@ -1560,6 +1687,23 @@ export default function ConsoleCanvas({
     s.renderer.shadowMap.needsUpdate = true;
     s.invalidate();
   }, [theme]);
+
+  // ── Action-key silkscreen ──────────────────────────────────────────────────
+  const a1 = actionLabels?.action1 ?? "";
+  const a2 = actionLabels?.action2 ?? "";
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    [a1, a2].forEach((text, i) => {
+      const caption = s.actionCaptions[i];
+      if (!caption || caption.text === text) return;
+      caption.mat.map?.dispose();
+      caption.mat.map = capLabelTexture(text);
+      caption.mat.needsUpdate = true;
+      caption.text = text;
+    });
+    s.invalidate();
+  }, [a1, a2]);
 
   // ── Key bloom targets ──────────────────────────────────────────────────────
   const glowKey = JSON.stringify(keyGlow ?? {});

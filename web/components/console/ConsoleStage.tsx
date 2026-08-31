@@ -154,6 +154,10 @@ export default function ConsoleStage({
           theme={resolved}
           screenElRef={screenRef}
           keyGlow={keyGlow}
+          actionLabels={{
+            action1: controls.action1?.label,
+            action2: controls.action2?.label,
+          }}
           onPress={handlePress}
           onKnobStep={(steps) => stepDial("knob", steps)}
           onWheelStep={(steps) => stepDial("numberWheel", steps)}
@@ -163,8 +167,20 @@ export default function ConsoleStage({
 
       {status && (
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-between px-6 text-[11px] font-bold uppercase tracking-[0.16em] text-white/45"
-          style={{ zIndex: 12 }}
+          className="pointer-events-none absolute flex justify-between text-[10px] font-bold uppercase tracking-[0.16em]"
+          style={{
+            zIndex: 12,
+            // The chin is body-coloured and most presets are light, so the
+            // caption takes the theme's own silkscreen ink rather than white.
+            color: resolved.label,
+            opacity: 0.75,
+            // On the hardware, not on the page. Anchored to the projected
+            // device rect so it stays on the console's chin at any size —
+            // pinned to the viewport it slid off the bottom of a phone.
+            left: "calc(var(--device-left, 0px) + 7%)",
+            right: "calc(var(--device-right, 0px) + 7%)",
+            bottom: "calc(var(--device-bottom, 0px) + 0.7%)",
+          }}
         >
           <span>{status.left}</span>
           <span>{status.right}</span>
