@@ -3,9 +3,10 @@ import "./globals.css";
 import Providers from "./providers";
 import AppShell from "@/components/shell/AppShell";
 import ConsoleStage from "@/components/console/ConsoleStage";
+import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://toko.app"),
+  metadataBase: new URL(SITE_URL),
   title: "TOKO · World's First Virtual Gamified Trading Console",
   description:
     "The simplest, most fun way to trade. A gamified trading console on Somnia.",
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "TOKO · World's First Virtual Gamified Trading Console",
     description: "Built for fun and money.",
-    url: "https://toko.app",
+    url: SITE_URL,
     images: ["/toko-og.jpg"],
   },
 };
