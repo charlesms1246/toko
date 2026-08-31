@@ -3,9 +3,10 @@
 /**
  * Taking a challenge — `/c/<code>`.
  *
- * The code is a pointer, not a record. Everything shown here is re-read from the
- * pool: whether the challenger's bid is still resting, what the window is, how
- * long is left. A link can say anything; the chain decides.
+ * The code is a pointer, not a record. It names `(challenger, id)` and nothing
+ * else durable — the offer's market, price and order id all change as it looks
+ * after itself, so everything shown here is found on chain each time. A link can
+ * say anything; the chain decides.
  *
  * **This is the one screen Demo Mode cannot cover.** Accepting means buying the
  * opposite outcome so it crosses the challenger's *real* resting order and the
@@ -84,11 +85,13 @@ export default function ChallengePage({
   }, [challenge, phase]);
 
   const take = useCallback(() => {
-    if (!challenge || !status?.window) return;
+    if (!challenge || !status?.open) return;
+    const live = status.open;
     setPhase("taking");
     setError(null);
     void (async () => {
-      const result = await coop.accept(challenge, status.window!);
+      // Take what is on the book now, not what the link remembered.
+      const result = await coop.accept(live.challenge, live.window);
       if (!result.ok) {
         setPhase("failed");
         setError(
@@ -100,7 +103,7 @@ export default function ChallengePage({
       }
       await wallet.refresh();
       const against = await coop.crossedWith(
-        status.window!.poolAddress,
+        live.window.poolAddress,
         wallet.getSnapshot().address!,
       );
       setMaker(against ?? null);
@@ -124,7 +127,9 @@ export default function ChallengePage({
             onPress: take,
           },
     status: {
-      left: status?.window ? `${status.window.asset} ${Math.max(0, status.secsLeft).toFixed(0)}s` : "CHALLENGE",
+      left: status?.open
+        ? `${status.open.window.asset} ${Math.max(0, status.open.windowSecsLeft).toFixed(0)}s`
+        : "CHALLENGE",
       right: `$${wallet.formatCollateral(me.collateral)}`,
     },
     lightShow: phase === "took",
@@ -143,9 +148,10 @@ export default function ChallengePage({
     );
   }
 
-  const mySide = challenge.side === "up" ? "DOWN" : "UP";
-  const cost = coop.costToAccept(challenge);
-  const win = coop.payout(challenge);
+  const live = status?.open?.challenge ?? challenge;
+  const mySide = live.side === "up" ? "DOWN" : "UP";
+  const cost = coop.costToAccept(live);
+  const win = coop.payout(live);
 
   // ── Not onboarded: this is the one thing Demo Mode cannot stand in for ────
   if (!onboarded) {
@@ -195,27 +201,16 @@ export default function ChallengePage({
     );
   }
 
-  if (status.state !== "open") {
-    const headline =
-      status.state === "expired"
-        ? "Window closed"
-        : status.state === "cancelled"
-          ? "Pulled"
-          : "Already taken";
-    const detail =
-      status.state === "expired"
-        ? "The challenge expired with its window. Nothing was traded."
-        : status.state === "cancelled"
-          ? "The challenger pulled their order before anyone took it."
-          : status.takenBy
-            ? `Someone else crossed it — ${status.takenBy.slice(0, 6)}…${status.takenBy.slice(-4)}. A resting order is public.`
-            : "Someone else crossed it first. A resting order is public.";
+  if (status.state !== "open" || !status.open) {
     return (
       <ScreenRoot className="items-center justify-center gap-1.5">
         <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-down">
-          {headline}
+          Not on the book
         </div>
-        <p className="px-3 text-center text-[11px] leading-snug text-text-2">{detail}</p>
+        <p className="px-3 text-center text-[11px] leading-snug text-text-2">
+          This challenge is no longer resting anywhere — taken, pulled, or its
+          offer ran out. Nothing was traded with you.
+        </p>
       </ScreenRoot>
     );
   }
@@ -223,12 +218,12 @@ export default function ChallengePage({
   return (
     <ScreenRoot className="gap-1.5">
       <ScreenHeader
-        left={`${status.window?.asset ?? ""} challenge`}
-        right={`${Math.max(0, status.secsLeft).toFixed(0)}s`}
+        left={`${status.open.window.asset} challenge`}
+        right={`${Math.max(0, status.open.offerSecsLeft).toFixed(0)}s`}
       />
       <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
         {challenge.handle ? `@${challenge.handle} took` : "They took"}{" "}
-        {challenge.side === "up" ? "UP" : "DOWN"} · you take
+        {live.side === "up" ? "UP" : "DOWN"} · you take
       </div>
       <BigNumber value={mySide} tone="brand" />
       <ScreenRow label="Costs up to" value={`$${cost.toFixed(2)}`} />
@@ -236,6 +231,10 @@ export default function ChallengePage({
       <ScreenRow
         label="Challenger"
         value={`${challenge.from.slice(0, 6)}…${challenge.from.slice(-4)}`}
+      />
+      <ScreenRow
+        label="Settles in"
+        value={`${Math.max(0, Math.round(status.open.windowSecsLeft / 60))}m`}
       />
       <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
         {error

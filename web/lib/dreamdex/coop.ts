@@ -43,6 +43,7 @@ import type { Address } from "viem";
 import * as markets from "./markets";
 import * as orders from "./orders";
 import * as book from "./book";
+import * as positions from "./positions";
 import * as wallet from "./wallet";
 import { MAKER_GAS_LIMIT } from "./config";
 import { getClient } from "./client";
@@ -60,6 +61,23 @@ export type Side = orders.Side;
  * chain — see TESTNET_FACTS §4c.
  */
 export const DUEL_TAG = 0x544f4b4fn;
+
+/**
+ * `userData` carries the tag in its high 32 bits and a **challenge id** in its
+ * low 32 — verified round-tripping a full 64-bit value on chain.
+ *
+ * The id is what makes a shared link survive. An offer's market and order id
+ * both change when it is re-posted to the front or rolled into the next window,
+ * so a link naming either would break the moment the offer looked after itself.
+ * The id never changes, so a link points at *the challenge* rather than at one
+ * particular order.
+ */
+export const packTag = (id: number) => (DUEL_TAG << 32n) | BigInt(id >>> 0);
+export const isDuelTag = (userData: bigint) => (BigInt(userData) >> 32n) === DUEL_TAG;
+export const idFromTag = (userData: bigint) => Number(BigInt(userData) & 0xffffffffn);
+
+/** A fresh challenge id. Only has to be unique per challenger. */
+export const newChallengeId = () => Math.floor(Math.random() * 0xffffffff) >>> 0;
 
 /**
  * How long a challenge stands on the book waiting for someone.
@@ -93,19 +111,20 @@ export const REVERT_AT = 0.5;
  * market entirely. The pool is resolved live from the market.
  */
 export interface Challenge {
-  /** The window the challenge lives in. */
-  marketId: string;
-  /** The side the challenger bought. The person accepting takes the other one. */
-  side: Side;
-  /** The challenger's limit, in YES terms, 0–1. */
-  yesPrice: number;
-  /** Contracts. */
-  size: number;
-  /** The challenger's address, so their order can be found on the pool. */
+  /** Stable identity, carried in `userData`. Survives re-posts and rolls. */
+  id: number;
+  /** The challenger's address — the other half of the identity. */
   from: Address;
-  /** The order id the bid rested under. */
-  orderId: string;
-  /** The challenger's handle, for display only — never trusted for anything. */
+  /** The side the challenger bought. Whoever takes it gets the other one. */
+  side: Side;
+  /**
+   * The price and window the offer had when the link was made. Both move, so
+   * these are hints for display and for finding it quickly — never trusted.
+   */
+  yesPrice: number;
+  size: number;
+  marketId?: string;
+  /** The challenger's handle, for display only. */
   handle?: string;
 }
 
@@ -125,12 +144,12 @@ const b64url = {
 export function encode(c: Challenge): string {
   return b64url.encode(
     JSON.stringify({
-      m: c.marketId,
+      i: c.id,
+      f: c.from,
       s: c.side === "up" ? 1 : 0,
       p: Math.round(c.yesPrice * 1000),
       q: c.size,
-      f: c.from,
-      o: c.orderId,
+      m: c.marketId,
       h: c.handle,
     }),
   );
@@ -140,20 +159,14 @@ export function encode(c: Challenge): string {
 export function decode(code: string): Challenge | null {
   try {
     const raw = JSON.parse(b64url.decode(code));
-    if (
-      typeof raw.m !== "string" ||
-      typeof raw.p !== "number" ||
-      typeof raw.f !== "string"
-    ) {
-      return null;
-    }
+    if (typeof raw.f !== "string" || typeof raw.i !== "number") return null;
     return {
-      marketId: raw.m,
-      side: raw.s === 1 ? "up" : "down",
-      yesPrice: raw.p / 1000,
-      size: Number(raw.q) || 1,
+      id: raw.i,
       from: raw.f as Address,
-      orderId: String(raw.o ?? ""),
+      side: raw.s === 1 ? "up" : "down",
+      yesPrice: Number(raw.p) / 1000,
+      size: Number(raw.q) || 1,
+      marketId: typeof raw.m === "string" ? raw.m : undefined,
       handle: typeof raw.h === "string" ? raw.h : undefined,
     };
   } catch {
@@ -230,6 +243,8 @@ export function frontPrice(b: book.Book, side: Side): number | null {
 
 export interface OpenChallenge {
   challenge: Challenge;
+  /** The order it is resting under *right now*. Changes when it moves. */
+  orderId: bigint;
   window: markets.Window;
   /** Seconds until the offer ages off the book. */
   offerSecsLeft: number;
@@ -257,40 +272,39 @@ export interface OpenChallenge {
  * limits, so the honest read is the affordable one.
  */
 export async function listOpen(maxWindows = 32): Promise<OpenChallenge[]> {
-  const client = getClient();
-  if (!client) return [];
-
   const windows = markets
     .getSnapshot()
     .windows.filter((w) => markets.secondsLeft(w) > 0)
     .slice(0, maxWindows);
 
-  const perWindow = await Promise.all(
-    windows.map(async (window) => {
-      const sides = await Promise.all(
-        [true, false].map(async (isBid) => {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const res = (await (client as any).getAllOpenOrdersOnchain(window.poolAddress, {
-              isBid,
-              limit: 50,
-            })) as { orders?: RawOrder[] };
-            return (res?.orders ?? []).map((o) => ({ order: o, isBid }));
-          } catch {
-            return [];
-          }
-        }),
-      );
-      return sides.flat().flatMap(({ order, isBid }) => {
-        const open = toOpen(order, isBid, window);
-        return open ? [open] : [];
-      });
+  const perWindow = await Promise.all(windows.map(ordersIn));
+  return perWindow.flat().sort((a, b) => a.offerSecsLeft - b.offerSecsLeft);
+}
+
+/** Every live challenge resting in one window, both sides of its book. */
+async function ordersIn(window: markets.Window): Promise<OpenChallenge[]> {
+  const client = getClient();
+  if (!client) return [];
+
+  const sides = await Promise.all(
+    [true, false].map(async (isBid) => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const res = (await (client as any).getAllOpenOrdersOnchain(window.poolAddress, {
+          isBid,
+          limit: 50,
+        })) as { orders?: RawOrder[] };
+        return (res?.orders ?? []).map((o) => ({ order: o, isBid }));
+      } catch {
+        return [];
+      }
     }),
   );
 
-  return perWindow
-    .flat()
-    .sort((a, b) => a.offerSecsLeft - b.offerSecsLeft);
+  return sides.flat().flatMap(({ order, isBid }) => {
+    const open = toOpen(order, isBid, window);
+    return open ? [open] : [];
+  });
 }
 
 interface RawOrder {
@@ -310,7 +324,7 @@ function toOpen(
   isBid: boolean,
   window: markets.Window,
 ): OpenChallenge | null {
-  if (BigInt(o.userData) !== DUEL_TAG) return null;
+  if (!isDuelTag(o.userData)) return null;
   if (BigInt(o.quantityRemaining) <= 0n) return null;
 
   const offerSecsLeft =
@@ -318,16 +332,17 @@ function toOpen(
   if (offerSecsLeft <= 0) return null;
 
   const challenge: Challenge = {
-    marketId: window.marketId,
+    id: idFromTag(o.userData),
+    from: o.owner,
     side: isBid ? "up" : "down",
     yesPrice: Number(o.price) / RAW,
     size: Number(o.quantityRemaining) / RAW,
-    from: o.owner,
-    orderId: o.orderId.toString(),
+    marketId: window.marketId,
   };
 
   return {
     challenge,
+    orderId: o.orderId,
     window,
     offerSecsLeft,
     windowSecsLeft: markets.secondsLeft(window),
@@ -387,92 +402,94 @@ export function priceLadder(b: book.Book, steps = 5): number[] {
 export type ChallengeState =
   /** The market list has not been read yet — not the same as "gone". */
   | "loading"
-  /** Still on the book. This is the only state that can be accepted. */
+  /** On the book somewhere. This is the only state that can be accepted. */
   | "open"
-  /** Somebody crossed it — possibly the invited player, possibly a stranger. */
-  | "taken"
-  /** The window closed before anyone took it. The escrow went back. */
-  | "expired"
-  /** The challenger pulled it. */
-  | "cancelled";
+  /** Nothing of this challenge is resting any more. */
+  | "gone";
 
 export interface ChallengeStatus {
   state: ChallengeState;
-  /** The window, when it is still live. */
-  window: markets.Window | null;
-  /** Seconds until the window closes. */
-  secsLeft: number;
-  /** Who took it, when we can tell. */
-  takenBy?: Address;
+  /** Where it is resting now, when it is. */
+  open: OpenChallenge | null;
   /**
-   * Whether the challenge is currently the best bid on its side. False means
-   * somebody is bidding better, so accepting would cross *them* — cheaper for
-   * the accepter, but not the duel the link promised.
+   * Whether it is first in its queue. False means somebody is bidding better,
+   * so accepting would cross *them* — cheaper for the accepter, but not the duel
+   * the link promised.
    */
   atFront?: boolean;
 }
 
 /**
- * Read a challenge's real state off the chain.
+ * Find a challenge on chain by identity.
  *
- * The order of these checks matters. An order that is gone from the book has
- * either filled or been cancelled, and only the fill history can tell those
- * apart — so the book is checked first and the tape only when it has to be.
+ * A link names `(challenger, id)`, never a market or an order, because both of
+ * those change every time the offer is re-posted to the front or rolled into the
+ * next window. So this looks for the order carrying that id, wherever it now is.
+ *
+ * The link's `marketId` is a hint — the window it was in when shared. Checking
+ * that pool first makes the common case one read instead of a full sweep, and
+ * the sweep is only paid once the offer has actually moved.
  */
 export async function status(c: Challenge): Promise<ChallengeStatus> {
   const snapshot = markets.getSnapshot();
 
-  // An empty list before the first load is not an expired challenge. Reporting
+  // An empty list before the first load is not a dead challenge. Reporting
   // "gone" here would tell someone their invite had died a second after they
   // opened it, which is the failure this whole module exists to avoid.
-  if (!snapshot.at) {
-    return { state: "loading", window: null, secsLeft: 0 };
-  }
+  if (!snapshot.at) return { state: "loading", open: null };
 
-  const window = snapshot.windows.find((w) => w.marketId === c.marketId) ?? null;
+  const hint = c.marketId
+    ? (snapshot.windows.find((w) => w.marketId === c.marketId) ?? null)
+    : null;
 
-  // A window that is no longer live has rolled: the bid aged off with it.
-  if (!window) {
-    return { state: "expired", window: null, secsLeft: 0 };
-  }
+  const found =
+    (hint ? await findIn(hint, c) : null) ??
+    (await listOpen()).find(
+      (r) => r.challenge.id === c.id && sameAddress(r.challenge.from, c.from),
+    ) ??
+    null;
 
-  const secsLeft = markets.secondsLeft(window);
-  const resting = await orders.openOrdersOf(window.poolAddress, c.from);
-  if (resting.some((id) => id.toString() === c.orderId)) {
-    const b = await book.readBook(window.poolAddress, 1);
-    return {
-      state: "open",
-      window,
-      secsLeft,
-      atFront: isAtFront(c.side, c.yesPrice, b),
-    };
-  }
+  if (!found) return { state: "gone", open: null };
 
-  // Gone from the book. Look for the fill that removed it.
-  const takenBy = await crossedBy(window.poolAddress, c.from);
+  const b = await book.readBook(found.window.poolAddress, 1);
   return {
-    state: takenBy ? "taken" : "cancelled",
-    window,
-    secsLeft,
-    takenBy,
+    state: "open",
+    open: found,
+    atFront: isAtFront(found.challenge.side, found.challenge.yesPrice, b),
   };
 }
 
+const sameAddress = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** Look for the challenge in one window, both sides of its book. */
+async function findIn(
+  window: markets.Window,
+  c: Challenge,
+): Promise<OpenChallenge | null> {
+  for (const row of await ordersIn(window)) {
+    if (row.challenge.id === c.id && sameAddress(row.challenge.from, c.from)) {
+      return row;
+    }
+  }
+  return null;
+}
+
 /**
- * Who crossed the challenger's resting order, if anyone.
+ * Who crossed a challenger's resting order, if anyone.
  *
  * The challenger is the *maker* here — they rested first — so their fills are
  * the rows where `maker` is their address, and the counterparty is the taker.
  */
-async function crossedBy(pool: string, challenger: Address): Promise<Address | undefined> {
+export async function crossedBy(
+  pool: string,
+  challenger: Address,
+): Promise<Address | undefined> {
   const client = getClient();
   if (!client) return undefined;
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fills = (await client.getFills(pool, { limit: 100 })) as any[];
-    const mine = fills.find(
-      (f) => String(f.maker).toLowerCase() === challenger.toLowerCase(),
-    );
+    const mine = fills.find((f) => sameAddress(String(f.maker), challenger));
     return mine ? (mine.taker as Address) : undefined;
   } catch {
     return undefined;
@@ -486,15 +503,16 @@ async function crossedBy(pool: string, challenger: Address): Promise<Address | u
  * instead of assuming the link's challenger. They differ whenever the challenge
  * was outbid between being posted and being taken.
  */
-export async function crossedWith(pool: string, taker: Address): Promise<Address | undefined> {
+export async function crossedWith(
+  pool: string,
+  taker: Address,
+): Promise<Address | undefined> {
   const client = getClient();
   if (!client) return undefined;
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fills = (await client.getFills(pool, { limit: 50 })) as any[];
-    const mine = fills.find(
-      (f) => String(f.taker).toLowerCase() === taker.toLowerCase(),
-    );
+    const mine = fills.find((f) => sameAddress(String(f.taker), taker));
     return mine ? (mine.maker as Address) : undefined;
   } catch {
     return undefined;
@@ -529,6 +547,14 @@ export async function crossedWith(pool: string, taker: Address): Promise<Address
  * than what was posted. Setting the cap to the posted price makes the re-post
  * branch unreachable — measured, and the reason `maxCost` is passed in rather
  * than derived from the price.
+ *
+ * It also **rolls the offer forward**. An order cannot outlive its market, so a
+ * long offer would otherwise have to be posted in a long window and settle hours
+ * after it was taken. Instead the offer sits in a short window and is re-posted
+ * into the successor when that one closes, which keeps settlement minutes away
+ * however long the offer stands. The challenge keeps its identity across the
+ * roll — `userData` carries a stable id — so links shared before it moved still
+ * resolve.
  *
  * This lives at module level so leaving the duel screen does not abandon the
  * offer. It is still best-effort — close the tab and nothing of ours runs —
@@ -586,6 +612,20 @@ export const getKeepAliveServer = () => IDLE;
 /** How long to tolerate being outbid before moving. Avoids thrashing on a blip. */
 const OUTBID_GRACE_MS = 30_000;
 const POLL_MS = 6_000;
+/**
+ * How early to carry an offer into the next window.
+ *
+ * Not just enough to beat the entry cutoff — a window's last stretch is where
+ * the price runs to extremes, because the outcome is nearly decided. Measured:
+ * an offer with a 0.97 budget priced out at 44 s left on a 5-minute window while
+ * waiting for a 15-second roll lead. Chasing the front there is chasing a number
+ * that has nothing to do with a fresh duel's odds.
+ *
+ * So the offer migrates while prices still mean something: a quarter of the
+ * window, floored at 20 s and capped at two minutes.
+ */
+const rollLeadFor = (w: markets.Window) =>
+  Math.min(120, Math.max(20, w.intervalSec * 0.25));
 
 let keepTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -598,13 +638,16 @@ export function keepAlive(opts: {
   escrowSecs: number;
   /** The most this may cost per contract while chasing the front. */
   maxCost: number;
+  /** The challenge's stable id, so it keeps its identity across every move. */
+  challengeId: number;
   /** Fired once the offer is off the book for good, whatever the reason. */
   onFinish?: (status: KeepAliveStatus) => void;
 }): () => void {
   stopKeepAlive();
 
-  const { window, side, size, escrowSecs, maxCost } = opts;
+  const { side, size, escrowSecs, maxCost, challengeId } = opts;
   const startedAt = Date.now();
+  let window = opts.window;
   let orderId = opts.orderId;
   let yesPrice = opts.yesPrice;
   let reposts = 0;
@@ -622,24 +665,97 @@ export function keepAlive(opts: {
     opts.onFinish?.(status);
   };
 
+  /**
+   * Put the offer on the book at `price` in `target`, replacing whatever is
+   * there. Used for both reasons an offer moves: outbid, and window rolled.
+   */
+  const move = async (target: markets.Window, price: number, secsLeft: number) => {
+    if (target.poolAddress !== window.poolAddress) {
+      // A new window is a new pool, so the collateral has to be approved to it.
+      await orders.preApprove(target.poolAddress);
+    }
+    const again = await orders.rest(
+      target,
+      side,
+      orders.toRawPrice(price),
+      orders.toRawSize(size),
+      {
+        expireNs: BigInt(Math.floor(Date.now() / 1000 + secsLeft)) * 1_000_000_000n,
+        userData: packTag(challengeId),
+      },
+    );
+    if (!again.ok || again.orderId == null) return false;
+    window = target;
+    orderId = again.orderId;
+    yesPrice = price;
+    reposts += 1;
+    outbidSince = null;
+    setKeep({ orderId, yesPrice, reposts, message: null });
+    return true;
+  };
+
   const run = async () => {
     if (busy) return;
     busy = true;
     try {
       const secsLeft = escrowSecs - (Date.now() - startedAt) / 1000;
+      const windowSecsLeft = markets.secondsLeft(window);
+      const rollLead = rollLeadFor(window);
 
       // Gone from the book: taken by somebody, since we are the only one who
-      // cancels it.
-      const own = await orders.ownOpenOrders(window.poolAddress);
-      const stillResting = own.some((id) => id === orderId);
-      if (!stillResting) {
-        finish("taken", "Somebody took it");
-        return;
+      // cancels it. Only trustworthy while the window is still live — an
+      // expired window drops the order without anyone taking it.
+      if (windowSecsLeft > rollLead) {
+        const own = await orders.ownOpenOrders(window.poolAddress);
+        if (!own.some((id) => id === orderId)) {
+          finish("taken", "Somebody took it");
+          return;
+        }
       }
 
       if (secsLeft <= 0) {
-        await orders.cancel(window.poolAddress, orderId);
+        if (windowSecsLeft > 0) await orders.cancel(window.poolAddress, orderId);
         finish("expired", "Offer expired — escrow returned");
+        return;
+      }
+
+      // ── The window is about to close: carry the offer into the next one ──
+      if (windowSecsLeft <= rollLead) {
+        const next = markets.nextToClose(
+          markets.getSnapshot().windows,
+          window.intervalSec,
+          rollLead,
+        );
+        if (!next || next.marketId === window.marketId) return; // wait for it
+        const nb = await book.readBook(next.poolAddress, 1);
+        const front = frontPrice(nb, side);
+        if (front == null || costOf(side, front) > maxCost) {
+          if (windowSecsLeft > 0) await orders.cancel(window.poolAddress, orderId);
+          finish("pricedOut", "The next window opened past your price — escrow returned");
+          return;
+        }
+        // Rolling is the one place a stale read can cost real money: the
+        // "taken" check above is skipped inside the roll lead, so an offer
+        // filled during it would be re-posted here and the challenger would end
+        // up holding a position *and* a fresh offer.
+        //
+        // A cancel that fails on a live window means exactly that — it filled
+        // between the two reads — so it is treated as taken rather than moved.
+        if (windowSecsLeft > 0) {
+          const pulled = await orders.cancel(window.poolAddress, orderId);
+          if (!pulled.ok) {
+            finish("taken", "Somebody took it");
+            return;
+          }
+        } else if ((await heldIn(window, side)) > 0n) {
+          // The window closed before we got to it and we are holding the
+          // outcome, so it was filled rather than aged off.
+          finish("taken", "Somebody took it");
+          return;
+        }
+        if (!(await move(next, front, secsLeft))) {
+          finish("expired", "Could not carry the offer forward — escrow returned");
+        }
         return;
       }
 
@@ -665,27 +781,9 @@ export function keepAlive(opts: {
       // next pass reports as taken.
       const pulled = await orders.cancel(window.poolAddress, orderId);
       if (!pulled.ok) return;
-
-      const again = await orders.rest(
-        window,
-        side,
-        orders.toRawPrice(front),
-        orders.toRawSize(size),
-        {
-          expireNs: BigInt(Math.floor(Date.now() / 1000 + secsLeft)) * 1_000_000_000n,
-          userData: DUEL_TAG,
-        },
-      );
-      if (!again.ok || again.orderId == null) {
-        finish("expired", again.error ?? "Could not move the offer — escrow returned");
-        return;
+      if (!await move(window, front, secsLeft)) {
+        finish("expired", "Could not move the offer — escrow returned");
       }
-
-      orderId = again.orderId;
-      yesPrice = front;
-      reposts += 1;
-      outbidSince = null;
-      setKeep({ orderId, yesPrice, reposts, message: null });
     } catch {
       // A read failed; try again next pass rather than abandon the offer.
     } finally {
@@ -695,6 +793,17 @@ export function keepAlive(opts: {
 
   keepTimer = setInterval(() => void run(), POLL_MS);
   return stopKeepAlive;
+}
+
+/** Contracts held on one side of a window — how a fill is confirmed after the
+ * fact, when the order is gone and there is nothing left to cancel. */
+async function heldIn(window: markets.Window, side: Side): Promise<bigint> {
+  try {
+    const holding = await positions.readHolding(window);
+    return side === "up" ? holding.up : holding.down;
+  } catch {
+    return 0n;
+  }
 }
 
 /** Stop watching. The order stays on the book until taken or expired. */

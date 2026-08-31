@@ -68,6 +68,8 @@ export default function DuelPage() {
   const [posted_, setPosted] = useState<number | null>(null);
   /** The dearest price the knob was offering when posted — the chase budget. */
   const [budget, setBudget] = useState<number | null>(null);
+  /** Stable identity for this challenge, carried on chain in `userData`. */
+  const [challengeId, setChallengeId] = useState<number | null>(null);
   const me = useSyncExternalStore(
     wallet.subscribe,
     wallet.getSnapshot,
@@ -103,16 +105,16 @@ export default function DuelPage() {
   const live = round.status === "open";
 
   const challenge: coop.Challenge | null =
-    posted && round.window && round.restingOrderId != null && round.side && me.address
+    posted && round.window && challengeId != null && round.side && me.address
       ? {
-          marketId: round.window.marketId,
+          // The link names the challenge, not the order — both the order and the
+          // window change as the offer moves itself.
+          id: challengeId,
+          from: me.address,
           side: round.side,
-          // The link carries the YES price, because that is what was rested and
-          // what the accepting side has to cross.
           yesPrice: posted_ ?? 0,
           size: SIZE,
-          from: me.address,
-          orderId: round.restingOrderId.toString(),
+          marketId: round.window.marketId,
           handle: user.username,
         }
       : null;
@@ -120,6 +122,8 @@ export default function DuelPage() {
   const post = (s: Side) => {
     setSide(s);
     if (!round.canEnter || price == null) return;
+    const id = coop.newChallengeId();
+    setChallengeId(id);
     setPosted(price);
     setBudget(coop.budgetPrice(round.book, s));
     setPostedAt(Date.now());
@@ -128,7 +132,7 @@ export default function DuelPage() {
     // going *down* the ladder makes a short more aggressive, not less.
     round.rest(s, price, SIZE, {
       expireNs: BigInt(Math.floor(Date.now() / 1000) + escrow.secs) * 1_000_000_000n,
-      userData: coop.DUEL_TAG,
+      userData: coop.packTag(id),
     });
   };
 
@@ -136,7 +140,13 @@ export default function DuelPage() {
   // it survives leaving the screen; the order's own on-chain expiry is the
   // backstop if the tab is closed entirely.
   useEffect(() => {
-    if (!posted || !round.window || round.restingOrderId == null || posted_ == null) {
+    if (
+      !posted ||
+      !round.window ||
+      round.restingOrderId == null ||
+      posted_ == null ||
+      challengeId == null
+    ) {
       return;
     }
     return coop.keepAlive({
@@ -147,12 +157,13 @@ export default function DuelPage() {
       size: SIZE,
       escrowSecs: escrow.secs,
       maxCost: coop.costOf(round.side ?? side, budget ?? posted_),
+      challengeId,
       // A callback from an external system is where a reset belongs.
       onFinish: (status) => {
         if (status === "expired" || status === "pricedOut") round.reset();
       },
     });
-  }, [posted, round, posted_, budget, side, escrow]);
+  }, [posted, round, posted_, budget, side, escrow, challengeId]);
 
   const share = async () => {
     if (!challenge) return;

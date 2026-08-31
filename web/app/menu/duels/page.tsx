@@ -72,7 +72,7 @@ export default function DuelsPage() {
         const multiple = row.cost > 0 ? row.challenge.size / row.cost : 0;
         return (
           <Link
-            key={`${row.window.marketId}-${row.challenge.orderId}`}
+            key={`${row.challenge.from}-${row.challenge.id}`}
             href={`/c/${coop.encode(row.challenge)}`}
             className="flex items-center justify-between border-b border-[var(--color-line)] px-4 py-3.5 last:border-b-0"
           >
