@@ -1,13 +1,13 @@
 "use client";
 
 /**
- * Lucky — the Minute at everyday odds.
+ * Lucky — the Round at everyday odds.
  *
  * The knob's rungs sit near the middle of the book, so they fill readily. See
- * `components/games/MinuteConsole` for the mechanic.
+ * `components/games/RoundConsole` for the mechanic.
  */
 
-import MinuteConsole, { type Rung } from "@/components/games/MinuteConsole";
+import RoundConsole, { type Rung } from "@/components/games/RoundConsole";
 
 const LADDER: Rung[] = [
   { label: "MKT", price: null },
@@ -18,5 +18,5 @@ const LADDER: Rung[] = [
 ];
 
 export default function LuckyPage() {
-  return <MinuteConsole title="Lucky" ladder={LADDER} />;
+  return <RoundConsole title="Lucky" ladder={LADDER} />;
 }

@@ -43,7 +43,7 @@ import {
   ScreenRoot,
   ScreenRow,
 } from "@/components/screen/Screen";
-import { useMinuteRound, useNow, type Side } from "@/lib/games/useMinuteRound";
+import { useRound, useNow, type Side } from "@/lib/games/useRound";
 import * as coop from "@/lib/dreamdex/coop";
 import * as book from "@/lib/dreamdex/book";
 import * as wallet from "@/lib/dreamdex/wallet";
@@ -53,9 +53,10 @@ import { useUser } from "@/lib/api/hooks";
 
 const STEPS = 5;
 const SIZE = 1;
-const FIVE_MINUTES = 300;
-/** Above a 5m window's roll lead, so a fresh offer is never posted into one
- * that is about to be carried forward anyway. */
+/**
+ * Enough runway that a fresh offer is never posted into a window already inside
+ * its roll lead, which is a quarter of the window.
+ */
 const ROLL_FLOOR_S = 90;
 
 export default function DuelPage() {
@@ -68,8 +69,8 @@ export default function DuelPage() {
   const [escrowIdx, setEscrowIdx] = useState(0);
   const escrow = coop.ESCROW_OPTIONS[escrowIdx];
   /**
-   * Play the 5-minute series regardless of how long the offer stands, and let
-   * the offer roll forward into successive windows.
+   * Play the shortest window with runway, regardless of how long the offer
+   * stands, and let the offer roll forward into successive windows.
    *
    * Picking a window that outlasts the offer was the obvious reading, but it
    * meant a 30-minute offer landed on a 24h window — settling hours after it was
@@ -80,7 +81,7 @@ export default function DuelPage() {
    * The floor keeps it out of a window already inside its roll lead, where the
    * price has stopped meaning anything.
    */
-  const round = useMinuteRound(FIVE_MINUTES, ROLL_FLOOR_S);
+  const round = useRound(null, ROLL_FLOOR_S);
   const toast = useToast();
   const user = useUser();
   const [priceIdx, setPriceIdx] = useState(2);
@@ -139,7 +140,7 @@ export default function DuelPage() {
           yesPrice: posted_ ?? 0,
           size: SIZE,
           marketId: round.window.marketId,
-          handle: user.username,
+          handle: user.handle,
         }
       : null;
 

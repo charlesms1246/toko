@@ -29,17 +29,23 @@ import {
   ScreenRoot,
   ScreenRow,
 } from "@/components/screen/Screen";
-import { useMinuteRound, type Side } from "@/lib/games/useMinuteRound";
+import { useRound, type Side } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
 
 /** Called prices. Lower is further from the market and pays more. */
 const CALLS = [0.4, 0.3, 0.2, 0.1, 0.05];
 const SIZE = 1;
-const FIVE_MINUTES = 300;
+/**
+ * A resting bid needs room for the market to travel, so Pin wants a window with
+ * real time left rather than the shortest one going. It asks for runway instead
+ * of naming a cadence — the venue has stopped rolling series before now, and a
+ * game pinned to one simply stops finding a market.
+ */
+const PIN_RUNWAY_S = 120;
 
 export default function PinPage() {
-  const round = useMinuteRound(FIVE_MINUTES);
+  const round = useRound(null, PIN_RUNWAY_S);
   const [callIdx, setCallIdx] = useState(1);
   const [side, setSide] = useState<Side>("up");
 
@@ -230,7 +236,7 @@ export default function PinPage() {
         {round.message
           ? round.message
           : !round.window
-            ? "finding a 5m window"
+            ? "finding a window"
             : round.balance === 0n
               ? "fund your wallet"
               : "name a price · the market must come to you"}

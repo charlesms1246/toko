@@ -21,7 +21,7 @@ import {
   ScreenRoot,
   ScreenRow,
 } from "@/components/screen/Screen";
-import { useMinuteRound } from "@/lib/games/useMinuteRound";
+import { useRound } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
 
@@ -29,7 +29,7 @@ const SIZE = 1;
 const SLIPPAGE = 0.02;
 
 export default function RushPage() {
-  const round = useMinuteRound();
+  const round = useRound();
   const settled = ["won", "lost", "void"].includes(round.status);
   const live = round.status === "open";
 
