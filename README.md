@@ -53,6 +53,10 @@ TREASURY_PRIVATE_KEY=0x...
 PRIVATE_KEY=0x...
 ```
 
+**Use two different accounts.** The treasury signs for strangers and the trading
+key holds a position; one key doing both means a probe script and a public
+endpoint share a balance, and either one draining takes the other down with it.
+
 Fund the treasury with testnet STT from [the Somnia faucet
 bot](https://t.me/somnia_helper_bot) (50 STT / 24h, no group join) or [Google
 Cloud's](https://cloud.google.com/application/web3/faucet/somnia/shannon)
@@ -289,6 +293,10 @@ Stated plainly, because a README that only lists strengths is not much use.
 
 **[HOW_TO_PLAY.md](HOW_TO_PLAY.md)** explains every game and its controls, for
 players rather than developers.
+
+**[SDK_FEEDBACK.md](SDK_FEEDBACK.md)** is our report back to Somnia — the SDK and
+docs problems this build ran into, each with a reproduction, and the parts of the
+protocol that turned out better than documented.
 
 More detail lives in `claude-docs/` — `TESTNET_FACTS.md` for every measurement
 and the traps behind it, `INTEGRATION_PLAN.md` for why each decision went the way
