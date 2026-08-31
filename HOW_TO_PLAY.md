@@ -23,6 +23,11 @@ its price is just the market's estimate of your odds:
 | $0.10 | you are a long shot | $1.00 | **10x** |
 | $0.02 | almost certainly wrong | $1.00 | **50x** |
 
+![Four contracts as bars. Pay $0.50 on a coin flip and win $1.00 — that is 2x.
+Pay $0.33 as the underdog for 3x, $0.10 as a long shot for 10x, $0.02 when the
+market thinks you are almost certainly wrong for 50x. Every one of them pays the
+same $1.00 if you are right.](docs/diagrams/play-payout.svg)
+
 **The payout knob is really a price.** Asking for 10x is asking to pay 10 cents.
 That is why a big multiple is not generous — it is the market telling you it does
 not fancy your chances. Nobody sets these numbers; they come off a live order
@@ -43,6 +48,12 @@ Two consequences worth knowing before you press anything:
 
 You are holding a device, not filling in a form. Every game uses the same
 hardware:
+
+![The console, labelled: the screen and its status strip showing asset, seconds
+left and balance; the big key bottom right for the main action; LONG and SHORT
+below it; the ridged knob on the right for the payout you are asking for; the
+number wheel for how many contracts; and MENU and HOME along the
+bottom.](docs/diagrams/play-console.svg)
 
 | Control | What it does |
 |---|---|
@@ -117,6 +128,11 @@ bigger the multiple.
 
 Press **TAKE** to buy it.
 
+![Snipe over one window: the underdog's offer starts around 34 cents and slides
+toward zero as the window runs down, so the multiple grows from 3x to 6x to 20x
+the longer you wait. In the last seconds the market maker pulls its quotes and
+there is nothing left to take.](docs/diagrams/play-snipe.svg)
+
 The catch is real. In the last couple of seconds the market maker withdraws its
 quotes entirely, and there is nothing left to take. Wait too long and the screen
 says so. This is the one game that is purely about timing.
@@ -128,6 +144,11 @@ deal**: what the order book will actually pay you for it right now.
 
 - **TAKE THE DEAL** — sell now, bank whatever it is worth.
 - **Do nothing** — hold to the buzzer and collect the full $1 if you are right.
+
+![Rush over one window: the deal — what the book will pay for your position —
+starts at what you paid and wanders as the market moves. Take the deal at any
+point and bank it, or hold on to the buzzer for $1.00 if you are right and $0 if
+you are wrong.](docs/diagrams/play-rush.svg)
 
 There is no PUSH button, deliberately. Pushing *is* declining the deal, so a key
 for it would be a control that does nothing.
@@ -145,6 +166,10 @@ the multiple compounds. Lose a rung and the ladder ends there.
 2. Win the rung and the console offers **PRESS** or **FOLD**.
    - **PRESS** — roll everything into the next window.
    - **FOLD** — stop and keep it.
+
+![The ladder: $1 at stake on rung one, and pressing a win carries $2 to rung
+two, $4 to rung three, $8 to rung four. Folding at any rung stops and keeps it.
+Losing a rung ends the ladder there.](docs/diagrams/play-ladder.svg)
 
 You choose a side fresh on every rung. It never rolls by itself, because every
 rung spends real money.
@@ -171,6 +196,12 @@ market comes to your price. The screen shows how far it still has to travel.
 If it fills, you are in the round at your price. If the window closes first,
 nothing happens and your money comes straight back.
 
+![Pin: sellers are asking 0.68 down to 0.64, buyers are bidding 0.60 and 0.58,
+and your pin sits below all of it at 0.40 with the distance it still has to
+travel marked. If the market comes to you, you are in the round at your price; if
+the window closes first, nothing happens and your money comes
+back.](docs/diagrams/play-pin.svg)
+
 > Playing Pin *is* providing liquidity. Your resting bid is real depth that
 > anyone can trade against — which is exactly what this venue is short of.
 
@@ -182,6 +213,12 @@ A challenge that is a real order, not a message.
 2. **Number wheel** — how long the offer stands: `5m`, `30m`, `1h`, `4h`.
 3. **LONG** or **SHORT**, then **CHALLENGE**.
 4. **SHARE** — send the link to anyone.
+
+![A duel: you pick a side, the odds, and how long the offer stands — 5m, 30m, 1h
+or 4h. Share the link or leave it on the board at Menu → Open duels, where anyone
+can take it. When someone does, they take the opposite side at the odds you
+offered, and you are on opposite sides of one window until it
+closes.](docs/diagrams/play-duel.svg)
 
 Whoever opens it takes the opposite side, and the two of you trade **with each
 other**: the pool mints a fresh pair of contracts, one for each of you, with no
