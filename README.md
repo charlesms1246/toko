@@ -10,6 +10,12 @@ and payout comes from Shannon testnet. The single exception is **Demo Mode**,
 which lets someone play before they have a wallet, is labelled everywhere, and
 is described honestly below.
 
+![The round: LONG or SHORT, a knob that sets your price, and PLAY — sending an
+IOC order to the on-chain book. It either finds no counterparty, or leaves you
+holding contracts until the window closes and the oracle settles it, paying
+1.000000 per winning contract. You can cash out into the live bid at any
+point.](docs/diagrams/the-round.svg)
+
 ```bash
 cd web
 npm install
@@ -78,6 +84,11 @@ That one fact is what lets the console survive intact: **the payout knob became 
 limit price** and still reads as a multiple. 2x is 0.50, 3x is 0.33, 10x is 0.10.
 `ConsoleControls` never changed.
 
+![The knob's rungs on a price rail: 2x at 0.50, 3x at 0.33, 5x at 0.20, 10x at
+0.10, 25x at 0.04, 50x at 0.02, 100x at 0.01. Lucky covers 2x to 10x; Moonshot
+covers 5x to 100x. What you ask for is what you pay, and it is the market's odds
+on you.](docs/diagrams/the-knob.svg)
+
 Measured on Shannon rather than taken from the docs (`claude-docs/TESTNET_FACTS.md`):
 
 | | |
@@ -127,6 +138,12 @@ take. Mint-a-pair means the two of you trade with each other on a book nobody
 else is standing in — verified on chain as `kind = MINT_A_PAIR`, two buyers,
 0.500 each, one pair minted.
 
+![A duel: the challenger rests a BUY UP at 0.500 on the order book, tagged
+userData 0x544f4b4f and listed publicly at /menu/duels. An accepter buys DOWN at
+0.500. The pool mints a pair — the challenger holds 1.000 UP, the accepter 1.000
+DOWN, with no seller and no market maker in the
+trade.](docs/diagrams/the-duel.svg)
+
 It also taught the sharpest lesson in the project: **a resting order cannot be
 addressed.** The pool matches by price-time priority, so whoever accepts crosses
 the *best* bid on that side, not the one your link names. A challenge is only a
@@ -149,6 +166,11 @@ same oracle result as everyone else's.
 prices, get worse as they eat through levels, partially fill when depth runs out,
 and fail when nobody is there. A paper fill can never beat the book. A demo that
 flatters you teaches expectations the real product then breaks.
+
+![Every game screen, the round and the ladder all sit above a single Executor.
+One swap chooses between paper — which walks the real book level by level before
+signup — and chain, which places the order for real from a funded
+wallet.](docs/diagrams/the-seam.svg)
 
 It is labelled on every screen, never claims anything happened on chain, and
 ends the moment you fund a wallet. Anything that genuinely cannot be demoed —
