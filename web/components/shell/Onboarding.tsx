@@ -4,6 +4,9 @@
  * The ordered gates a new player passes through before the console becomes
  * playable: landing -> starting -> username -> funding -> customize.
  *
+ * The landing step also offers the way *round* it: Demo Mode, which hands over
+ * the console with live markets and hypothetical fills and no wallet at all.
+ *
  * The funding gate is the one that matters. A visitor arrives with a wallet
  * generated in their browser and nothing in it, so this is where the treasury
  * sends them STT for gas and the collateral contract's faucet sends them tUSDC
@@ -27,7 +30,14 @@ import * as wallet from "@/lib/dreamdex/wallet";
 
 type Step = "landing" | "starting" | "username" | "funding" | "customize";
 
-export default function Onboarding({ onDone }: { onDone: () => void }) {
+export default function Onboarding({
+  onDone,
+  onDemo,
+}: {
+  onDone: () => void;
+  /** Try the console before signing up. Live markets, hypothetical fills. */
+  onDemo: () => void;
+}) {
   const [step, setStep] = useState<Step>("landing");
   const [handle, setHandle] = useState("");
   const [stage, setStage] = useState<wallet.FundingStage | null>(null);
@@ -88,6 +98,17 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           >
             START
           </TapTarget>
+          <TapTarget
+            className="mt-3 w-full rounded-full border border-[var(--color-line-strong)] px-8 py-4 text-base font-extrabold text-text-2 transition active:scale-[0.98]"
+            haptic="low"
+            onClick={onDemo}
+          >
+            Try it first
+          </TapTarget>
+          <p className="mt-3 px-2 text-[11px] leading-relaxed text-text-3">
+            Real markets, real prices, real settlement — only your fills are
+            pretend. No wallet needed.
+          </p>
         </div>
       )}
 

@@ -15,6 +15,27 @@ import { useProgramConsole } from "@/lib/console/controls";
 import { useBalance } from "@/lib/api/hooks";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
 import { useIsMounted } from "@/lib/react/hooks";
+import * as demo from "@/lib/demo";
+import { useSyncExternalStore } from "react";
+import NeedsWallet from "@/components/menu/NeedsWallet";
+
+/**
+ * Screens that read the player's own chain state. In Demo Mode there is no
+ * wallet behind them, so they say what they need rather than showing an empty
+ * list that looks like a real record of nothing.
+ *
+ * Everything else stays open: live windows and the duel board are real market
+ * data, and the leaderboard is built from the venue's trades, not the player's.
+ */
+const NEEDS_WALLET = [
+  "/menu/wallet",
+  "/menu/withdraw",
+  "/menu/transactions",
+  "/menu/positions",
+  "/menu/history",
+  "/menu/achievements",
+  "/menu/share",
+];
 
 export default function MenuDrawer({
   children,
@@ -26,6 +47,12 @@ export default function MenuDrawer({
   const pathname = usePathname();
   const balance = useBalance();
   const isHub = pathname === "/menu";
+  const { active: demoing } = useSyncExternalStore(
+    demo.subscribe,
+    demo.getSnapshot,
+    demo.getServerSnapshot,
+  );
+  const blocked = demoing && NEEDS_WALLET.includes(pathname);
 
   useProgramConsole({
     status: { left: "MENU", right: `$${formatCollateral(balance)}` },
@@ -62,7 +89,7 @@ export default function MenuDrawer({
         </header>
 
         <div className="no-scrollbar flex-1 overflow-y-auto px-4 pb-8 pt-4">
-          {children}
+          {blocked ? <NeedsWallet /> : children}
         </div>
       </div>
     </div>

@@ -2,15 +2,17 @@
 
 /**
  * Everything that layers over the console: the ordered onboarding gates, the
- * cross-page active-play pill, the onboarding tour, and the settle toasts.
+ * Demo Mode label, the onboarding tour, and the settle toasts.
  */
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Onboarding from "./Onboarding";
 import Tour from "./Tour";
+import DemoBadge from "./DemoBadge";
 import { resumeAudio } from "@/lib/sound";
 import * as onboarding from "@/lib/onboarding";
+import * as demo from "@/lib/demo";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -20,13 +22,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     onboarding.getSnapshot,
     onboarding.getServerSnapshot,
   );
+  const { active: demoing } = useSyncExternalStore(
+    demo.subscribe,
+    demo.getSnapshot,
+    demo.getServerSnapshot,
+  );
 
   useEffect(() => {
     onboarding.hydrate();
+    demo.hydrate();
   }, []);
 
   const finishOnboarding = useCallback(() => {
+    // A funded wallet and a paper ledger must never be live together.
+    demo.end();
     onboarding.completeOnboarding();
+    resumeAudio();
+    router.push("/games");
+  }, [router]);
+
+  /** Try it before signing up: the console is real, only the fills are not. */
+  const startDemo = useCallback(() => {
+    demo.start();
     resumeAudio();
     router.push("/games");
   }, [router]);
@@ -35,8 +52,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
-      {!onboarded && <Onboarding onDone={finishOnboarding} />}
-      {onboarded && !tourSeen && <Tour onDone={onboarding.completeTour} />}
+      <DemoBadge />
+      {!onboarded && !demoing && (
+        <Onboarding onDone={finishOnboarding} onDemo={startDemo} />
+      )}
+      {(onboarded || demoing) && !tourSeen && (
+        <Tour onDone={onboarding.completeTour} />
+      )}
     </>
   );
 }
