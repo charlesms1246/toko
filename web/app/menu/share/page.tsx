@@ -12,7 +12,8 @@ import Image from "next/image";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import TapTarget from "@/components/ui/TapTarget";
 import { EmptyState } from "@/components/menu/MenuUI";
-import { useUser } from "@/lib/api/hooks";
+import { useReferral, useUser } from "@/lib/api/hooks";
+import { SITE_LABEL } from "@/lib/site";
 import { formatUsd } from "@/lib/api/math";
 import { useToast } from "@/components/ui/Toast";
 import { playSfx } from "@/lib/sound";
@@ -26,6 +27,7 @@ export default function SharePage() {
     stats.getServerSnapshot,
   );
   const user = useUser();
+  const referral = useReferral();
   const toast = useToast();
   const [index, setIndex] = useState(0);
 
@@ -124,11 +126,11 @@ export default function SharePage() {
                 {play.asset} · ${play.cost.toFixed(2)}
               </div>
               <div className="text-sm font-extrabold text-white">
-                @{user.username}
+                @{user.handle}
               </div>
             </div>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">
-              toko.app
+              {SITE_LABEL}
             </div>
           </div>
         </div>
@@ -161,7 +163,7 @@ export default function SharePage() {
           playSfx("tap");
           void navigator.clipboard
             ?.writeText(
-              `${formatUsd(pnl, true)} on ${play.asset} ${label} — https://toko.app/@${user.username}`,
+              `${formatUsd(pnl, true)} on ${play.asset} ${label} — ${referral.url}`,
             )
             .then(() => toast("Card text copied", "win"))
             .catch(() => toast("Couldn't copy that.", "lose"));

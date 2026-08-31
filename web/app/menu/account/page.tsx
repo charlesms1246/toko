@@ -34,11 +34,11 @@ export default function AccountPage() {
     <>
       <div className="mb-5 flex items-center gap-3">
         <div className="grid h-14 w-14 place-items-center rounded-full bg-brand-500 text-xl font-black text-black">
-          {user.username.slice(0, 2).toUpperCase()}
+          {user.handle.slice(0, 2).toUpperCase()}
         </div>
         <div className="min-w-0">
           <div className="truncate text-lg font-extrabold">
-            @{user.username}
+            @{user.handle}
           </div>
           <div className="text-xs text-text-3">
             Signed in with {"Embedded wallet"}
@@ -67,7 +67,7 @@ export default function AccountPage() {
       </div>
 
       <MenuSection title="Profile">
-        <MenuRow label="Handle" value={`@${user.username}`} href="/menu/username" />
+        <MenuRow label="Handle" value={`@${user.handle}`} href="/menu/username" />
         <MenuRow
           label="Favourite game"
           value={stats.assets.join(", ") || "—"}

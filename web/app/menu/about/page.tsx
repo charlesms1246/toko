@@ -28,21 +28,21 @@ export default function AboutPage() {
         <p className="text-xs leading-relaxed text-text-2">
           <strong className="text-text">TOKO has no token.</strong> We have never
           launched one. Any coin, presale, or airdrop claiming to be TOKO is a
-          scam. @tokoconsole is our only account.
+          scam.
         </p>
       </div>
 
       <MenuSection title="How it works">
-        <MenuRow label="Chips are USDC on Somnia testnet" />
-        <MenuRow label="Prices come from Pyth" />
-        <MenuRow label="Markets settle on Somnia" />
+        <MenuRow label="You trade DreamDEX Event Contracts" value="binary Up/Down" />
+        <MenuRow label="Collateral is tUSDC" value="Somnia testnet" />
+        <MenuRow label="Prices come from Somnia's on-chain oracle" value="EMA feed" />
+        <MenuRow label="Windows settle on chain" value="1 tUSDC per winner" />
       </MenuSection>
 
       <MenuSection title="Links">
-        <MenuRow label="X / Twitter" href={LINKS.twitter} />
-        <MenuRow label="GitHub" href={LINKS.github} />
-        <MenuRow label="Docs" href={LINKS.docs} />
-        <MenuRow label="Support" href={LINKS.support} />
+        <MenuRow label="Source" href={LINKS.github} />
+        <MenuRow label="DreamDEX" href={LINKS.dreamdex} />
+        <MenuRow label="Somnia docs" href={LINKS.somnia} />
       </MenuSection>
 
       <div className="flex flex-col items-center gap-2 py-4 opacity-70">

@@ -20,7 +20,7 @@ import {
 } from "@/lib/dreamdex/config";
 import * as wallet from "@/lib/dreamdex/wallet";
 import { useIsMounted } from "@/lib/react/hooks";
-import { useNow } from "@/lib/games/useMinuteRound";
+import { useNow } from "@/lib/games/useRound";
 
 /** How long until the next weekly claim, in the coarsest useful unit. */
 function untilNext(at: number, now: number) {

@@ -34,11 +34,11 @@ export default function MenuHub() {
     <>
       <div className="mb-5 flex items-center gap-3">
         <div className="grid h-12 w-12 place-items-center rounded-full bg-brand-500 text-lg font-black text-black">
-          {user.username.slice(0, 2).toUpperCase()}
+          {user.handle.slice(0, 2).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-base font-extrabold">
-            @{user.username}
+            @{user.handle}
           </div>
           <div className="truncate text-xs text-text-3">
             {user.address.slice(0, 10)}…{user.address.slice(-6)}
