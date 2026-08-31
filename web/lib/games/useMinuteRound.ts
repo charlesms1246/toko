@@ -22,6 +22,10 @@
  *   pretend a press is instant.
  * - **Resolution is observable ~3s after expiry.** `settling` is a real state,
  *   not a flourish.
+ *
+ * Every order goes through `execution`, which is the single object Demo Mode
+ * swaps. The window, the book, the countdown and the oracle result are the same
+ * either way — only whose money moves is different.
  */
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
@@ -29,8 +33,7 @@ import * as markets from "@/lib/dreamdex/markets";
 import * as book from "@/lib/dreamdex/book";
 import * as orders from "@/lib/dreamdex/orders";
 import * as positions from "@/lib/dreamdex/positions";
-import * as redeem from "@/lib/dreamdex/redeem";
-import * as wallet from "@/lib/dreamdex/wallet";
+import * as execution from "@/lib/dreamdex/execution";
 import { getClient } from "@/lib/dreamdex/client";
 import type { Position } from "@/lib/dreamdex/portfolio";
 
@@ -127,11 +130,12 @@ export function useMinuteRound(
     book.getBookSnapshot,
     book.getBookServerSnapshot,
   );
-  const walletState = useSyncExternalStore(
-    wallet.subscribe,
-    wallet.getSnapshot,
-    wallet.getServerSnapshot,
+  const balance = useSyncExternalStore(
+    execution.subscribeBalance,
+    execution.getBalance,
+    execution.getServerBalance,
   );
+  const exec = execution.current();
 
   const [status, setStatus] = useState<RoundStatus>("idle");
   const [side, setSide] = useState<Side | null>(null);
@@ -145,8 +149,9 @@ export function useMinuteRound(
   const [playing, setPlaying] = useState<markets.Window | null>(null);
 
   useEffect(() => {
-    wallet.ensureWallet();
-    void wallet.refresh();
+    const active = execution.current();
+    active.ready();
+    void active.refresh();
     return markets.startPolling(3000);
   }, []);
 
@@ -165,8 +170,8 @@ export function useMinuteRound(
   // two transactions on the press instead of one.
   useEffect(() => {
     if (!pool || status !== "idle") return;
-    void orders.preApprove(pool);
-  }, [pool, status]);
+    void exec.preApprove(pool);
+  }, [pool, status, exec]);
 
   const secsLeft = window ? Math.max(0, window.expiry - now / 1000) : 0;
   const impliedUp = book.impliedUp(bookState.book);
@@ -178,7 +183,7 @@ export function useMinuteRound(
     !!window &&
     secsLeft > ENTRY_CUTOFF_SECONDS &&
     (!!askFor("up") || !!askFor("down")) &&
-    walletState.collateral > 0n;
+    balance > 0n;
 
   // ── Settlement ────────────────────────────────────────────────────────────
 
@@ -230,11 +235,10 @@ export function useMinuteRound(
           kind: chain.isVoided ? "voided" : "winner",
           redeemable: chain.isVoided ? held / 2n : held,
         };
-        const result = await redeem.redeem(claim);
+        const result = await execution.current().claim(claim);
         if (cancelled) return;
-        setPayout(claim.redeemable);
+        setPayout(result.paid);
         if (!result.ok) setMessage(result.error ?? "Could not claim");
-        void wallet.refresh();
       } catch {
         // Keep polling; the oracle lands within a few seconds.
       }
@@ -267,8 +271,9 @@ export function useMinuteRound(
       setPayout(null);
 
       void (async () => {
-        const before = wallet.getSnapshot().collateral;
-        const result = await orders.buy(
+        const active = execution.current();
+        const before = active.balance();
+        const result = await active.buy(
           target,
           nextSide,
           orders.toRawPrice(limitPrice),
@@ -282,8 +287,8 @@ export function useMinuteRound(
           );
           return;
         }
-        await wallet.refresh();
-        setEntryCost(before - wallet.getSnapshot().collateral);
+        await active.refresh();
+        setEntryCost(before - active.balance());
         setHeld(result.filled);
         setPlaying(target);
         setStatus("open");
@@ -314,8 +319,9 @@ export function useMinuteRound(
       setPayout(null);
 
       void (async () => {
-        const before = wallet.getSnapshot().collateral;
-        const result = await orders.rest(
+        const active = execution.current();
+        const before = active.balance();
+        const result = await active.rest(
           target,
           nextSide,
           orders.toRawPrice(limitPrice),
@@ -328,8 +334,8 @@ export function useMinuteRound(
           setMessage(result.error ?? "Could not place the order");
           return;
         }
-        await wallet.refresh();
-        setEntryCost(before - wallet.getSnapshot().collateral);
+        await active.refresh();
+        setEntryCost(before - active.balance());
         setPlaying(target);
         setRestingOrderId(result.orderId ?? null);
         // It may have crossed on arrival if the book moved to meet it.
@@ -351,7 +357,7 @@ export function useMinuteRound(
     if (status !== "resting" || !playing) return;
     let cancelled = false;
     const check = async () => {
-      const holding = await positions.readHolding(playing);
+      const holding = await execution.current().holding(playing);
       if (cancelled) return;
       const mine = side === "up" ? holding.up : holding.down;
       if (mine > 0n) {
@@ -379,8 +385,9 @@ export function useMinuteRound(
     const limit = side === "up" ? bid.price - 0.02 : 1 - bid.price + 0.02;
     setStatus("pending");
     void (async () => {
-      const before = wallet.getSnapshot().collateral;
-      const result = await orders.sell(playing, side, orders.toRawPrice(limit), held);
+      const active = execution.current();
+      const before = active.balance();
+      const result = await active.sell(playing, side, orders.toRawPrice(limit), held);
       if (!result.ok) {
         setStatus("open");
         setMessage(
@@ -388,8 +395,8 @@ export function useMinuteRound(
         );
         return;
       }
-      await wallet.refresh();
-      setPayout(wallet.getSnapshot().collateral - before);
+      await active.refresh();
+      setPayout(active.balance() - before);
       setHeld(0n);
       setStatus(result.ok ? "won" : "lost");
     })();
@@ -405,7 +412,8 @@ export function useMinuteRound(
     setMessage(null);
     setRestingOrderId(null);
     setFilledOnArrival(false);
-    void positions.refresh();
+    // Paper play has no on-chain positions to re-read.
+    if (!execution.current().paper) void positions.refresh();
   }, []);
 
   // Return the console to idle a few seconds after a result.
@@ -425,7 +433,7 @@ export function useMinuteRound(
     filledOnArrival,
     side,
     status: settling ? "settling" : restingExpired ? "idle" : status,
-    balance: walletState.collateral,
+    balance,
     payout,
     entryCost,
     canEnter,

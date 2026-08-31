@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import * as store from "./store";
 import { priceHistory, spot, subscribeTick, type PricePoint } from "./prices";
 import * as wallet from "@/lib/dreamdex/wallet";
+import * as execution from "@/lib/dreamdex/execution";
 import type { MinigameId } from "./types";
 
 /**
@@ -55,13 +56,17 @@ export function useUser() {
 }
 
 /** The real tUSDC balance, raw. Format with `wallet.formatCollateral`. */
+/**
+ * Spendable balance — the wallet's real collateral, or the paper one in Demo
+ * Mode. Read through `execution` so the two can never disagree with what the
+ * games are actually spending.
+ */
 export function useBalance(): bigint {
-  const walletState = useSyncExternalStore(
-    wallet.subscribe,
-    wallet.getSnapshot,
-    wallet.getServerSnapshot,
+  return useSyncExternalStore(
+    execution.subscribeBalance,
+    execution.getBalance,
+    execution.getServerBalance,
   );
-  return walletState.collateral;
 }
 
 export function useMinigameBest(game: MinigameId) {
