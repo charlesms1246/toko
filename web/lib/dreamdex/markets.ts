@@ -126,6 +126,33 @@ export function startPolling(everyMs = 5000): () => void {
 /** Seconds until a window locks. Negative once it has. */
 export const secondsLeft = (w: Window) => w.expiry - Date.now() / 1000;
 
+/**
+ * The shortest live series with enough runway — the round the console plays.
+ *
+ * The venue's series are **not fixed**. Shannon ran 1-minute windows for months
+ * and then stopped rolling them; a few minutes later the 5-minute series stopped
+ * too, leaving 15m as the shortest thing trading. Meanwhile new venues appeared
+ * running their own cadences, including some odd ones (31s, 115s, 507s).
+ *
+ * So the console asks for the shortest round available rather than naming one.
+ * A minute is the ideal and the game is designed around it, but hardcoding it
+ * meant every trading game sat on "finding a window" the moment the venue moved
+ * on — which is a worse product than a slightly longer round.
+ */
+export function shortestRound(
+  windows: Window[],
+  minSecsLeft = 0,
+): Window | null {
+  const usable = windows.filter((w) => secondsLeft(w) > minSecsLeft);
+  if (!usable.length) return null;
+  const shortest = Math.min(...usable.map((w) => w.intervalSec));
+  return (
+    usable
+      .filter((w) => w.intervalSec === shortest)
+      .sort((a, b) => a.expiry - b.expiry)[0] ?? null
+  );
+}
+
 /** Windows of one cadence, soonest first. */
 export const ofInterval = (windows: Window[], intervalSec: number) =>
   windows.filter((w) => w.intervalSec === intervalSec);
