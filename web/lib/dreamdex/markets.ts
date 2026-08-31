@@ -138,16 +138,29 @@ export const secondsLeft = (w: Window) => w.expiry - Date.now() / 1000;
  * A minute is the ideal and the game is designed around it, but hardcoding it
  * meant every trading game sat on "finding a window" the moment the venue moved
  * on — which is a worse product than a slightly longer round.
+ *
+ * `skip` carries markets already caught with nothing resting. Depth does not
+ * follow the series here — the maker that quoted the old 1m book is not
+ * necessarily quoting whatever is live now — so a window can look perfectly
+ * tradeable and return `ImmediateOrCancelNoFill` on the press. Rather than read
+ * every candidate's book on every poll, the console remembers the ones that
+ * actually failed and prefers something else.
  */
 export function shortestRound(
   windows: Window[],
   minSecsLeft = 0,
+  skip?: ReadonlySet<string>,
 ): Window | null {
-  const usable = windows.filter((w) => secondsLeft(w) > minSecsLeft);
-  if (!usable.length) return null;
-  const shortest = Math.min(...usable.map((w) => w.intervalSec));
+  const live = windows.filter((w) => secondsLeft(w) > minSecsLeft);
+  // Windows already caught with nothing to trade against are passed over — but
+  // never to the point of returning nothing, because a window with a thin book
+  // is still better than no window at all.
+  const usable = skip?.size ? (live.filter((w) => !skip.has(w.marketId)) ) : live;
+  const pool = usable.length ? usable : live;
+  if (!pool.length) return null;
+  const shortest = Math.min(...pool.map((w) => w.intervalSec));
   return (
-    usable
+    pool
       .filter((w) => w.intervalSec === shortest)
       .sort((a, b) => a.expiry - b.expiry)[0] ?? null
   );

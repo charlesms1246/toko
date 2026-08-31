@@ -12,9 +12,16 @@
  * Set `TREASURY_PRIVATE_KEY` in `web/.env` to enable this. Without it the route
  * reports itself unavailable and the UI falls back to the public faucets — the
  * feature is genuinely off rather than pretending to work.
+ *
+ * It is also the only place that can honestly count a referral. Every new player
+ * passes through here exactly once — we pay for their first gas — so recording
+ * the code they arrived with turns "who did I bring?" into something we actually
+ * know, rather than a number that would have to be invented.
  */
 
 import { NextResponse } from "next/server";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import {
   createPublicClient,
   createWalletClient,
@@ -42,6 +49,50 @@ const THRESHOLD = parseEther(TOPUP_THRESHOLD_STT);
 const COOLDOWN_MS = 60 * 60 * 1000;
 const lastTopUp = new Map<string, number>();
 
+/**
+ * Who we funded, and which referral code they arrived with.
+ *
+ * On disk rather than in memory so a restart does not erase everyone's invites.
+ * One entry per address, written the first time we pay for their gas — which is
+ * once per player, because after that they can pay for themselves.
+ */
+const REFERRALS = join(process.cwd(), ".data", "referrals.json");
+
+type Referrals = Record<string, { ref: string; at: number }>;
+
+async function readReferrals(): Promise<Referrals> {
+  try {
+    return JSON.parse(await readFile(REFERRALS, "utf8")) as Referrals;
+  } catch {
+    return {};
+  }
+}
+
+async function recordReferral(address: string, ref: string) {
+  const all = await readReferrals();
+  const key = address.toLowerCase();
+  if (all[key]) return; // first funding only — never double-count a player
+  all[key] = { ref: ref.toLowerCase(), at: Date.now() };
+  await mkdir(dirname(REFERRALS), { recursive: true });
+  await writeFile(REFERRALS, JSON.stringify(all), "utf8");
+}
+
+/**
+ * How many players a code has brought in.
+ *
+ * Deliberately just a count of funded wallets. There is no earnings figure
+ * because there are no referral earnings — inventing one would be exactly the
+ * thing this project refuses to do.
+ */
+export async function GET(request: Request) {
+  const ref = new URL(request.url).searchParams.get("ref");
+  if (!ref) return NextResponse.json({ invited: 0 });
+  const all = await readReferrals();
+  const wanted = ref.toLowerCase();
+  const invited = Object.values(all).filter((r) => r.ref === wanted).length;
+  return NextResponse.json({ invited });
+}
+
 function treasuryKey(): `0x${string}` | null {
   const raw = process.env.TREASURY_PRIVATE_KEY;
   if (!raw) return null;
@@ -59,8 +110,9 @@ export async function POST(request: Request) {
   }
 
   let address: string;
+  let ref: string | undefined;
   try {
-    ({ address } = (await request.json()) as { address: string });
+    ({ address, ref } = (await request.json()) as { address: string; ref?: string });
   } catch {
     return NextResponse.json({ error: "Malformed request" }, { status: 400 });
   }
@@ -99,6 +151,7 @@ export async function POST(request: Request) {
     const hash = await wallet.sendTransaction({ to: address as Address, value: AMOUNT });
     await publicClient.waitForTransactionReceipt({ hash });
     lastTopUp.set(address.toLowerCase(), Date.now());
+    if (ref) await recordReferral(address, ref);
     return NextResponse.json({ hash });
   } catch (err) {
     return NextResponse.json(

@@ -107,11 +107,21 @@ export interface Round {
  * one too, and reading `Date.now()` during render is what the React Compiler's
  * purity rule rejects.
  */
-export /** The same choice the hook renders from, made at press time. */
+export /**
+ * Markets that have already turned a press away with nothing on the other side.
+ *
+ * Module-level and unbounded on purpose: a market id is only ever live for
+ * minutes, so the set turns over by itself, and remembering across screens is
+ * the point — walking from Lucky to Snipe should not re-learn that the same
+ * window is empty.
+ */
+const thin = new Set<string>();
+
+/** The same choice the hook renders from, made at press time. */
 function pickWindow(intervalSec: number | null, minSecsLeft: number) {
   const windows = markets.getSnapshot().windows;
   return intervalSec == null
-    ? markets.shortestRound(windows, minSecsLeft)
+    ? markets.shortestRound(windows, minSecsLeft, thin)
     : markets.nextToClose(windows, intervalSec, minSecsLeft);
 }
 
@@ -180,7 +190,7 @@ export function useRound(
   // round stays with the window it was opened in, even as the next one rolls.
   const live =
     intervalSec == null
-      ? markets.shortestRound(windows, minSecsLeft)
+      ? markets.shortestRound(windows, minSecsLeft, thin)
       : markets.nextToClose(windows, intervalSec, minSecsLeft);
   const window = playing ?? live;
   const pool = window?.poolAddress;
@@ -300,6 +310,8 @@ export function useRound(
           orders.toRawSize(contracts),
         );
         if (!result.ok) {
+          // Proof this window has nothing to trade against; prefer another.
+          if (result.noLiquidity) thin.add(target.marketId);
           setStatus("idle");
           setSide(null);
           setMessage(

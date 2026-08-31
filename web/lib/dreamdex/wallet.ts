@@ -184,11 +184,20 @@ export interface FundingResult {
 export async function requestGas(): Promise<FundingResult> {
   const address = ensureWallet();
   if (!address) return { ok: false, reason: "No wallet yet" };
+  // Whoever's link brought them here, stored by `/r/[code]` or `/@handle`. This
+  // is the one moment attribution can be recorded honestly: we are paying for
+  // this player's first gas, so we know they are new.
+  let ref: string | undefined;
+  try {
+    ref = window.localStorage.getItem("toko_ref") ?? undefined;
+  } catch {
+    ref = undefined;
+  }
   try {
     const res = await fetch("/api/topup", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ address }),
+      body: JSON.stringify({ address, ref }),
     });
     const body = (await res.json()) as { hash?: Hash; error?: string; skipped?: boolean };
     if (!res.ok) return { ok: false, reason: body.error ?? `Top-up failed (${res.status})` };
@@ -218,6 +227,26 @@ const lastClaim = (): number => {
     return 0;
   }
 };
+
+/**
+ * How many players a referral code has actually brought in.
+ *
+ * Counted where it can be observed honestly: we pay for every new player's
+ * first gas, so the sponsorship route knows which code each funded wallet
+ * arrived with. Null when it cannot be read — never a zero standing in for
+ * "unknown".
+ */
+export async function invitedCount(code: string): Promise<number | null> {
+  if (!code) return null;
+  try {
+    const res = await fetch(`/api/topup?ref=${encodeURIComponent(code)}`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { invited?: number };
+    return typeof body.invited === "number" ? body.invited : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * What the next claim would be, and when it unlocks.

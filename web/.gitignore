@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Server-side records the routes keep (referrals, grants). Local, not source.
+.data/
