@@ -25,7 +25,13 @@ import { useConsoleTheme } from "@/lib/console/theme-context";
 import { useStoreActions } from "@/lib/api/hooks";
 import { APP } from "@/lib/api/fixtures";
 import { resumeAudio } from "@/lib/sound";
-import { COLLATERAL, GAS, STT_FAUCETS } from "@/lib/dreamdex/config";
+import {
+  COLLATERAL,
+  GAS,
+  SIGNUP_GRANT,
+  STT_FAUCETS,
+  WEEKLY_GRANT,
+} from "@/lib/dreamdex/config";
 import * as demo from "@/lib/demo";
 import * as wallet from "@/lib/dreamdex/wallet";
 
@@ -179,7 +185,8 @@ export default function Onboarding({
               </p>
               <p className="mt-4 text-sm leading-relaxed text-text-2">
                 Real testnet collateral, in a wallet only this browser holds. Gas
-                is on us — every round you play settles on chain.
+                is on us — every round you play settles on chain. Another{" "}
+                {WEEKLY_GRANT} lands every week if you want it.
               </p>
               {past && past.rounds > 0 && (
                 <p className="mt-3 text-[11px] leading-relaxed text-text-3">
@@ -241,7 +248,7 @@ export default function Onboarding({
                 {stage === "gas"
                   ? `Sending you ${GAS.symbol} for gas…`
                   : stage === "collateral"
-                    ? `Sending you 10,000 ${COLLATERAL.symbol}…`
+                    ? `Sending you ${SIGNUP_GRANT} ${COLLATERAL.symbol}…`
                     : "Creating your wallet…"}
               </p>
               <p className="mt-2 text-[11px] text-text-3">

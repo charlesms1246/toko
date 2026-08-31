@@ -14,10 +14,23 @@ import {
   COLLATERAL,
   GAS,
   STT_FAUCETS,
+  WEEKLY_GRANT,
   explorerAddress,
   explorerTx,
 } from "@/lib/dreamdex/config";
 import * as wallet from "@/lib/dreamdex/wallet";
+import { useIsMounted } from "@/lib/react/hooks";
+import { useNow } from "@/lib/games/useMinuteRound";
+
+/** How long until the next weekly claim, in the coarsest useful unit. */
+function untilNext(at: number, now: number) {
+  const ms = at - now;
+  if (ms <= 0) return "ready";
+  const days = Math.floor(ms / (24 * 60 * 60 * 1000));
+  if (days >= 1) return `${days}d`;
+  const hours = Math.ceil(ms / (60 * 60 * 1000));
+  return `${hours}h`;
+}
 
 export default function WalletPage() {
   const toast = useToast();
@@ -29,11 +42,19 @@ export default function WalletPage() {
   const [busy, setBusy] = useState<"gas" | "collateral" | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [lastTx, setLastTx] = useState<string | null>(null);
+  const mounted = useIsMounted();
+  // Ticks so the countdown moves, and so readiness is never decided by reading
+  // the clock mid-render.
+  const now = useNow(30_000);
 
   useEffect(() => {
     wallet.ensureWallet();
     void wallet.refresh();
   }, []);
+
+  // The schedule lives in local storage, so it is only knowable on the client.
+  const grant = mounted ? wallet.grantStatus() : null;
+  const grantReady = grant != null && now >= grant.nextAt;
 
   const fundGas = useCallback(async () => {
     setBusy("gas");
@@ -51,8 +72,8 @@ export default function WalletPage() {
     setBusy(null);
     if (result.ok) {
       if (result.hash) setLastTx(result.hash);
-      toast(`Received 10,000 ${COLLATERAL.symbol}`, "win");
-    } else toast(result.reason ?? "Faucet failed", "lose");
+      toast(`Received ${result.amount} ${COLLATERAL.symbol}`, "win");
+    } else toast(result.reason ?? "Not available yet", "lose");
   }, [toast]);
 
   const address = state.address;
@@ -113,11 +134,21 @@ export default function WalletPage() {
         <MenuRow
           label={
             busy === "collateral"
-              ? "Requesting…"
-              : `Get 10,000 ${COLLATERAL.symbol}`
+              ? "Minting…"
+              : grant?.kind === "weekly"
+                ? `Weekly ${WEEKLY_GRANT} ${COLLATERAL.symbol}`
+                : `Claim your ${grant?.amount ?? ""} ${COLLATERAL.symbol}`
           }
-          value={lowGas ? "needs gas" : "faucet"}
-          onClick={busy ? undefined : fundCollateral}
+          value={
+            lowGas
+              ? "needs gas"
+              : !grant
+                ? "—"
+                : grantReady
+                  ? "ready"
+                  : untilNext(grant.nextAt, now)
+          }
+          onClick={busy || !grantReady ? undefined : fundCollateral}
         />
         <MenuRow label="Refresh balances" onClick={() => void wallet.refresh()} />
         {lastTx && (
