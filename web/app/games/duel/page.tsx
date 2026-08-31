@@ -50,6 +50,8 @@ import * as wallet from "@/lib/dreamdex/wallet";
 import * as demo from "@/lib/demo";
 import { useToast } from "@/components/ui/Toast";
 import { useUser } from "@/lib/api/hooks";
+import PriceChart from "@/components/screen/PriceChart";
+import * as markets from "@/lib/dreamdex/markets";
 
 const STEPS = 5;
 const SIZE = 1;
@@ -407,6 +409,15 @@ export default function DuelPage() {
             postedAt == null ? 0 : Math.min(1, (now - postedAt) / (escrow.secs * 1000))
           }
         />
+        <PriceChart
+          asset={round.window?.asset ?? "BTC"}
+          entry={
+            round.window?.strike != null
+              ? markets.strikePrice(round.window.strike)
+              : null
+          }
+          className="flex-1"
+        />
         <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
           {keep.reposts > 0
             ? `moved to the front ${keep.reposts}x · anyone can take it`
@@ -453,6 +464,15 @@ export default function DuelPage() {
         value={ask ? ask.price.toFixed(3) : "—"}
       />
 
+      <PriceChart
+        asset={round.window?.asset ?? "BTC"}
+        entry={
+          round.window?.strike != null
+            ? markets.strikePrice(round.window.strike)
+            : null
+        }
+        className="flex-1"
+      />
       <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
         {round.message
           ? round.message

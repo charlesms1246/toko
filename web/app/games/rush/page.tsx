@@ -24,6 +24,8 @@ import {
 import { useRound } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
+import PriceChart from "@/components/screen/PriceChart";
+import * as markets from "@/lib/dreamdex/markets";
 
 const SIZE = 1;
 const SLIPPAGE = 0.02;
@@ -134,6 +136,15 @@ export default function RushPage() {
               : 0
           }
         />
+        <PriceChart
+          asset={round.window?.asset ?? "BTC"}
+          entry={
+            round.window?.strike != null
+              ? markets.strikePrice(round.window.strike)
+              : null
+          }
+          className="flex-1"
+        />
         <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
           take the deal, or hold and let it ride
         </div>
@@ -157,6 +168,15 @@ export default function RushPage() {
       <ScreenRow
         label="Ante"
         value={upAsk ? `$${(upAsk.price * SIZE).toFixed(2)}` : "—"}
+      />
+      <PriceChart
+        asset={round.window?.asset ?? "BTC"}
+        entry={
+          round.window?.strike != null
+            ? markets.strikePrice(round.window.strike)
+            : null
+        }
+        className="flex-1"
       />
       <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
         {round.message

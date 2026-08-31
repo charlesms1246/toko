@@ -32,6 +32,8 @@ import {
 import { useRound, type Side } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
+import PriceChart from "@/components/screen/PriceChart";
+import * as markets from "@/lib/dreamdex/markets";
 
 /** Called prices. Lower is further from the market and pays more. */
 const CALLS = [0.4, 0.3, 0.2, 0.1, 0.05];
@@ -163,6 +165,15 @@ export default function PinPage() {
               : 0
           }
         />
+        <PriceChart
+          asset={round.window?.asset ?? "BTC"}
+          entry={
+            round.window?.strike != null
+              ? markets.strikePrice(round.window.strike)
+              : null
+          }
+          className="flex-1"
+        />
         <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
           on the book · fills if the market comes
         </div>
@@ -231,6 +242,15 @@ export default function PinPage() {
       <ScreenRow
         label={side === "up" ? "Up now" : "Down now"}
         value={ask ? ask.price.toFixed(3) : "—"}
+      />
+      <PriceChart
+        asset={round.window?.asset ?? "BTC"}
+        entry={
+          round.window?.strike != null
+            ? markets.strikePrice(round.window.strike)
+            : null
+        }
+        className="flex-1"
       />
       <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
         {round.message

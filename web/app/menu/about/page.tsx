@@ -40,6 +40,7 @@ export default function AboutPage() {
       </MenuSection>
 
       <MenuSection title="Links">
+        <MenuRow label="Follow on X" href={LINKS.x} />
         <MenuRow label="Source" href={LINKS.github} />
         <MenuRow label="DreamDEX" href={LINKS.dreamdex} />
         <MenuRow label="Somnia docs" href={LINKS.somnia} />
