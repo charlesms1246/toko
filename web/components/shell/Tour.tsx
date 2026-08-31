@@ -5,7 +5,6 @@
 import Image from "next/image";
 import { useState } from "react";
 import TapTarget from "@/components/ui/TapTarget";
-import { LINKS } from "@/lib/api/fixtures";
 
 interface Stop {
   tag: string;
@@ -51,16 +50,7 @@ export default function Tour({ onDone }: { onDone: () => void }) {
               <p className="text-xs leading-relaxed text-text-2">
                 <strong className="text-text">TOKO has no token.</strong> We have
                 never launched one. Any coin, presale, or airdrop claiming to be
-                TOKO is a scam.{" "}
-                <a
-                  href={LINKS.twitter}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-bold text-text underline"
-                >
-                  @tokoconsole
-                </a>{" "}
-                is our only account.
+                TOKO is a scam.
               </p>
             </div>
             <div className="flex items-center justify-center gap-2 opacity-70">

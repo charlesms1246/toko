@@ -3,7 +3,7 @@
 /**
  * The roll ladder on the console — Press and Breakout.
  *
- * Each rung is a real Minute round staked with the previous rung's payout. Win
+ * Each rung is a real Round staked with the previous rung's payout. Win
  * and the console offers PRESS or FOLD; lose and the ladder ends there.
  *
  * Press lets you pick a side each rung. Breakout locks the side chosen at the
@@ -21,7 +21,7 @@ import {
   ScreenRow,
 } from "@/components/screen/Screen";
 import { useRollLadder } from "@/lib/games/useRollLadder";
-import type { Side } from "@/lib/games/useMinuteRound";
+import type { Side } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
 

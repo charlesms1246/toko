@@ -1,7 +1,11 @@
 "use client";
 
 /**
- * The Minute — one live 1-minute Event Contract window is one round.
+ * The Round — one live Event Contract window is one round.
+ *
+ * It plays whatever the shortest live series is. The venue stopped rolling 1m
+ * windows, and then 5m ones, and a game pinned to a cadence stops finding a
+ * market when that happens.
  *
  * LONG buys Up, SHORT buys Down, and the knob is your **limit price**, shown as
  * the multiple it implies: a binary pays 1 per contract, so a price of 0.33 is
@@ -27,7 +31,7 @@ import {
   ScreenRow,
 } from "@/components/screen/Screen";
 import CoinIcon from "@/components/games/CoinIcon";
-import { useMinuteRound, type Side } from "@/lib/games/useMinuteRound";
+import { useRound, type Side } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import * as markets from "@/lib/dreamdex/markets";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
@@ -42,7 +46,7 @@ const SIZES = [1, 2, 5, 10, 25];
 /** Wide enough to survive the ~3s round trip; see TESTNET_FACTS. */
 const SLIPPAGE = 0.02;
 
-export default function MinuteConsole({
+export default function RoundConsole({
   title,
   ladder,
 }: {
@@ -50,7 +54,7 @@ export default function MinuteConsole({
   ladder: Rung[];
 }) {
   const LADDER = ladder;
-  const round = useMinuteRound();
+  const round = useRound();
   const [rung, setRung] = useState(0);
   const [sizeIdx, setSizeIdx] = useState(0);
   const [side, setSide] = useState<Side>("up");
