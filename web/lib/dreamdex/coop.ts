@@ -378,11 +378,21 @@ export function postableRange(b: book.Book): { min: number; max: number } | null
   const noBid = book.best(b.noBids)?.price;
   const noAsk = book.best(b.noAsks)?.price;
 
-  const floor = Math.max(yesBid ?? 0, noAsk == null ? 0 : 1 - noAsk);
-  const ceil = Math.min(yesAsk ?? 1, noBid == null ? 1 : 1 - noBid);
+  // Both bounds must come from a real level. Defaulting the missing side to 0
+  // or 1 turns an unread book into a full-range "spread", and the knob then
+  // offers a confident 2.00x with no market behind it — which is inventing a
+  // price, not reading one. An empty book means "no answer yet", not "even
+  // money".
+  const floors = [yesBid, noAsk == null ? undefined : 1 - noAsk].filter(
+    (v): v is number => v != null,
+  );
+  const ceils = [yesAsk, noBid == null ? undefined : 1 - noBid].filter(
+    (v): v is number => v != null,
+  );
+  if (!floors.length || !ceils.length) return null;
 
-  const min = floor + TICK;
-  const max = ceil - TICK;
+  const min = Math.max(...floors) + TICK;
+  const max = Math.min(...ceils) - TICK;
   return max < min ? null : { min, max };
 }
 
@@ -630,7 +640,15 @@ const rollLeadFor = (w: markets.Window) =>
 let keepTimer: ReturnType<typeof setInterval> | null = null;
 
 export function keepAlive(opts: {
-  window: markets.Window;
+  /**
+   * Which window the offer is in, by id rather than by object.
+   *
+   * The store rebuilds its `Window` objects on every poll, so a caller passing
+   * the object would restart this watcher every few seconds — and a React
+   * effect keyed on it re-runs on every render, which with the `setKeep` below
+   * is an infinite loop that freezes the tab. An id is stable.
+   */
+  marketId: string;
   side: Side;
   orderId: bigint;
   yesPrice: number;
@@ -647,7 +665,14 @@ export function keepAlive(opts: {
 
   const { side, size, escrowSecs, maxCost, challengeId } = opts;
   const startedAt = Date.now();
-  let window = opts.window;
+  const found = markets
+    .getSnapshot()
+    .windows.find((w) => w.marketId === opts.marketId);
+  if (!found) {
+    setKeep({ status: "idle", message: "Window not found" });
+    return stopKeepAlive;
+  }
+  let window: markets.Window = found;
   let orderId = opts.orderId;
   let yesPrice = opts.yesPrice;
   let reposts = 0;
@@ -784,8 +809,13 @@ export function keepAlive(opts: {
       if (!await move(window, front, secsLeft)) {
         finish("expired", "Could not move the offer — escrow returned");
       }
-    } catch {
-      // A read failed; try again next pass rather than abandon the offer.
+    } catch (err) {
+      // Keep going — a failed read should not abandon a live offer — but say so.
+      // Swallowing this silently hid the roll branch failing every pass, which
+      // looked exactly like the roll never being reached.
+      setKeep({
+        message: `retrying: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}`,
+      });
     } finally {
       busy = false;
     }

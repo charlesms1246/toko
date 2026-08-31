@@ -51,12 +51,28 @@ import { useUser } from "@/lib/api/hooks";
 
 const STEPS = 5;
 const SIZE = 1;
+const FIVE_MINUTES = 300;
+/** Above a 5m window's roll lead, so a fresh offer is never posted into one
+ * that is about to be carried forward anyway. */
+const ROLL_FLOOR_S = 90;
 
 export default function DuelPage() {
   const [escrowIdx, setEscrowIdx] = useState(0);
   const escrow = coop.ESCROW_OPTIONS[escrowIdx];
-  // The window has to outlast the offer, whichever series that turns out to be.
-  const round = useMinuteRound(null, escrow.secs);
+  /**
+   * Play the 5-minute series regardless of how long the offer stands, and let
+   * the offer roll forward into successive windows.
+   *
+   * Picking a window that outlasts the offer was the obvious reading, but it
+   * meant a 30-minute offer landed on a 24h window — settling hours after it was
+   * taken, and priced wherever that window happened to be, which is often nearly
+   * decided (a duel offered at $0.99 to win $1.00 is not a duel). A short window
+   * keeps settlement minutes away and the odds near the middle.
+   *
+   * The floor keeps it out of a window already inside its roll lead, where the
+   * price has stopped meaning anything.
+   */
+  const round = useMinuteRound(FIVE_MINUTES, ROLL_FLOOR_S);
   const toast = useToast();
   const user = useUser();
   const [priceIdx, setPriceIdx] = useState(2);
@@ -139,31 +155,46 @@ export default function DuelPage() {
   // Keep the offer takeable while it stands. This watcher lives outside React so
   // it survives leaving the screen; the order's own on-chain expiry is the
   // backstop if the tab is closed entirely.
+  //
+  // Every dependency here is a primitive on purpose. `round` is a fresh object
+  // each render and `round.window` is rebuilt by the market poller every few
+  // seconds, so depending on either restarts the watcher constantly — and since
+  // starting it publishes to a store this component subscribes to, that is an
+  // infinite render loop, not just churn.
+  const marketId = round.window?.marketId;
+  const restingOrderId = round.restingOrderId;
+  const roundSide = round.side;
+  const resetRound = round.reset;
+
   useEffect(() => {
-    if (
-      !posted ||
-      !round.window ||
-      round.restingOrderId == null ||
-      posted_ == null ||
-      challengeId == null
-    ) {
-      return;
-    }
+    if (!posted || !marketId || restingOrderId == null || posted_ == null) return;
+    if (challengeId == null || budget == null) return;
     return coop.keepAlive({
-      window: round.window,
-      side: round.side ?? side,
-      orderId: round.restingOrderId,
+      marketId,
+      side: roundSide ?? side,
+      orderId: restingOrderId,
       yesPrice: posted_,
       size: SIZE,
       escrowSecs: escrow.secs,
-      maxCost: coop.costOf(round.side ?? side, budget ?? posted_),
+      maxCost: coop.costOf(roundSide ?? side, budget),
       challengeId,
       // A callback from an external system is where a reset belongs.
       onFinish: (status) => {
-        if (status === "expired" || status === "pricedOut") round.reset();
+        if (status === "expired" || status === "pricedOut") resetRound();
       },
     });
-  }, [posted, round, posted_, budget, side, escrow, challengeId]);
+  }, [
+    posted,
+    marketId,
+    restingOrderId,
+    roundSide,
+    resetRound,
+    posted_,
+    budget,
+    side,
+    escrow,
+    challengeId,
+  ]);
 
   const share = async () => {
     if (!challenge) return;
@@ -377,7 +408,7 @@ export default function DuelPage() {
         label="Offer stands"
         value={
           round.window
-            ? `${escrow.label} · settles in ${Math.round(round.secsLeft / 60)}m`
+            ? `${escrow.label} · settles in ${Math.max(1, Math.round(round.secsLeft / 60))}m`
             : escrow.label
         }
       />
@@ -392,11 +423,13 @@ export default function DuelPage() {
           : finished
             ? keep.message
             : !round.window
-              ? `finding a window that outlasts ${escrow.label}`
+              ? "finding a fresh window"
               : round.balance === 0n
                 ? "fund your wallet"
                 : price == null
-                  ? "spread too tight to post inside"
+                  ? round.book.yesBids.length || round.book.yesAsks.length
+                    ? "spread too tight to post inside"
+                    : "waiting for the book"
                   : "first in line · listed for anyone"}
       </div>
     </ScreenRoot>
