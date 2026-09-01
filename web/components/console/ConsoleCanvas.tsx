@@ -1445,9 +1445,10 @@ export default function ConsoleCanvas({
             dragging.kind === "knob"
               ? (Math.PI * 2) / KNOB.snapInterval
               : (Math.PI * 2) / 12;
-          // The drum follows the thumb: down-drag rolls it one way whatever the
-          // value does.
-          const spin = -steps * turn;
+          // The drum rolls with the thumb. `steps` is the *value* delta and
+          // already carries the "up means more" inversion, so the visible spin
+          // takes the same sign as the pointer's travel instead.
+          const spin = steps * turn;
           if (dragging.kind === "knob") {
             knobTarget.value += spin;
             handlers.current.onKnobStep?.(steps);
