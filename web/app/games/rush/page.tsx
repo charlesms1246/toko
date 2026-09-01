@@ -42,6 +42,7 @@ const SLIPPAGE = 0.02;
 
 export default function RushPage() {
   const round = useRound();
+  const spot = useSpot(round.window?.asset ?? "BTC");
   const settled = ["won", "lost", "void"].includes(round.status);
   const live = round.status === "open";
 

@@ -13,18 +13,27 @@
 
 import { useState } from "react";
 import { useProgramConsole } from "@/lib/console/controls";
-import {
-  BigNumber,
-  ScreenBar,
-  ScreenHeader,
-  ScreenRoot,
-  ScreenRow,
-} from "@/components/screen/Screen";
 import { useRollLadder } from "@/lib/games/useRollLadder";
 import type { Side } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
 import PriceChart from "@/components/screen/PriceChart";
+import {
+  CentreRule,
+  CentreStat,
+  Footer,
+  Fx,
+  GhostCount,
+  Header,
+  Shell,
+  Splash,
+  Stage,
+  StageCentre,
+  Tile,
+  TileRow,
+} from "@/components/screen/GameScreen";
+import { useSpot } from "@/lib/api/hooks";
+import { formatPrice } from "@/lib/api/math";
 import * as markets from "@/lib/dreamdex/markets";
 
 export default function LadderConsole({
@@ -35,6 +44,7 @@ export default function LadderConsole({
   lockSide: boolean;
 }) {
   const ladder = useRollLadder(lockSide);
+  const spot = useSpot(ladder.round.window?.asset ?? "BTC");
   const { round } = ladder;
   const [side, setSide] = useState<Side>("up");
 
@@ -77,21 +87,53 @@ export default function LadderConsole({
     lightShow: round.status === "settling" || ladder.canPress,
   });
 
+  const chart = (
+    <>
+      <PriceChart
+        bare
+        asset={round.window?.asset ?? "BTC"}
+        entry={
+          round.window?.strike != null
+            ? markets.strikePrice(round.window.strike)
+            : null
+        }
+      />
+      <Fx />
+    </>
+  );
+
+  const header = (
+    <Header
+      eyebrow={`${title} · rung ${ladder.height + 1}`}
+      value={spot > 0 ? `$${formatPrice(spot)}` : "—"}
+      rightLabel={round.window ? "Ends in" : "In the ladder"}
+      rightValue={
+        round.window
+          ? `${round.secsLeft.toFixed(0)}s`
+          : `$${ladder.atRisk.toFixed(2)}`
+      }
+      badge={ladder.height > 0 ? `Rung ${ladder.height}` : undefined}
+    />
+  );
+
   // ── Won a rung: press on, or fold ────────────────────────────────────────
   if (ladder.canPress) {
     return (
-      <ScreenRoot className="items-center justify-center gap-1">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-up">
-          Rung {ladder.height} cleared
-        </div>
-        <BigNumber value={`$${ladder.nextStake.toFixed(2)}`} tone="up" />
-        <div className="text-[11px] font-semibold text-text-2">
-          riding on the next window
-        </div>
-        <div className="mt-1 text-[10px] font-semibold uppercase tracking-widest text-text-3">
-          press to roll · fold to keep it
-        </div>
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <Stage>
+          {chart}
+          <Splash won value={`$${ladder.nextStake.toFixed(2)}`} />
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-up">
+            Rung {ladder.height} cleared
+          </div>
+          <div className="tnum mt-0.5 text-[15px] font-extrabold text-text">
+            press to roll · fold to keep it
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
@@ -99,102 +141,110 @@ export default function LadderConsole({
   if (ladder.finished) {
     const lost = round.status === "lost" || round.status === "void";
     return (
-      <ScreenRoot className="items-center justify-center gap-1">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          {lost ? `Broke on rung ${ladder.height + 1}` : "Folded"}
-        </div>
-        <BigNumber
-          value={lost ? `−$${ladder.atRisk.toFixed(2)}` : `$${ladder.nextStake.toFixed(2)}`}
-          tone={lost ? "down" : "up"}
-        />
-        <div className="text-[11px] font-semibold text-text-2">
-          {ladder.height} rung{ladder.height === 1 ? "" : "s"} cleared
-        </div>
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <Stage>
+          {chart}
+          <Splash
+            won={!lost}
+            value={
+              lost
+                ? `−$${ladder.atRisk.toFixed(2)}`
+                : `$${ladder.nextStake.toFixed(2)}`
+            }
+          />
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            {lost ? `Broke on rung ${ladder.height + 1}` : "Folded"}
+          </div>
+          <div className="tnum mt-0.5 text-[15px] font-extrabold text-text">
+            {ladder.height} rung{ladder.height === 1 ? "" : "s"} cleared
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   if (round.status === "settling") {
     return (
-      <ScreenRoot className="items-center justify-center gap-2">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          Rung {ladder.height + 1} closing
-        </div>
-        <BigNumber value="…" tone="brand" />
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <Stage>
+          {chart}
+          <GhostCount>0</GhostCount>
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            Rung {ladder.height + 1} closing
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   // ── A rung is riding ─────────────────────────────────────────────────────
   if (live && round.window) {
     return (
-      <ScreenRoot className="gap-1.5">
-        <ScreenHeader
-          left={`Rung ${ladder.height + 1} · ${round.side === "up" ? "UP" : "DOWN"}`}
-          right={`${round.secsLeft.toFixed(0)}s`}
-        />
-        <BigNumber
-          value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
-          tone="brand"
-        />
-        <ScreenRow
-          label="Staked"
-          value={
-            round.entryCost != null
-              ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
-              : "—"
-          }
-        />
-        <ScreenRow label="In the ladder" value={`$${ladder.atRisk.toFixed(2)}`} />
-        <ScreenBar
-          progress={
-            round.window.intervalSec
-              ? 1 - round.secsLeft / round.window.intervalSec
-              : 0
-          }
-        />
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <TileRow cols={3}>
+          <Tile
+            label="Staked"
+            value={
+              round.entryCost != null
+                ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
+                : "—"
+            }
+          />
+          <Tile label="At risk" value={`$${ladder.atRisk.toFixed(2)}`} />
+          <Tile
+            label="Pays"
+            value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
+            tone="brand"
+          />
+        </TileRow>
+        <Stage>
+          {chart}
+          <GhostCount>{round.secsLeft.toFixed(0)}</GhostCount>
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            {round.side === "up" ? "Long" : "Short"} · rung riding
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   // ── Idle ─────────────────────────────────────────────────────────────────
   return (
-    <ScreenRoot className="gap-2">
-      <ScreenHeader
-        left={title}
-        right={round.window ? `${round.secsLeft.toFixed(0)}s` : "—"}
-      />
-      <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-        {side === "up" ? "Up pays" : "Down pays"}
-      </div>
-      <BigNumber
-        value={ask ? `${book.multipleAt(ask.price).toFixed(2)}x` : "—"}
-        tone={side === "up" ? "up" : "down"}
-      />
-      <ScreenRow
-        label="First rung"
-        value={ask ? `$${ask.price.toFixed(2)}` : "—"}
-      />
-      <PriceChart
-        asset={round.window?.asset ?? "BTC"}
-        entry={
-          round.window?.strike != null
-            ? markets.strikePrice(round.window.strike)
-            : null
-        }
-        className="flex-1"
-      />
-      <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
-        {round.message
-          ? round.message
-          : !round.window
-            ? "finding a window"
-            : round.balance === 0n
-              ? "fund your wallet"
-              : lockSide
-                ? "pick a side — every rung rides it"
-                : "clear a rung, then press or fold"}
-      </div>
-    </ScreenRoot>
+    <Shell>
+      {header}
+      <Stage>
+        {chart}
+        <StageCentre>
+          <CentreStat
+            label={side === "up" ? "Up pays" : "Down pays"}
+            value={ask ? `${book.multipleAt(ask.price).toFixed(2)}x` : "—"}
+            tone={side === "up" ? "up" : "down"}
+          />
+          <CentreRule />
+          <CentreStat
+            label="First rung"
+            value={ask ? `$${ask.price.toFixed(2)}` : "—"}
+          />
+        </StageCentre>
+      </Stage>
+      <Footer>
+        <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+          {round.message
+            ? round.message
+            : !round.window
+              ? "finding a window"
+              : `${side === "up" ? "long" : "short"} · press start`}
+        </div>
+      </Footer>
+    </Shell>
   );
 }

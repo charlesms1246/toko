@@ -36,13 +36,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useProgramConsole } from "@/lib/console/controls";
-import {
-  BigNumber,
-  ScreenBar,
-  ScreenHeader,
-  ScreenRoot,
-  ScreenRow,
-} from "@/components/screen/Screen";
 import { useRound, useNow, type Side } from "@/lib/games/useRound";
 import * as coop from "@/lib/dreamdex/coop";
 import * as book from "@/lib/dreamdex/book";
@@ -51,6 +44,24 @@ import * as demo from "@/lib/demo";
 import { useToast } from "@/components/ui/Toast";
 import { useUser } from "@/lib/api/hooks";
 import PriceChart from "@/components/screen/PriceChart";
+import {
+  CentreRule,
+  CentreStat,
+  Footer,
+  Fx,
+  GhostCount,
+  Header,
+  Notice,
+  Shell,
+  Splash,
+  Stage,
+  StageCentre,
+  StageReadout,
+  Tile,
+  TileRow,
+} from "@/components/screen/GameScreen";
+import { useSpot } from "@/lib/api/hooks";
+import { formatPrice } from "@/lib/api/math";
 import * as markets from "@/lib/dreamdex/markets";
 
 const STEPS = 5;
@@ -84,6 +95,7 @@ export default function DuelPage() {
    * price has stopped meaning anything.
    */
   const round = useRound(null, ROLL_FLOOR_S);
+  const spot = useSpot(round.window?.asset ?? "BTC");
   const toast = useToast();
   const user = useUser();
   const [priceIdx, setPriceIdx] = useState(2);
@@ -289,18 +301,43 @@ export default function DuelPage() {
   // cannot be demoed — it says so rather than pretending.
   if (demoing) {
     return (
-      <ScreenRoot className="items-center justify-center gap-1.5">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          Needs a wallet
-        </div>
-        <BigNumber value="DUEL" tone="brand" />
-        <p className="px-3 text-center text-[10px] leading-snug text-text-3">
-          A duel is your real order crossing somebody else&apos;s. A pretend one
-          has nothing to cross with. Set up a wallet and it takes seconds.
-        </p>
-      </ScreenRoot>
+      <Shell>
+        <Notice
+          title="Duel needs a wallet"
+          body="A duel is your real order crossing somebody else's. A pretend one has nothing to cross with, and no order for anyone to find."
+          hint="Setting one up takes seconds"
+        />
+      </Shell>
     );
   }
+
+  const chart = (
+    <>
+      <PriceChart
+        bare
+        asset={round.window?.asset ?? "BTC"}
+        entry={
+          round.window?.strike != null
+            ? markets.strikePrice(round.window.strike)
+            : null
+        }
+      />
+      <Fx />
+    </>
+  );
+
+  const header = (
+    <Header
+      eyebrow={`Duel · ${round.window?.asset ?? "—"}`}
+      value={spot > 0 ? `$${formatPrice(spot)}` : "—"}
+      rightLabel={round.window ? "Ends in" : "Balance"}
+      rightValue={
+        round.window
+          ? `${round.secsLeft.toFixed(0)}s`
+          : `$${wallet.formatCollateral(round.balance)}`
+      }
+    />
+  );
 
   if (settled) {
     const won = round.status === "won";
@@ -309,175 +346,180 @@ export default function DuelPage() {
         ? Number(round.payout - round.entryCost) / 1e6
         : null;
     return (
-      <ScreenRoot className="items-center justify-center gap-1">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          {round.status === "void" ? "Voided" : won ? "You won it" : "They won it"}
-        </div>
-        <BigNumber
-          value={net == null ? "—" : `${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(2)}`}
-          tone={won ? "up" : "down"}
-        />
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <Stage>
+          {chart}
+          <Splash
+            won={won}
+            value={
+              net == null
+                ? "—"
+                : `${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(2)}`
+            }
+          />
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            {round.status === "void"
+              ? "Voided"
+              : won
+                ? "You won it"
+                : "They won it"}
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   if (round.status === "settling") {
     return (
-      <ScreenRoot className="items-center justify-center gap-2">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          Window closed
-        </div>
-        <BigNumber value="…" tone="brand" />
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <Stage>
+          {chart}
+          <GhostCount>0</GhostCount>
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            Window closed
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   // ── Somebody took it — the duel is on ────────────────────────────────────
   if (live && round.window) {
     return (
-      <ScreenRoot className="gap-1.5">
-        <ScreenHeader
-          left={`${round.window.asset} ${round.side === "up" ? "UP" : "DOWN"}`}
-          right={`${round.secsLeft.toFixed(0)}s`}
-        />
-        <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-up">
-          {round.filledOnArrival ? "Filled on arrival" : "Challenge taken"}
-        </div>
-        <BigNumber value={`$${(Number(round.held) / 1e6).toFixed(2)}`} tone="up" />
-        <ScreenRow
-          label="Paid"
-          value={
-            round.entryCost != null
-              ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
-              : "—"
-          }
-        />
-        <ScreenBar
-          progress={
-            round.window.intervalSec
-              ? 1 - round.secsLeft / round.window.intervalSec
-              : 0
-          }
-        />
-        {round.filledOnArrival && (
-          <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
-            the book moved · you took the market, not a challenger
+      <Shell>
+        {header}
+        <TileRow cols={2}>
+          <Tile
+            label="Paid"
+            value={
+              round.entryCost != null
+                ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
+                : "—"
+            }
+          />
+          <Tile
+            label="Pays"
+            value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
+            tone="up"
+          />
+        </TileRow>
+        <Stage>
+          {chart}
+          <GhostCount>{round.secsLeft.toFixed(0)}</GhostCount>
+          <StageReadout
+            label={round.filledOnArrival ? "Filled on arrival" : "Challenge taken"}
+          >
+            <span className="tnum text-[30px] font-extrabold leading-none text-up">
+              {round.side === "up" ? "UP" : "DOWN"}
+            </span>
+          </StageReadout>
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            {round.filledOnArrival
+              ? "the book moved · you took the market, not a challenger"
+              : "the duel is on · riding to the buzzer"}
           </div>
-        )}
-      </ScreenRoot>
+        </Footer>
+      </Shell>
     );
   }
 
   // ── Posted, waiting for someone to take the other side ───────────────────
   if (posted && round.window) {
     return (
-      <ScreenRoot className="gap-1.5">
-        <ScreenHeader
-          left={`${round.window.asset} ${round.side === "up" ? "UP" : "DOWN"}`}
-          right={`${round.secsLeft.toFixed(0)}s`}
-        />
-        <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          Challenge is live
-        </div>
-        <BigNumber value="SHARE IT" tone="brand" />
-        <ScreenRow
-          label="You paid"
-          value={postedCost == null ? "—" : `$${postedCost.toFixed(2)}`}
-        />
-        <ScreenRow
-          label="They pay"
-          value={postedCost == null ? "—" : `$${(1 - postedCost).toFixed(2)}`}
-        />
-        <ScreenRow
-          label="Chase up to"
-          value={
-            budget == null
+      <Shell>
+        {header}
+        <TileRow cols={3}>
+          <Tile
+            label="You paid"
+            value={postedCost == null ? "—" : `$${postedCost.toFixed(2)}`}
+          />
+          <Tile
+            label="They pay"
+            value={postedCost == null ? "—" : `$${(1 - postedCost).toFixed(2)}`}
+          />
+          <Tile
+            label="Expires"
+            value={
+              postedAt == null
+                ? escrow.label
+                : `${Math.max(0, Math.ceil((postedAt + escrow.secs * 1000 - now) / 1000))}s`
+            }
+          />
+        </TileRow>
+        <Stage>
+          {chart}
+          <GhostCount>{round.secsLeft.toFixed(0)}</GhostCount>
+          <StageReadout label="Challenge is live">
+            <span className="tnum text-[30px] font-extrabold leading-none text-brand-500">
+              SHARE IT
+            </span>
+          </StageReadout>
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            {keep.reposts > 0
+              ? `moved to the front ${keep.reposts}x · anyone can take it`
+              : "on the public board · anyone can take it"}
+          </div>
+          <div className="tnum mt-0.5 text-[15px] font-extrabold text-text">
+            {budget == null
               ? "—"
-              : `$${coop.costOf(round.side ?? side, budget).toFixed(2)}`
-          }
-        />
-        <ScreenRow
-          label="Offer expires in"
-          value={
-            postedAt == null
-              ? escrow.label
-              : `${Math.max(0, Math.ceil((postedAt + escrow.secs * 1000 - now) / 1000))}s`
-          }
-        />
-        <ScreenBar
-          progress={
-            postedAt == null ? 0 : Math.min(1, (now - postedAt) / (escrow.secs * 1000))
-          }
-        />
-        <PriceChart
-          asset={round.window?.asset ?? "BTC"}
-          entry={
-            round.window?.strike != null
-              ? markets.strikePrice(round.window.strike)
-              : null
-          }
-          className="flex-1"
-        />
-        <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
-          {keep.reposts > 0
-            ? `moved to the front ${keep.reposts}x · anyone can take it`
-            : "on the public board · anyone can take it"}
-        </div>
-      </ScreenRoot>
+              : `$${coop.costOf(round.side ?? side, budget).toFixed(2)}`}
+            <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-text-3">
+              chase budget
+            </span>
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   const ask = book.best(side === "up" ? round.book.yesAsks : round.book.noAsks);
 
   return (
-    <ScreenRoot className="gap-2">
-      <ScreenHeader
-        left="Duel"
-        right={round.window ? `${round.secsLeft.toFixed(0)}s` : "—"}
-      />
-      <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-        Your side pays
-      </div>
-      <BigNumber
-        value={myCost == null ? "—" : `${(1 / myCost).toFixed(2)}x`}
-        tone="brand"
-      />
+    <Shell>
+      {header}
+      <TileRow cols={3}>
+        <Tile
+          label="You pay"
+          value={myCost == null ? "—" : `$${myCost.toFixed(2)}`}
+        />
+        <Tile
+          label="They pay"
+          value={theirCost == null ? "—" : `$${theirCost.toFixed(2)}`}
+        />
+        <Tile label="Stands" value={escrow.label} />
+      </TileRow>
+      <Stage>
+        {chart}
+        <StageCentre>
+          <CentreStat
+            label="Your side pays"
+            value={myCost == null ? "—" : `${(1 / myCost).toFixed(2)}x`}
+          />
+          <CentreRule />
+          <CentreStat
+            label={side === "up" ? "Market up" : "Market down"}
+            value={ask ? ask.price.toFixed(3) : "—"}
+            tone={side === "up" ? "up" : "down"}
+          />
+        </StageCentre>
+      </Stage>
+      <Footer>
+        <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+          {round.message
+            ? round.message
+            : finished
+              ? keep.message
 
-      <ScreenRow
-        label="You pay"
-        value={myCost == null ? "—" : `$${myCost.toFixed(2)}`}
-      />
-      <ScreenRow
-        label="They pay"
-        value={theirCost == null ? "—" : `$${theirCost.toFixed(2)}`}
-      />
-      <ScreenRow
-        label="Offer stands"
-        value={
-          round.window
-            ? `${escrow.label} · settles in ${Math.max(1, Math.round(round.secsLeft / 60))}m`
-            : escrow.label
-        }
-      />
-      <ScreenRow
-        label={side === "up" ? "Market up" : "Market down"}
-        value={ask ? ask.price.toFixed(3) : "—"}
-      />
-
-      <PriceChart
-        asset={round.window?.asset ?? "BTC"}
-        entry={
-          round.window?.strike != null
-            ? markets.strikePrice(round.window.strike)
-            : null
-        }
-        className="flex-1"
-      />
-      <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
-        {round.message
-          ? round.message
-          : finished
-            ? keep.message
             : !round.window
               ? "finding a fresh window"
               : round.balance === 0n
@@ -488,6 +530,7 @@ export default function DuelPage() {
                     : "waiting for the book"
                   : "first in line · listed for anyone"}
       </div>
-    </ScreenRoot>
+    </Footer>
+    </Shell>
   );
 }

@@ -22,17 +22,27 @@
 
 import { useState } from "react";
 import { useProgramConsole } from "@/lib/console/controls";
-import {
-  BigNumber,
-  ScreenBar,
-  ScreenHeader,
-  ScreenRoot,
-  ScreenRow,
-} from "@/components/screen/Screen";
 import { useRound, type Side } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
 import PriceChart from "@/components/screen/PriceChart";
+import {
+  CentreRule,
+  CentreStat,
+  Footer,
+  Fx,
+  GhostCount,
+  Header,
+  Shell,
+  Splash,
+  Stage,
+  StageCentre,
+  StageReadout,
+  Tile,
+  TileRow,
+} from "@/components/screen/GameScreen";
+import { useSpot } from "@/lib/api/hooks";
+import { formatPrice } from "@/lib/api/math";
 import * as markets from "@/lib/dreamdex/markets";
 
 /** Called prices. Lower is further from the market and pays more. */
@@ -48,6 +58,7 @@ const PIN_RUNWAY_S = 120;
 
 export default function PinPage() {
   const round = useRound(null, PIN_RUNWAY_S);
+  const spot = useSpot(round.window?.asset ?? "BTC");
   const [callIdx, setCallIdx] = useState(1);
   const [side, setSide] = useState<Side>("up");
 
@@ -108,6 +119,34 @@ export default function PinPage() {
     lightShow: round.status === "settling" || settled,
   });
 
+  const chart = (
+    <>
+      <PriceChart
+        bare
+        asset={round.window?.asset ?? "BTC"}
+        entry={
+          round.window?.strike != null
+            ? markets.strikePrice(round.window.strike)
+            : null
+        }
+      />
+      <Fx />
+    </>
+  );
+
+  const header = (
+    <Header
+      eyebrow={`Pin · ${round.window?.asset ?? "—"}`}
+      value={spot > 0 ? `$${formatPrice(spot)}` : "—"}
+      rightLabel={round.window ? "Ends in" : "Balance"}
+      rightValue={
+        round.window
+          ? `${round.secsLeft.toFixed(0)}s`
+          : `$${formatCollateral(round.balance)}`
+      }
+    />
+  );
+
   if (settled) {
     const won = round.status === "won";
     const net =
@@ -115,152 +154,147 @@ export default function PinPage() {
         ? Number(round.payout - round.entryCost) / 1e6
         : null;
     return (
-      <ScreenRoot className="items-center justify-center gap-1">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          {round.status === "void" ? "Voided" : won ? "Pinned it" : "Missed"}
-        </div>
-        <BigNumber
-          value={net == null ? "—" : `${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(2)}`}
-          tone={won ? "up" : "down"}
-        />
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <Stage>
+          {chart}
+          <Splash
+            won={won}
+            value={
+              net == null
+                ? "—"
+                : `${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(2)}`
+            }
+          />
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            {round.status === "void" ? "Voided" : won ? "Pinned it" : "Missed"}
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   if (round.status === "settling") {
     return (
-      <ScreenRoot className="items-center justify-center gap-2">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          Window closed
-        </div>
-        <BigNumber value="…" tone="brand" />
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <Stage>
+          {chart}
+          <GhostCount>0</GhostCount>
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            Window closed
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   // ── The bid is on the book, waiting ──────────────────────────────────────
   if (resting && round.window) {
     return (
-      <ScreenRoot className="gap-1.5">
-        <ScreenHeader
-          left={`${round.window.asset} ${side === "up" ? "UP" : "DOWN"}`}
-          right={`${round.secsLeft.toFixed(0)}s`}
-        />
-        <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          Resting at
-        </div>
-        <BigNumber value={call.toFixed(2)} tone="brand" />
-        <ScreenRow
-          label="Market"
-          value={ask ? ask.price.toFixed(3) : "—"}
-        />
-        <ScreenRow
-          label="Needs to fall"
-          value={distance != null && distance > 0 ? distance.toFixed(3) : "—"}
-        />
-        <ScreenBar
-          progress={
-            round.window.intervalSec
-              ? 1 - round.secsLeft / round.window.intervalSec
-              : 0
-          }
-        />
-        <PriceChart
-          asset={round.window?.asset ?? "BTC"}
-          entry={
-            round.window?.strike != null
-              ? markets.strikePrice(round.window.strike)
-              : null
-          }
-          className="flex-1"
-        />
-        <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
-          on the book · fills if the market comes
-        </div>
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <TileRow cols={3}>
+          <Tile label="Resting at" value={call.toFixed(2)} tone="brand" />
+          <Tile label="Market" value={ask ? ask.price.toFixed(3) : "—"} />
+          <Tile
+            label="Must fall"
+            value={distance != null && distance > 0 ? distance.toFixed(3) : "—"}
+          />
+        </TileRow>
+        <Stage>
+          {chart}
+          <GhostCount>{round.secsLeft.toFixed(0)}</GhostCount>
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            On the book · fills if the market comes
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   // ── Filled — the call was hit ────────────────────────────────────────────
   if (live && round.window) {
     return (
-      <ScreenRoot className="gap-1.5">
-        <ScreenHeader
-          left={`${round.window.asset} ${round.side === "up" ? "UP" : "DOWN"}`}
-          right={`${round.secsLeft.toFixed(0)}s`}
-        />
-        <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-up">
-          Call hit
-        </div>
-        <BigNumber
-          value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
-          tone="up"
-        />
-        <ScreenRow
-          label="Paid"
-          value={
-            round.entryCost != null
-              ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
-              : "—"
-          }
-        />
-        <ScreenBar
-          progress={
-            round.window.intervalSec
-              ? 1 - round.secsLeft / round.window.intervalSec
-              : 0
-          }
-        />
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <TileRow cols={2}>
+          <Tile
+            label="Paid"
+            value={
+              round.entryCost != null
+                ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
+                : "—"
+            }
+          />
+          <Tile
+            label="Pays"
+            value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
+            tone="up"
+          />
+        </TileRow>
+        <Stage>
+          {chart}
+          <GhostCount>{round.secsLeft.toFixed(0)}</GhostCount>
+          <StageReadout label="Call hit">
+            <span className="tnum text-[30px] font-extrabold leading-none text-up">
+              {call.toFixed(2)}
+            </span>
+          </StageReadout>
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            Filled at your price · riding to the buzzer
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   return (
-    <ScreenRoot className="gap-2">
-      <ScreenHeader
-        left="Pin"
-        right={round.window ? `${round.secsLeft.toFixed(0)}s` : "—"}
-      />
-      <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-        Your call pays
-      </div>
-      <BigNumber value={`${(1 / call).toFixed(1)}x`} tone="brand" />
-
-      <div className="flex items-center justify-center gap-1.5">
-        {CALLS.map((c, i) => (
-          <span
-            key={c}
-            className={`rounded-md px-2 py-1 text-[11px] font-black tabular-nums ${
-              i === callIdx ? "bg-brand-500 text-black" : "text-text-3"
-            }`}
-          >
-            {c.toFixed(2)}
-          </span>
-        ))}
-      </div>
-
-      <ScreenRow
-        label={side === "up" ? "Up now" : "Down now"}
-        value={ask ? ask.price.toFixed(3) : "—"}
-      />
-      <PriceChart
-        asset={round.window?.asset ?? "BTC"}
-        entry={
-          round.window?.strike != null
-            ? markets.strikePrice(round.window.strike)
-            : null
-        }
-        className="flex-1"
-      />
-      <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
-        {round.message
-          ? round.message
-          : !round.window
-            ? "finding a window"
-            : round.balance === 0n
-              ? "fund your wallet"
-              : "name a price · the market must come to you"}
-      </div>
-    </ScreenRoot>
+    <Shell>
+      {header}
+      <Stage>
+        {chart}
+        <StageCentre>
+          <CentreStat label="Your call pays" value={`${(1 / call).toFixed(1)}x`} />
+          <CentreRule />
+          <CentreStat
+            label={side === "up" ? "Up now" : "Down now"}
+            value={ask ? ask.price.toFixed(3) : "—"}
+            tone={side === "up" ? "up" : "down"}
+          />
+        </StageCentre>
+      </Stage>
+      <Footer>
+        <div className="flex items-center gap-1">
+          {CALLS.map((c, i) => (
+            <span
+              key={c}
+              className={`tnum flex-1 border px-1 py-0.5 text-center text-[11px] font-extrabold ${
+                i === callIdx
+                  ? "border-brand-500 bg-brand-500 text-black"
+                  : "border-white/10 text-text-3"
+              }`}
+            >
+              {c.toFixed(2)}
+            </span>
+          ))}
+        </div>
+        <div className="mt-2 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+          {round.message
+            ? round.message
+            : !round.window
+              ? "finding a window"
+              : `${side === "up" ? "long" : "short"} · press pin it`}
+        </div>
+      </Footer>
+    </Shell>
   );
 }

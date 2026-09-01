@@ -15,17 +15,26 @@
  */
 
 import { useProgramConsole } from "@/lib/console/controls";
-import {
-  BigNumber,
-  ScreenBar,
-  ScreenHeader,
-  ScreenRoot,
-  ScreenRow,
-} from "@/components/screen/Screen";
 import { useRound, ENTRY_CUTOFF_SECONDS } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
 import PriceChart from "@/components/screen/PriceChart";
+import {
+  CentreRule,
+  CentreStat,
+  Footer,
+  Fx,
+  GhostCount,
+  Header,
+  Shell,
+  Splash,
+  Stage,
+  StageCentre,
+  Tile,
+  TileRow,
+} from "@/components/screen/GameScreen";
+import { useSpot } from "@/lib/api/hooks";
+import { formatPrice } from "@/lib/api/math";
 import * as markets from "@/lib/dreamdex/markets";
 
 const SIZE = 1;
@@ -33,6 +42,7 @@ const SLIPPAGE = 0.02;
 
 export default function SnipePage() {
   const round = useRound();
+  const spot = useSpot(round.window?.asset ?? "BTC");
   const settled = ["won", "lost", "void"].includes(round.status);
   const live = round.status === "open";
 
@@ -82,6 +92,34 @@ export default function SnipePage() {
     lightShow: round.status === "settling" || settled,
   });
 
+  const chart = (
+    <>
+      <PriceChart
+        bare
+        asset={round.window?.asset ?? "BTC"}
+        entry={
+          round.window?.strike != null
+            ? markets.strikePrice(round.window.strike)
+            : null
+        }
+      />
+      <Fx />
+    </>
+  );
+
+  const header = (
+    <Header
+      eyebrow={`Snipe · ${round.window?.asset ?? "—"}`}
+      value={spot > 0 ? `$${formatPrice(spot)}` : "—"}
+      rightLabel={round.window ? "Ends in" : "Balance"}
+      rightValue={
+        round.window
+          ? `${round.secsLeft.toFixed(0)}s`
+          : `$${formatCollateral(round.balance)}`
+      }
+    />
+  );
+
   if (settled) {
     const won = round.status === "won";
     const net =
@@ -89,118 +127,122 @@ export default function SnipePage() {
         ? Number(round.payout - round.entryCost) / 1e6
         : null;
     return (
-      <ScreenRoot className="items-center justify-center gap-1">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          {round.status === "void"
-            ? "Voided"
-            : round.cashedOut
-              ? "Cashed out"
-              : won
-                ? "Sniped"
-                : "Missed"}
-        </div>
-        <BigNumber
-          value={net == null ? "—" : `${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(2)}`}
-          tone={won ? "up" : "down"}
-        />
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <Stage>
+          {chart}
+          <Splash
+            won={won}
+            value={
+              net == null
+                ? "—"
+                : `${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(2)}`
+            }
+          />
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            {round.status === "void"
+              ? "Voided"
+              : round.cashedOut
+                ? "Cashed out"
+                : won
+                  ? "Sniped"
+                  : "Missed"}
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   if (round.status === "settling") {
     return (
-      <ScreenRoot className="items-center justify-center gap-2">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          Window closed
-        </div>
-        <BigNumber value="…" tone="brand" />
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <Stage>
+          {chart}
+          <GhostCount>0</GhostCount>
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            Window closed
+          </div>
+          <div className="tnum mt-0.5 text-[15px] font-extrabold text-brand-500">
+            waiting on the oracle
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   if (live && round.window) {
     return (
-      <ScreenRoot className="gap-1.5">
-        <ScreenHeader
-          left={`${round.window.asset} ${round.side === "up" ? "UP" : "DOWN"}`}
-          right={`${round.secsLeft.toFixed(0)}s`}
-        />
-        <BigNumber
-          value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
-          tone="brand"
-        />
-        <ScreenRow
-          label="Paid"
-          value={
-            round.entryCost != null
-              ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
-              : "—"
-          }
-        />
-        <ScreenBar
-          progress={
-            round.window.intervalSec
-              ? 1 - round.secsLeft / round.window.intervalSec
-              : 0
-          }
-        />
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <TileRow cols={2}>
+          <Tile
+            label="Paid"
+            value={
+              round.entryCost != null
+                ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
+                : "—"
+            }
+          />
+          <Tile
+            label="Pays"
+            value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
+            tone="brand"
+          />
+        </TileRow>
+        <Stage>
+          {chart}
+          <GhostCount>{round.secsLeft.toFixed(0)}</GhostCount>
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            Taken · riding to the buzzer
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   return (
-    <ScreenRoot className="gap-2">
-      <ScreenHeader
-        left="Snipe"
-        right={round.window ? `${round.secsLeft.toFixed(0)}s` : "—"}
-      />
-
-      <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-        {wall ? `${wall.side === "up" ? "Up" : "Down"} pays` : "waiting for a quote"}
-      </div>
-      <BigNumber
-        value={multiple ? `${multiple.toFixed(2)}x` : "—"}
-        tone={closing ? "down" : "brand"}
-      />
-
-      {/* The wall: how much of the window is left before the quotes vanish. */}
-      <ScreenBar
-        progress={
-          round.window && round.window.intervalSec
-            ? 1 - round.secsLeft / round.window.intervalSec
-            : 0
-        }
-      />
-
-      <ScreenRow
-        label="Costs"
-        value={wall ? `$${(wall.ask.price * SIZE).toFixed(2)}` : "—"}
-      />
-
-      <PriceChart
-        asset={round.window?.asset ?? "BTC"}
-        entry={
-          round.window?.strike != null
-            ? markets.strikePrice(round.window.strike)
-            : null
-        }
-        className="flex-1"
-      />
-      <div
-        className={`text-center text-[10px] font-semibold uppercase tracking-widest ${
-          closing ? "text-down" : "text-text-3"
-        }`}
-      >
-        {round.message
-          ? round.message
-          : !round.window
-            ? "finding a window"
-            : round.balance === 0n
-              ? "fund your wallet"
-              : closing
-                ? "too late — quotes pulled"
-                : "wait for the payout · press take"}
-      </div>
-    </ScreenRoot>
+    <Shell>
+      {header}
+      <Stage>
+        {chart}
+        <StageCentre>
+          <CentreStat
+            label={wall ? `${wall.side === "up" ? "Up" : "Down"} pays` : "No quote"}
+            value={multiple ? `${multiple.toFixed(2)}x` : "—"}
+            tone={closing ? "down" : "brand"}
+          />
+          <CentreRule />
+          <CentreStat
+            label="Costs"
+            value={wall ? `$${(wall.ask.price * SIZE).toFixed(2)}` : "—"}
+            tone="up"
+          />
+        </StageCentre>
+      </Stage>
+      <Footer>
+        <div
+          className={`font-mono text-[10px] font-bold uppercase tracking-[0.16em] ${
+            closing ? "text-down" : "text-text-3"
+          }`}
+        >
+          {round.message
+            ? round.message
+            : !round.window
+              ? "finding a window"
+              : round.balance === 0n
+                ? "fund your wallet"
+                : closing
+                  ? "too late — quotes pulled"
+                  : "wait for the payout · press take"}
+        </div>
+      </Footer>
+    </Shell>
   );
 }
