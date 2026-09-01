@@ -1431,21 +1431,28 @@ export default function ConsoleCanvas({
         // the pointer has carried it from the grab point, so overshooting and
         // coming back returns you to where you started. Accumulating notches
         // per move event drifts, and never comes home.
-        const wanted = Math.trunc(travelled / perDetent);
-        const steps = wanted - dragging.emitted;
+        //
+        // **Drag up, the value goes up.** `travelled` is positive downwards, so
+        // the value takes the opposite sign; the drum keeps spinning with the
+        // thumb, which is why the two are computed separately.
+        const detents = Math.trunc(travelled / perDetent);
+        const steps = -(detents - dragging.emitted);
         dragging.lastY = event.clientY;
 
         if (steps !== 0) {
-          dragging.emitted = wanted;
+          dragging.emitted = detents;
           const turn =
             dragging.kind === "knob"
               ? (Math.PI * 2) / KNOB.snapInterval
               : (Math.PI * 2) / 12;
+          // The drum follows the thumb: down-drag rolls it one way whatever the
+          // value does.
+          const spin = -steps * turn;
           if (dragging.kind === "knob") {
-            knobTarget.value += steps * turn;
+            knobTarget.value += spin;
             handlers.current.onKnobStep?.(steps);
           } else {
-            wheelTarget.value += steps * turn;
+            wheelTarget.value += spin;
             handlers.current.onWheelStep?.(steps);
           }
         }
