@@ -41,26 +41,29 @@ export default function CustomizePage() {
 
   return (
     <>
-      <div className="no-scrollbar -mx-4 mb-2 flex gap-2 overflow-x-auto px-4">
+      <div className="no-scrollbar -mx-4 mb-1 flex items-baseline gap-5 overflow-x-auto px-4">
         {TABS.map(({ id, label }) => (
           <button
             key={id}
             type="button"
+            className="relative shrink-0"
             onClick={() => {
               playSfx("tap");
               setTab(id);
             }}
-            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition ${
-              tab === id
-                ? "bg-brand-500 text-black"
-                : "border border-[var(--color-line-strong)] text-text-2"
-            }`}
           >
-            {label}
+            <span
+              className={`pointer-events-none whitespace-nowrap text-[26px] font-extrabold leading-none tracking-tight transition-colors ${
+                tab === id ? "text-text" : "text-text-3"
+              }`}
+            >
+              {label}
+            </span>
           </button>
         ))}
       </div>
 
+      <div className="relative min-h-[160px]">
       {tab === "presets" ? (
         <PresetCarousel
           selected={custom.preset}
@@ -81,6 +84,7 @@ export default function CustomizePage() {
           )}
         </div>
       )}
+      </div>
 
       <div className="surface-skeuo rounded-card mt-4 p-4">
         <div className="flex items-baseline justify-between">
@@ -96,15 +100,15 @@ export default function CustomizePage() {
         )}
       </div>
 
-      <div className="mt-5 flex gap-2">
+      <div className="mt-5 flex items-center justify-between gap-3 pb-[max(8px,env(safe-area-inset-bottom))]">
         <TapTarget
-          className="flex-1 rounded-full border border-[var(--color-line-strong)] py-3 text-sm font-bold text-text-2"
+          className="relative h-[58px] flex-1 rounded-full border border-[var(--color-line-strong)] text-[15px] font-bold text-text-2"
           onClick={() => set({ preset: custom.preset })}
         >
-          Reset parts
+          Reset
         </TapTarget>
         <TapTarget
-          className="flex-1 rounded-full border border-[var(--color-line-strong)] py-3 text-sm font-bold text-text-2"
+          className="relative h-[58px] flex-1 rounded-full border border-[var(--color-line-strong)] text-[15px] font-bold text-text-2"
           onClick={() =>
             toast("For now, show off your rig with your PnL card")
           }
@@ -113,7 +117,7 @@ export default function CustomizePage() {
         </TapTarget>
         <TapTarget
           href="/games"
-          className="flex-1 rounded-full bg-brand-500 py-3 text-center text-sm font-extrabold text-black"
+          className="relative grid h-[58px] flex-1 place-items-center rounded-full bg-brand-500 text-[15px] font-extrabold text-black"
           haptic="high"
         >
           Done

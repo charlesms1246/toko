@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useProgramConsole } from "@/lib/console/controls";
-import { ScreenRoot } from "@/components/screen/Screen";
+import { Footer, Shell } from "@/components/screen/GameScreen";
 import GameIcon from "@/components/games/GameIcon";
 import { GAME_TAGLINES } from "@/lib/api/fixtures";
 import { GAME_LABELS, LAB_GAMES, LIVE_GAMES, MINIGAMES } from "@/lib/api/types";
@@ -23,6 +23,8 @@ import { useBalance, useIsAdmin } from "@/lib/api/hooks";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
 import { playSfx } from "@/lib/sound";
 import * as demo from "@/lib/demo";
+import { useUser } from "@/lib/api/hooks";
+import { COLLATERAL } from "@/lib/dreamdex/config";
 
 const MINIGAME_LABELS: Record<string, string> = {
   "line-rider": "Line Rider",
@@ -44,6 +46,7 @@ export default function GamesPage() {
   const router = useRouter();
   const balance = useBalance();
   const admin = useIsAdmin();
+  const user = useUser();
   const [index, setIndex] = useState(0);
   const rowsRef = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -118,7 +121,8 @@ export default function GamesPage() {
   });
 
   return (
-    <ScreenRoot>
+    <Shell>
+      <div className="flex min-h-0 flex-1 flex-col px-[var(--screen-rim,24px)] pt-[var(--screen-rim,24px)]">
       <div className="flex items-center justify-between pb-2.5 font-mono text-[12px] font-semibold uppercase tracking-[0.12em] text-text-2">
         <span className="flex min-w-0 items-center gap-2">
           <span className="relative inline-flex h-2 w-2 shrink-0">
@@ -135,11 +139,8 @@ export default function GamesPage() {
           </span>
           <span className="truncate">{paper ? "Demo" : "Live"}</span>
         </span>
-        <span className="flex shrink-0 items-center gap-2 pl-3">
-          <span className="text-text-3">Available</span>
-          <span className="tnum font-bold text-text">
-            ${formatCollateral(balance)}
-          </span>
+        <span className="flex shrink-0 items-center gap-2 pl-3 text-text-3">
+          {entries.length} games
         </span>
       </div>
 
@@ -166,7 +167,9 @@ export default function GamesPage() {
                 onClick={() =>
                   i === clamped ? router.push(entry.href) : setIndex(i)
                 }
-                className="relative flex w-full items-center gap-3 py-2.5 pl-3 text-left"
+                className={`relative flex w-full items-center gap-3 py-2.5 pl-3 text-left ${
+                  i === clamped ? "bg-brand-500/[0.13]" : ""
+                }`}
               >
                 {i === clamped && (
                   <span className="absolute inset-y-0 left-0 w-1 bg-brand-500" />
@@ -184,7 +187,7 @@ export default function GamesPage() {
                       i === clamped ? "text-brand-500" : "text-text-3"
                     }`}
                   >
-                    <GameIcon game={entry.id as never} size={20} />
+                    <GameIcon game={entry.id as never} size={26} />
                   </span>
                 )}
                 <span className="min-w-0 flex-1">
@@ -224,7 +227,32 @@ export default function GamesPage() {
           );
         })}
       </div>
-    </ScreenRoot>
+      </div>
+
+      <Footer>
+          <div className="flex items-center gap-2.5">
+            <span className="min-w-0 truncate text-[17px] font-extrabold lowercase leading-tight tracking-[0.02em] text-text">
+              {user.handle ? `@${user.handle}` : "your rig"}
+            </span>
+            {openPlay && (
+              <span className="tnum flex shrink-0 items-center border border-brand-500/60 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.08em] text-brand-500">
+                In play
+              </span>
+            )}
+          </div>
+          <div className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-text-2">
+            Available
+          </div>
+          <div className="mt-0.5 leading-none">
+            <span className="tnum text-[26px] font-extrabold tracking-tight text-text">
+              ${formatCollateral(balance)}
+            </span>
+            <span className="ml-1 font-mono text-[11px] uppercase tracking-[0.1em] text-text-2">
+              {COLLATERAL.symbol}
+            </span>
+          </div>
+      </Footer>
+    </Shell>
   );
 }
 

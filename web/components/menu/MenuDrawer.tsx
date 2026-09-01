@@ -47,6 +47,10 @@ export default function MenuDrawer({
   const pathname = usePathname();
   const balance = useBalance();
   const isHub = pathname === "/menu";
+  // The customizer is the one screen whose subject is the console itself, so it
+  // docks to the bottom over a live view of it rather than covering it — which
+  // is exactly what the reference does.
+  const overConsole = pathname === "/menu/customize";
   const { active: demoing } = useSyncExternalStore(
     demo.subscribe,
     demo.getSnapshot,
@@ -60,7 +64,9 @@ export default function MenuDrawer({
 
   const drawer = (
     <div
-      className="fixed z-[45] flex justify-center overflow-hidden bg-black/80 backdrop-blur-md"
+      className={`fixed z-[45] flex justify-center overflow-hidden ${
+        overConsole ? "items-end" : "bg-black/80 backdrop-blur-md"
+      }`}
       style={{
         // Seated on the device rather than on the page. It is portalled to
         // <body> to escape the screen's clipping, so it takes the hardware's
@@ -74,10 +80,18 @@ export default function MenuDrawer({
       }}
     >
       <div
-        className="flex h-full w-full max-w-md flex-col bg-[#0d0d0f]"
+        className={`flex w-full max-w-md flex-col ${
+          overConsole
+            ? "max-h-[82%] bg-gradient-to-t from-black via-black/96 to-transparent pt-6"
+            : "h-full bg-[#0d0d0f]"
+        }`}
         style={{ animation: "drawer-rise .3s var(--ease-out-expo) both" }}
       >
-        <header className="flex items-center justify-between border-b border-[var(--color-line)] px-3 py-3">
+        <header
+          className={`flex items-center justify-between px-3 py-3 ${
+            overConsole ? "" : "border-b border-[var(--color-line)]"
+          }`}
+        >
           {isHub ? (
             <span className="w-9" />
           ) : (
@@ -112,9 +126,11 @@ export default function MenuDrawer({
     <>
       {/* The console keeps rendering behind the drawer. */}
       <ScreenRoot className="items-center justify-center">
-        <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          Menu open
-        </span>
+        {!overConsole && (
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
+            Menu open
+          </span>
+        )}
       </ScreenRoot>
       {mounted && createPortal(drawer, document.body)}
     </>

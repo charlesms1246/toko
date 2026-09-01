@@ -14,7 +14,7 @@ export default function SwatchGrid({
   onSelect: (index: number) => void;
 }) {
   return (
-    <div className="grid grid-cols-6 gap-3 py-2">
+    <div className="grid grid-cols-6 justify-items-center gap-y-4 px-1 py-2">
       {swatches.map((swatch, index) => (
         <button
           key={swatch.hex}
@@ -27,7 +27,7 @@ export default function SwatchGrid({
             haptics.press("selection");
             onSelect(index);
           }}
-          className="mx-auto rounded-full transition active:scale-95"
+          className="relative h-[46px] w-[46px] rounded-full transition active:scale-95"
           style={{
             width: 46,
             height: 46,
