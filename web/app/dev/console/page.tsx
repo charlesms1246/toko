@@ -19,7 +19,7 @@ export default function DevConsolePage() {
   return (
     <>
       <div
-        className="relative mb-4 h-[420px] overflow-hidden rounded-2xl border border-[var(--color-line)]"
+        className="relative mb-4 h-[420px] overflow-hidden rounded-card border border-[var(--color-line)]"
         style={{ background: ambientFor(theme) }}
       >
         <ConsoleCanvas

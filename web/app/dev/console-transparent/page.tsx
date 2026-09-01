@@ -19,7 +19,7 @@ export default function DevConsoleTransparentPage() {
   return (
     <>
       <div
-        className="relative mb-4 h-[460px] overflow-hidden rounded-2xl border border-[var(--color-line)]"
+        className="relative mb-4 h-[460px] overflow-hidden rounded-card border border-[var(--color-line)]"
         style={{ background: CHECKER }}
       >
         <ConsoleCanvas theme={THEMES_BY_ID[themeId]} />

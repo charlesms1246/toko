@@ -38,7 +38,7 @@ export default function DevExportPage() {
     <>
       <div
         ref={stageRef}
-        className="relative mb-4 aspect-[836/1492] w-full overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[#08080a]"
+        className="relative mb-4 aspect-[836/1492] w-full overflow-hidden rounded-card border border-[var(--color-line)] bg-[#08080a]"
       >
         <ConsoleCanvas theme={resolved} exportMode />
       </div>
