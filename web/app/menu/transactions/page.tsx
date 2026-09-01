@@ -40,7 +40,7 @@ export default function TransactionsPage() {
   return (
     <>
       {error && (
-        <p className="mb-4 rounded-2xl border border-[var(--color-line)] px-4 py-3 text-[11px] text-down">
+        <p className="surface-skeuo rounded-card mb-4 px-4 py-3 text-[13px] font-bold text-down">
           {error}
         </p>
       )}
@@ -50,14 +50,14 @@ export default function TransactionsPage() {
           Nothing on chain yet. Fund the wallet to see activity here.
         </EmptyState>
       ) : (
-        <div className="mb-5 overflow-hidden rounded-2xl border border-[var(--color-line)]">
+        <div className="mb-5 flex flex-col gap-1.5">
           {rows.map((tx) => (
             <a
               key={tx.hash}
               href={explorerTx(tx.hash)}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-3 border-b border-[var(--color-line)] px-4 py-3 last:border-b-0 transition hover:bg-white/[.04]"
+              className="surface-skeuo rounded-card flex items-center gap-3 p-4 transition-transform active:scale-[0.99]"
             >
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-bold">

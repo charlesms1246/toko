@@ -22,6 +22,7 @@ export default function Panel({
   closeHref = "/games",
   screenLabel,
   status,
+  wide,
   children,
 }: {
   title: string;
@@ -31,6 +32,12 @@ export default function Panel({
   /** What the console screen shows while this panel is open. */
   screenLabel: string;
   status?: { left?: string; right?: string };
+  /**
+   * Break out of the phone-width column. For the dev tools, which are internal
+   * reference pages rather than part of the product surface — a catalogue is
+   * no use as a single narrow column on a desktop.
+   */
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   const mounted = useIsMounted();
@@ -41,7 +48,9 @@ export default function Panel({
   const panel = (
     <div className="fixed inset-0 z-[45] flex justify-center bg-black/80 backdrop-blur-md">
       <div
-        className="flex h-full w-full max-w-md flex-col border-x border-[var(--color-line)] bg-[#0d0d0f]"
+        className={`flex h-full w-full flex-col border-x border-[var(--color-line)] bg-[#0d0d0f] ${
+          wide ? "max-w-[1400px]" : "max-w-md"
+        }`}
         style={{ animation: "drawer-rise .3s var(--ease-out-expo) both" }}
       >
         <header className="flex items-center justify-between border-b border-[var(--color-line)] px-3 py-3">

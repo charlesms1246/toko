@@ -47,7 +47,7 @@ export default function AchievementsPage() {
   return (
     <>
       {state.error && (
-        <p className="mb-4 rounded-2xl border border-[var(--color-line)] px-4 py-3 text-[11px] text-down">
+        <p className="surface-skeuo rounded-card mb-4 px-4 py-3 text-[13px] font-bold text-down">
           {state.error}
         </p>
       )}
@@ -72,7 +72,7 @@ export default function AchievementsPage() {
         {rows.map((a) => (
           <div
             key={a.slug}
-            className="flex flex-col items-center rounded-2xl border border-[var(--color-line)] bg-white/[.03] p-3 text-center"
+            className="surface-skeuo rounded-card flex flex-col items-center gap-1.5 px-1 pb-2.5 pt-2 text-center"
             title={`${a.description} — ${a.value}/${a.threshold}`}
           >
             <Image

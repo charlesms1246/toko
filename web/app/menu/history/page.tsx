@@ -24,7 +24,7 @@ export default function HistoryPage() {
 
   if (error) {
     return (
-      <p className="rounded-2xl border border-[var(--color-line)] px-4 py-3 text-[11px] text-down">
+      <p className="surface-skeuo rounded-card px-4 py-3 text-[13px] font-bold text-down">
         {error}
       </p>
     );
@@ -35,14 +35,14 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[var(--color-line)]">
+    <div className="flex flex-col gap-1.5">
       {stats.rounds.map((r) => (
         <a
           key={r.marketAddress}
           href={explorerTx(r.txHash)}
           target="_blank"
           rel="noreferrer"
-          className="flex items-center gap-3 border-b border-[var(--color-line)] px-4 py-3 last:border-b-0 transition hover:bg-white/[.04]"
+          className="surface-skeuo rounded-card flex items-center gap-3 p-4 transition-transform active:scale-[0.99]"
         >
           <div className="min-w-0 flex-1">
             <div className="text-sm font-bold">

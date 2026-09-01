@@ -40,7 +40,7 @@ export default function LeaderboardPage() {
   return (
     <>
       {state.error && (
-        <p className="mb-4 rounded-2xl border border-[var(--color-line)] px-4 py-3 text-[11px] text-down">
+        <p className="surface-skeuo rounded-card mb-4 px-4 py-3 text-[13px] font-bold text-down">
           {state.error}
         </p>
       )}
@@ -48,7 +48,7 @@ export default function LeaderboardPage() {
       {state.rows.length === 0 ? (
         <EmptyState>No fills in the sampled windows yet.</EmptyState>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-[var(--color-line)]">
+        <div className="flex flex-col gap-1.5">
           {state.rows.map((row) => {
             const isYou = row.address === me;
             return (
@@ -57,7 +57,7 @@ export default function LeaderboardPage() {
                 href={explorerAddress(row.address)}
                 target="_blank"
                 rel="noreferrer"
-                className={`flex items-center gap-3 border-b border-[var(--color-line)] px-4 py-3 last:border-b-0 transition hover:bg-white/[.04] ${
+                className={`surface-skeuo rounded-card flex items-center gap-3 p-4 transition-transform active:scale-[0.99] ${
                   isYou ? "bg-brand-500/10" : ""
                 }`}
               >
