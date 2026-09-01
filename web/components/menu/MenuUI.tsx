@@ -11,15 +11,13 @@ export function MenuSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="mb-6">
+    <section className="mb-6 flex flex-col gap-1.5">
       {title && (
-        <h2 className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.18em] text-text-3">
+        <h2 className="mb-0.5 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-text-3">
           {title}
         </h2>
       )}
-      <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white/[.03]">
-        {children}
-      </div>
+      {children}
     </section>
   );
 }
@@ -44,32 +42,34 @@ export function MenuRow({
 }) {
   const body = (
     <>
-      {icon && (
+      {icon ? (
         <Image
           src={icon}
           alt=""
-          width={24}
-          height={24}
-          className="shrink-0 rounded"
+          width={48}
+          height={48}
+          className="h-12 w-12 shrink-0 object-contain"
         />
-      )}
+      ) : null}
       <span
-        className={`flex-1 text-left text-sm font-bold ${
+        className={`flex-1 text-left text-[17px] font-bold ${
           danger ? "text-down" : "text-text"
         }`}
       >
         {label}
       </span>
-      {value != null && (
-        <span className="text-sm font-semibold tabular-nums text-text-2">
-          {value}
-        </span>
+      {value != null ? (
+        <span className="tnum text-[15px] font-bold text-text-2">{value}</span>
+      ) : (
+        <span className="text-2xl text-text-3">›</span>
       )}
     </>
   );
 
+  // Each row is its own raised card, the way the reference's menu reads —
+  // a stack of objects rather than a boxed list.
   const className =
-    "flex w-full items-center gap-3 border-b border-[var(--color-line)] px-4 py-3.5 last:border-b-0 transition hover:bg-white/[.04] active:bg-white/[.06]";
+    "surface-skeuo rounded-card flex w-full items-center gap-3 p-4 text-left transition-transform active:scale-[0.99]";
 
   if (href) {
     return (

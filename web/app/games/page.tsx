@@ -116,18 +116,25 @@ export default function GamesPage() {
 
   return (
     <ScreenRoot>
-      <div className="flex items-center justify-between pb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-text-2">
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span
-            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-              paper ? "bg-brand-500" : "bg-up"
-            }`}
-          />
+      <div className="flex items-center justify-between pb-2.5 font-mono text-[12px] font-semibold uppercase tracking-[0.12em] text-text-2">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="relative inline-flex h-2 w-2 shrink-0">
+            <span
+              className={`absolute inset-0 animate-ping ${
+                paper ? "bg-brand-500/70" : "bg-up/70"
+              }`}
+            />
+            <span
+              className={`relative inline-block h-2 w-2 ${
+                paper ? "bg-brand-500" : "bg-up"
+              }`}
+            />
+          </span>
           <span className="truncate">{paper ? "Demo" : "Live"}</span>
         </span>
-        <span className="flex shrink-0 items-center gap-1.5 pl-3">
+        <span className="flex shrink-0 items-center gap-2 pl-3">
           <span className="text-text-3">Available</span>
-          <span className="tabular-nums font-bold text-text">
+          <span className="tnum font-bold text-text">
             ${formatCollateral(balance)}
           </span>
         </span>
@@ -142,7 +149,12 @@ export default function GamesPage() {
           const head = i === firstMinigame;
           return (
             <div key={entry.id}>
-              {head && <Section title="Minigame" hint="Just for fun · No stake" />}
+              {head && (
+                <>
+                  <span className="mt-3 block h-px w-full bg-[var(--color-line-strong)]" />
+                  <Section title="Minigame" hint="Just for fun · No stake" />
+                </>
+              )}
               <button
                 ref={(el) => {
                   rowsRef.current[i] = el;
@@ -151,13 +163,13 @@ export default function GamesPage() {
                 onClick={() =>
                   i === clamped ? router.push(entry.href) : setIndex(i)
                 }
-                className="relative flex w-full items-center gap-2.5 py-1.5 pl-3 text-left"
+                className="relative flex w-full items-center gap-3 py-2.5 pl-3 text-left"
               >
                 {i === clamped && (
-                  <span className="absolute inset-y-0 left-0 w-[3px] bg-brand-500" />
+                  <span className="absolute inset-y-0 left-0 w-1 bg-brand-500" />
                 )}
                 <span
-                  className={`tabular-nums w-4 shrink-0 font-mono text-[11px] font-bold ${
+                  className={`tnum w-5 shrink-0 font-mono text-[14px] font-bold ${
                     i === clamped ? "text-brand-500" : "text-text-3"
                   }`}
                 >
@@ -165,32 +177,42 @@ export default function GamesPage() {
                 </span>
                 {!entry.minigame && (
                   <span
-                    className={i === clamped ? "text-brand-500" : "text-text-3"}
+                    className={`shrink-0 ${
+                      i === clamped ? "text-brand-500" : "text-text-3"
+                    }`}
                   >
-                    <GameIcon game={entry.id as never} size={16} />
+                    <GameIcon game={entry.id as never} size={20} />
                   </span>
                 )}
                 <span className="min-w-0 flex-1">
                   <span
-                    className={`block truncate text-[13px] font-extrabold uppercase leading-tight tracking-[0.02em] ${
-                      i === clamped ? "text-text" : "text-text-2"
-                    }`}
+                    className={`block truncate uppercase leading-tight tracking-[0.02em] ${
+                      entry.minigame
+                        ? "text-[15px] font-bold"
+                        : "text-[18px] font-extrabold"
+                    } ${i === clamped ? "text-text" : "text-text-2"}`}
                   >
                     {entry.label}
                   </span>
-                  <span className="block truncate font-mono text-[9px] uppercase leading-tight tracking-[0.06em] text-text-3">
+                  <span className="marquee-mask block truncate font-mono text-[11px] uppercase leading-tight tracking-[0.08em] text-text-3">
                     {entry.tagline}
                   </span>
                 </span>
+                {openPlay && i === clamped && (
+                  <span className="inline-flex shrink-0 items-center gap-1.5 border border-up/60 bg-up/15 px-1.5 py-1 font-mono text-[9px] font-bold uppercase leading-none tracking-[0.12em] text-up">
+                    <span className="h-1.5 w-1.5 bg-up motion-safe:animate-pulse" />
+                    In play
+                  </span>
+                )}
                 {entry.lab && (
-                  <span className="shrink-0 border border-[var(--color-premium-500)] px-1 py-px font-mono text-[8px] font-bold uppercase tracking-[0.12em] text-[var(--color-premium-500)]">
+                  <span className="shrink-0 border border-[var(--color-premium-500)] px-1 py-px font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--color-premium-500)]">
                     Lab
                   </span>
                 )}
                 <span
-                  className={`shrink-0 font-mono text-sm ${
-                    i === clamped ? "text-brand-500" : "text-text-3/40"
-                  }`}
+                  className={`shrink-0 font-mono ${
+                    entry.minigame ? "text-sm" : "text-lg"
+                  } ${i === clamped ? "text-brand-500" : "text-text-3/40"}`}
                 >
                   ›
                 </span>
@@ -205,9 +227,9 @@ export default function GamesPage() {
 
 function Section({ title, hint }: { title: string; hint: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 pt-2 pb-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-text-3">
+    <div className="flex items-baseline justify-between gap-2 pb-0.5 pt-5 font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-text-3">
       <span>{title}</span>
-      <span className="truncate tracking-[0.08em]">{hint}</span>
+      <span className="truncate tracking-[0.1em]">{hint}</span>
     </div>
   );
 }

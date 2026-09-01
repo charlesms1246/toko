@@ -32,28 +32,35 @@ export default function MenuHub() {
 
   return (
     <>
-      <div className="mb-5 flex items-center gap-3">
-        <div className="grid h-12 w-12 place-items-center rounded-full bg-brand-500 text-lg font-black text-black">
-          {user.handle.slice(0, 2).toUpperCase()}
+      {/* The balance card, ported from the reference's menu kit: a raised
+          card with the handle above and the balance set very large. */}
+      <div className="card-neo rounded-card relative mb-5 p-4">
+        <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-text-3">
+          My balance
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-base font-extrabold">
-            @{user.handle}
+        <div className="mt-6 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-500 text-sm font-black text-black">
+              {user.handle.slice(0, 2).toUpperCase()}
+            </div>
+            <div className="flex min-w-0 items-baseline gap-0.5">
+              <span className="text-xl font-black text-text-3">$</span>
+              <span className="tnum truncate text-[34px] font-black leading-none text-text">
+                {formatCollateral(walletState.collateral)}
+              </span>
+            </div>
           </div>
-          <div className="truncate text-xs text-text-3">
-            {user.address.slice(0, 10)}…{user.address.slice(-6)}
+          <div className="flex shrink-0 items-center gap-2">
+            <Image
+              src="/assets/icons/chip-logo.webp"
+              alt="tUSDC"
+              width={22}
+              height={22}
+            />
           </div>
         </div>
-        <div className="flex items-center gap-1.5 rounded-full border border-[var(--color-line-strong)] px-3 py-1.5">
-          <Image
-            src="/assets/icons/chip-logo.webp"
-            alt="USDC"
-            width={16}
-            height={16}
-          />
-          <span className="text-sm font-black tabular-nums">
-            {formatCollateral(walletState.collateral)}
-          </span>
+        <div className="mt-2 truncate text-[11px] font-bold text-text-3">
+          @{user.handle} · {user.address.slice(0, 10)}…{user.address.slice(-6)}
         </div>
       </div>
 
