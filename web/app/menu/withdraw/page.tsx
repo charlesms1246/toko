@@ -69,7 +69,7 @@ export default function WithdrawPage() {
 
   return (
     <>
-      <div className="mb-5 rounded-2xl border border-[var(--color-line)] bg-white/[.03] p-4">
+      <div className="surface-skeuo rounded-card mb-5 p-4">
         <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
           Available
         </div>
@@ -82,7 +82,7 @@ export default function WithdrawPage() {
       <label className="mb-2 block px-1 text-[11px] font-bold uppercase tracking-[0.18em] text-text-3">
         Amount
       </label>
-      <div className="mb-3 flex items-center gap-2 rounded-2xl border border-[var(--color-line-strong)] bg-white/5 px-4 py-3">
+      <div className="rounded-card mb-3 flex items-center gap-2 border border-[var(--color-line-strong)] bg-black/40 px-4 py-3.5">
         <span className="text-lg font-bold text-text-3">$</span>
         <input
           inputMode="decimal"
@@ -108,7 +108,7 @@ export default function WithdrawPage() {
         onChange={(e) => setTo(e.target.value.trim())}
         placeholder="0x…"
         spellCheck={false}
-        className="mb-6 w-full rounded-2xl border border-[var(--color-line-strong)] bg-white/5 px-4 py-3 font-mono text-xs outline-none placeholder:text-text-3"
+        className="rounded-card mb-6 w-full border border-[var(--color-line-strong)] bg-black/40 px-4 py-3.5 font-mono text-[13px] font-bold outline-none placeholder:text-text-3"
       />
 
       <TapTarget

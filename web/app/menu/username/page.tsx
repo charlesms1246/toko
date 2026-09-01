@@ -20,7 +20,7 @@ export default function UsernamePage() {
         3–20 characters. Letters, numbers and underscores.
       </p>
 
-      <div className="mt-5 flex items-center gap-2 rounded-2xl border border-[var(--color-line-strong)] bg-white/5 px-4 py-3">
+      <div className="rounded-card mt-5 flex items-center gap-2 border border-[var(--color-line-strong)] bg-black/40 px-4 py-3.5">
         <span className="text-lg font-bold text-text-3">@</span>
         <input
           value={handle}

@@ -82,7 +82,7 @@ export default function CustomizePage() {
         </div>
       )}
 
-      <div className="mt-4 rounded-2xl border border-[var(--color-line)] bg-white/[.03] p-4">
+      <div className="surface-skeuo rounded-card mt-4 p-4">
         <div className="flex items-baseline justify-between">
           <span className="text-sm font-extrabold">{resolved.name}</span>
           <span className="text-lg font-black tabular-nums text-text-3">
