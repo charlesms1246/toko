@@ -22,11 +22,14 @@ export default function PriceChart({
   asset,
   entry,
   className = "",
+  bare = false,
 }: {
   asset: string;
   /** The window's opening price — the level the settlement compares against. */
   entry?: number | null;
   className?: string;
+  /** Full-bleed behind a screen: no frame, no corner ticks. */
+  bare?: boolean;
 }) {
   const points = usePriceHistory(asset);
 
@@ -71,23 +74,28 @@ export default function PriceChart({
 
   return (
     <div
-      className={`relative min-h-0 w-full overflow-hidden border border-white/10 bg-black/40 ${className}`}
+      // Bare means it *is* the stage, so it positions itself over the whole of
+      // it. Framed means it is a tile in a stack and sits in normal flow.
+      className={`overflow-hidden ${
+        bare
+          ? "absolute inset-0"
+          : "relative min-h-0 w-full border border-white/10 bg-black/40"
+      } ${className}`}
     >
       {/* Corner ticks — the reference marks every instrument this way. */}
-      {(
+      {!bare &&
         [
           "left-0 top-0 border-l border-t",
           "right-0 top-0 border-r border-t",
           "left-0 bottom-0 border-l border-b",
           "right-0 bottom-0 border-r border-b",
-        ] as const
-      ).map((corner) => (
-        <span
-          key={corner}
-          aria-hidden
-          className={`pointer-events-none absolute h-2 w-2 border-white/35 ${corner}`}
-        />
-      ))}
+        ].map((corner) => (
+          <span
+            key={corner}
+            aria-hidden
+            className={`pointer-events-none absolute h-2 w-2 border-white/35 ${corner}`}
+          />
+        ))}
 
       {view ? (
         <>
@@ -155,7 +163,7 @@ export default function PriceChart({
 
           {view.entryY != null && (
             <span
-              className="pointer-events-none absolute right-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-white/55"
+              className="pointer-events-none absolute right-[var(--screen-rim,12px)] font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-white/55"
               style={{ top: `calc(${view.entryY}% - 12px)` }}
             >
               Entry
@@ -163,7 +171,7 @@ export default function PriceChart({
           )}
 
           <span
-            className="pointer-events-none absolute bottom-1.5 left-2 font-mono text-[13px] font-extrabold tabular-nums"
+            className="pointer-events-none absolute bottom-1.5 left-[var(--screen-rim,12px)] font-mono text-[13px] font-extrabold tabular-nums"
             style={{ color: tint, textShadow: `0 0 10px ${tint}66` }}
           >
             {view.change >= 0 ? "+" : ""}

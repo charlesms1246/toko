@@ -14,17 +14,27 @@
  */
 
 import { useProgramConsole } from "@/lib/console/controls";
-import {
-  BigNumber,
-  ScreenBar,
-  ScreenHeader,
-  ScreenRoot,
-  ScreenRow,
-} from "@/components/screen/Screen";
 import { useRound } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
 import PriceChart from "@/components/screen/PriceChart";
+import {
+  CentreRule,
+  CentreStat,
+  Footer,
+  Fx,
+  GhostCount,
+  Header,
+  Shell,
+  Splash,
+  Stage,
+  StageCentre,
+  StageReadout,
+  Tile,
+  TileRow,
+} from "@/components/screen/GameScreen";
+import { useSpot } from "@/lib/api/hooks";
+import { formatPrice } from "@/lib/api/math";
 import * as markets from "@/lib/dreamdex/markets";
 
 const SIZE = 1;
@@ -72,6 +82,34 @@ export default function RushPage() {
     lightShow: round.status === "settling" || settled,
   });
 
+  const chart = (
+    <>
+      <PriceChart
+        bare
+        asset={round.window?.asset ?? "BTC"}
+        entry={
+          round.window?.strike != null
+            ? markets.strikePrice(round.window.strike)
+            : null
+        }
+      />
+      <Fx />
+    </>
+  );
+
+  const header = (
+    <Header
+      eyebrow={`Rush · ${round.window?.asset ?? "—"}`}
+      value={spot > 0 ? `$${formatPrice(spot)}` : "—"}
+      rightLabel={round.window ? "Ends in" : "Balance"}
+      rightValue={
+        round.window
+          ? `${round.secsLeft.toFixed(0)}s`
+          : `$${formatCollateral(round.balance)}`
+      }
+    />
+  );
+
   if (settled) {
     const won = round.status === "won";
     const net =
@@ -79,114 +117,108 @@ export default function RushPage() {
         ? Number(round.payout) / 1e6 - cost
         : null;
     return (
-      <ScreenRoot className="items-center justify-center gap-1">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          {round.status === "void"
-            ? "Voided"
-            : round.cashedOut
-              ? "Took the deal"
-              : won
-                ? "Pushed and won"
-                : "Busted"}
-        </div>
-        <BigNumber
-          value={net == null ? "—" : `${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(2)}`}
-          tone={won ? "up" : "down"}
-        />
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <Stage>
+          {chart}
+          <Splash
+            won={won}
+            value={
+              net == null
+                ? "—"
+                : `${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(2)}`
+            }
+          />
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            {round.status === "void"
+              ? "Voided"
+              : round.cashedOut
+                ? "Took the deal"
+                : won
+                  ? "Held and won"
+                  : "Busted"}
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   if (round.status === "settling") {
     return (
-      <ScreenRoot className="items-center justify-center gap-2">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          Pushed to the buzzer
-        </div>
-        <BigNumber value="…" tone="brand" />
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <Stage>
+          {chart}
+          <GhostCount>0</GhostCount>
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            Held to the buzzer
+          </div>
+          <div className="tnum mt-0.5 text-[15px] font-extrabold text-brand-500">
+            waiting on the oracle
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   if (live && round.window) {
     const ahead = dealValue != null && cost != null && dealValue >= cost;
     return (
-      <ScreenRoot className="gap-1.5">
-        <ScreenHeader
-          left={`${round.window.asset} ${round.side === "up" ? "UP" : "DOWN"}`}
-          right={`${round.secsLeft.toFixed(0)}s`}
-        />
-        <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-          The deal
-        </div>
-        <BigNumber
-          value={dealValue == null ? "no bid" : `$${dealValue.toFixed(2)}`}
-          tone={ahead ? "up" : "down"}
-        />
-        <ScreenRow label="Paid" value={cost != null ? `$${cost.toFixed(2)}` : "—"} />
-        <ScreenRow
-          label="Push pays"
-          value={`$${contracts.toFixed(2)}`}
-          tone="brand"
-        />
-        <ScreenBar
-          progress={
-            round.window.intervalSec
-              ? 1 - round.secsLeft / round.window.intervalSec
-              : 0
-          }
-        />
-        <PriceChart
-          asset={round.window?.asset ?? "BTC"}
-          entry={
-            round.window?.strike != null
-              ? markets.strikePrice(round.window.strike)
-              : null
-          }
-          className="flex-1"
-        />
-        <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
-          take the deal, or hold and let it ride
-        </div>
-      </ScreenRoot>
+      <Shell>
+        {header}
+        <TileRow cols={2}>
+          <Tile label="Paid" value={cost != null ? `$${cost.toFixed(2)}` : "—"} />
+          <Tile label="Hold pays" value={`$${contracts.toFixed(2)}`} tone="brand" />
+        </TileRow>
+        <Stage>
+          {chart}
+          <GhostCount>{round.secsLeft.toFixed(0)}</GhostCount>
+          <StageReadout label="The deal">
+            <span
+              className={`tnum text-[30px] font-extrabold leading-none ${
+                ahead ? "text-up" : "text-down"
+              }`}
+            >
+              {dealValue == null ? "no bid" : `$${dealValue.toFixed(2)}`}
+            </span>
+          </StageReadout>
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            Take the deal, or hold it to the buzzer
+          </div>
+        </Footer>
+      </Shell>
     );
   }
 
   return (
-    <ScreenRoot className="gap-2">
-      <ScreenHeader
-        left="Rush"
-        right={round.window ? `${round.secsLeft.toFixed(0)}s` : "—"}
-      />
-      <div className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-text-3">
-        Up pays
-      </div>
-      <BigNumber
-        value={upAsk ? `${book.multipleAt(upAsk.price).toFixed(2)}x` : "—"}
-        tone="brand"
-      />
-      <ScreenRow
-        label="Ante"
-        value={upAsk ? `$${(upAsk.price * SIZE).toFixed(2)}` : "—"}
-      />
-      <PriceChart
-        asset={round.window?.asset ?? "BTC"}
-        entry={
-          round.window?.strike != null
-            ? markets.strikePrice(round.window.strike)
-            : null
-        }
-        className="flex-1"
-      />
-      <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
-        {round.message
-          ? round.message
-          : !round.window
-            ? "finding a window"
-            : round.balance === 0n
-              ? "fund your wallet"
-              : "ante up, then take or push"}
-      </div>
-    </ScreenRoot>
+    <Shell>
+      {header}
+      <Stage>
+        {chart}
+        <StageCentre>
+          <CentreStat
+            label="Up pays"
+            value={upAsk ? `${book.multipleAt(upAsk.price).toFixed(2)}x` : "—"}
+          />
+          <CentreRule />
+          <CentreStat
+            label="Ante"
+            value={upAsk ? `$${(upAsk.price * SIZE).toFixed(2)}` : "—"}
+            tone="up"
+          />
+        </StageCentre>
+      </Stage>
+      <Footer>
+        <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+          {round.message ?? (round.window ? "Ante up to take a hand" : "finding a window")}
+        </div>
+      </Footer>
+    </Shell>
   );
 }

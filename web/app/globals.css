@@ -235,6 +235,75 @@ body {
   transition-duration: 0.12s;
 }
 
+/* ── Reference kit ─────────────────────────────────────────────────────────
+ * Ported verbatim from the reference build's stylesheet so its markup renders
+ * here unchanged. These are the classes its chunks reach for that Tailwind does
+ * not generate.
+ */
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-scanlines {
+  background-image: repeating-linear-gradient(0deg, #ffffff09 0 1px, #0000 1px 3px);
+}
+
+.viz-vignette {
+  background: radial-gradient(120% 120% at 50% 42%, #0000 56%, #0000008c 100%);
+}
+
+.shimmer {
+  background: linear-gradient(100deg, #ffffff0a 30%, #ffffff17 50%, #ffffff0a 70%) 0 0 /
+    200% 100%;
+  animation: 1.4s linear infinite shimmer;
+}
+
+.card-neo {
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(#2a2a29 0%, #222221 46%, #191919 100%),
+    #222221;
+  border: 1px solid #30302e;
+  box-shadow:
+    inset 0 1px #3a3a38,
+    inset 0 2px 8px #ffffff06,
+    inset 0 -1px 4px #0000007a,
+    0 1px #070707,
+    0 18px 36px -28px #000000f2;
+}
+
+.card-neo-active {
+  border-color: color-mix(in srgb, var(--color-brand-500) 55%, transparent);
+  box-shadow:
+    inset 0 1px #3a3a38,
+    inset 0 0 0 1px color-mix(in srgb, var(--color-brand-500) 22%, transparent),
+    0 18px 36px -28px #000000f2;
+}
+
+.marquee-mask {
+  --marquee-fade-w: 0%;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--marquee-fade-w),
+    black calc(100% - var(--marquee-fade-w)),
+    transparent
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--marquee-fade-w),
+    black calc(100% - var(--marquee-fade-w)),
+    transparent
+  );
+  transition: --marquee-fade-w 0.5s;
+}
+
+.marquee-fade {
+  --marquee-fade-w: 6%;
+}
+
 /* ── Switch (used across settings) ─────────────────────────────────────── */
 
 .toko-switch-control {
