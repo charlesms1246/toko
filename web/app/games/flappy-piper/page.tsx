@@ -1,174 +1,370 @@
 "use client";
 
 /**
- * Flappy Piper — a free arcade minigame. No stake, just a score leaderboard.
- * The main key flaps.
+ * Flappy Piper — ported 1:1 from the reference build's engine.
+ *
+ * Every constant below is theirs, and the model is theirs too: the canvas is
+ * responsive and DPR-scaled rather than a fixed bitmap, the bird's height is a
+ * **fraction of the screen** so the game plays the same at any size, and the
+ * obstacles are trading candles rather than pipes — which is the joke the whole
+ * console is built on.
+ *
+ * The one thing not ported is their leaderboard: it is server-backed, and we
+ * have no server to hold one. The personal best is real and local, which is
+ * what we have always shown.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLatest } from "@/lib/react/hooks";
+import { Bird } from "lucide-react";
 import { useProgramConsole } from "@/lib/console/controls";
-import { ScreenRoot } from "@/components/screen/Screen";
-import MinigameBoard from "@/components/games/MinigameBoard";
 import { useMinigameBest, useStoreActions } from "@/lib/api/hooks";
 import { playLose, playTick } from "@/lib/sound";
 import haptics from "@/lib/haptics";
 
-const W = 240;
-const H = 300;
-const GRAVITY = 1500;
-const FLAP = -420;
-const PIPE_GAP = 96;
-const PIPE_W = 34;
-const SPEED = 108;
+// ── The reference's constants, verbatim ─────────────────────────────────────
+const BIRD_X = 0.28; // b — how far across the screen the bird sits
+const BIRD_SIZE = 64; // x
+const BIRD_H = (395 / 567) * BIRD_SIZE; // S
+const HIT_PAD = 16; // C — horizontal collision padding
+const EDGE = 23; // w — px kept clear of the ceiling and floor
+const GRAVITY = 5.6; // T — in screen-heights per second squared
+const FLAP = -1.42; // E
+const TERMINAL = 2.65; // D
+const RAMP_S = 48; // j — seconds to full difficulty
+const SPEED_MIN = 138; // k
+const SPEED_MAX = 172; // A
+const SPACING_MAX = 190; // M
+const SPACING_MIN = 165; // N
+const CANDLE_W = 30; // P
+const WICK = 15; // F
+const GAP_MAX = 0.205; // I — half-gap, as a fraction of height
+const GAP_MIN = 0.145; // L
+const MARGIN = 0.06; // R — keeps a gap off the very edge
+const DRIFT = 0.28; // z — how far a gap may wander from the last
+const UP = [52, 211, 153] as const; // q
+const DOWN = [255, 90, 77] as const; // K
 
-interface Pipe {
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+const rgba = (c: readonly number[], a: number) =>
+  `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+interface Candle {
   x: number;
-  gapY: number;
-  passed: boolean;
+  center: number;
+  half: number;
+  scored: boolean;
 }
 
 export default function FlappyPiperPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [running, setRunning] = useState(false);
+  const [phase, setPhase] = useState<"intro" | "playing" | "over">("intro");
   const [score, setScore] = useState(0);
-  const [lastScore, setLastScore] = useState<number | null>(null);
+  const [lastScore, setLastScore] = useState(0);
   const actions = useStoreActions();
   const best = useMinigameBest("flappy-piper");
 
-  const state = useRef({ y: H / 2, vy: 0, pipes: [] as Pipe[], score: 0 });
-  const raf = useRef(0);
-  const flapRef = useRef(false);
+  const engine = useRef({
+    w: 0,
+    h: 0,
+    birdY: 0.42,
+    angle: -0.35,
+    vy: 0,
+    elapsed: 0,
+    parallax: 0,
+    spawnX: 0,
+    lastCenter: 0.42,
+    candles: [] as Candle[],
+    running: false,
+    raf: 0,
+    last: 0,
+    score: 0,
+  });
 
   const end = useCallback(() => {
-    cancelAnimationFrame(raf.current);
-    setRunning(false);
-    setLastScore(state.current.score);
-    actions.submitMinigameScore("flappy-piper", state.current.score);
+    const e = engine.current;
+    e.running = false;
+    cancelAnimationFrame(e.raf);
+    setLastScore(e.score);
+    setPhase("over");
+    actions.submitMinigameScore("flappy-piper", e.score);
     playLose();
-    haptics.outcome("lose");
+    haptics.press("high");
   }, [actions]);
+  const endRef = useLatest(end);
 
-  const start = useCallback(() => {
-    state.current = { y: H / 2, vy: FLAP * 0.6, pipes: [], score: 0 };
-    setScore(0);
-    setLastScore(null);
-    setRunning(true);
-  }, []);
-
-  const flap = useCallback(() => {
-    if (!running) {
-      start();
-      return;
-    }
-    flapRef.current = true;
-  }, [running, start]);
-
+  // ── The loop ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!running) return;
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const e = engine.current;
 
-    let last = performance.now();
-    let spawn = 0;
+    const measure = () => {
+      const r = canvas.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      e.w = r.width;
+      e.h = r.height;
+      canvas.width = Math.round(r.width * dpr);
+      canvas.height = Math.round(r.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (!e.running) draw();
+    };
 
-    const frame = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      const s = state.current;
+    const difficulty = () => clamp01(e.elapsed / RAMP_S);
+    const spacing = () => lerp(SPACING_MAX, SPACING_MIN, difficulty());
 
-      if (flapRef.current) {
-        s.vy = FLAP;
-        flapRef.current = false;
-        haptics.press("tickSmall");
-      }
+    const nextCenter = (half: number) => {
+      const lo = half + MARGIN;
+      const hi = 1 - half - MARGIN;
+      let c = e.lastCenter + (Math.random() * 2 - 1) * DRIFT;
+      c = Math.max(lo, Math.min(hi, c));
+      e.lastCenter = c;
+      return c;
+    };
 
-      s.vy += GRAVITY * dt;
-      s.y += s.vy * dt;
-
-      spawn -= dt;
-      if (spawn <= 0) {
-        spawn = 1.55;
-        s.pipes.push({
-          x: W,
-          gapY: 50 + Math.random() * (H - 100 - PIPE_GAP),
-          passed: false,
+    const fill = () => {
+      const half = lerp(GAP_MAX, GAP_MIN, difficulty());
+      while (e.spawnX < e.w + spacing()) {
+        e.candles.push({
+          x: e.spawnX,
+          center: nextCenter(half),
+          half,
+          scored: false,
         });
+        e.spawnX += spacing();
+      }
+    };
+
+    const draw = () => {
+      const { w, h } = e;
+      ctx.clearRect(0, 0, w, h);
+
+      // A faint grid that scrolls, so speed reads even between candles.
+      ctx.strokeStyle = "rgba(255,255,255,0.045)";
+      ctx.lineWidth = 1;
+      for (let x = -((e.parallax | 0) % 64); x < w; x += 64) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
       }
 
-      for (const pipe of s.pipes) {
-        pipe.x -= SPEED * dt;
-        if (!pipe.passed && pipe.x + PIPE_W < 46) {
-          pipe.passed = true;
-          s.score += 1;
-          setScore(s.score);
+      for (const c of e.candles) {
+        const top = (c.center - c.half) * h;
+        const bottom = (c.center + c.half) * h;
+        const x = c.x - CANDLE_W / 2;
+        // Two candles, one hanging from the ceiling and one standing on the
+        // floor — red above, green below, each with its wick.
+        ctx.fillStyle = rgba(DOWN, 0.9);
+        ctx.fillRect(x, 0, CANDLE_W, top);
+        ctx.strokeStyle = rgba(DOWN, 0.9);
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(c.x, top);
+        ctx.lineTo(c.x, top + WICK);
+        ctx.stroke();
+
+        ctx.fillStyle = rgba(UP, 0.9);
+        ctx.fillRect(x, bottom, CANDLE_W, h - bottom);
+        ctx.strokeStyle = rgba(UP, 0.9);
+        ctx.beginPath();
+        ctx.moveTo(c.x, bottom);
+        ctx.lineTo(c.x, bottom - WICK);
+        ctx.stroke();
+      }
+
+      // The bird: a rounded chip, banked by its vertical speed.
+      const bx = e.w * BIRD_X;
+      const by = e.birdY * h;
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(e.angle);
+      ctx.fillStyle = "#ffc016";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, BIRD_SIZE / 4, BIRD_H / 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#241008";
+      ctx.beginPath();
+      ctx.ellipse(BIRD_SIZE / 12, -BIRD_H / 16, 2.2, 2.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    };
+
+    const step = (dt: number) => {
+      // The screen surface is positioned by the console every frame, so on the
+      // first ticks the canvas can still measure 0. Without this the bird's
+      // radius is `EDGE / 0` and the very first step reports a floor strike.
+      if (e.h <= 0 || e.w <= 0) return true;
+      e.elapsed += dt;
+      const speed = lerp(SPEED_MIN, SPEED_MAX, difficulty());
+
+      e.vy = Math.min(TERMINAL, e.vy + GRAVITY * dt);
+      e.birdY += e.vy * dt;
+      e.angle += ((e.vy * 0.5 - e.angle) * Math.min(1, dt * 6));
+      e.parallax = (e.parallax + speed * 0.4 * dt) % 64;
+
+      e.spawnX -= speed * dt;
+      for (const c of e.candles) c.x -= speed * dt;
+      while (e.candles.length && e.candles[0].x < -CANDLE_W) e.candles.shift();
+      fill();
+
+      const bx = e.w * BIRD_X;
+      for (const c of e.candles) {
+        if (!c.scored && c.x + CANDLE_W / 2 < bx) {
+          c.scored = true;
+          e.score += 1;
+          setScore(e.score);
           playTick();
         }
       }
-      s.pipes = s.pipes.filter((p) => p.x > -PIPE_W);
 
-      // Collisions: floor, ceiling, and the pipe mouths.
-      if (s.y < 6 || s.y > H - 6) return end();
-      for (const pipe of s.pipes) {
-        const withinX = 46 + 9 > pipe.x && 46 - 9 < pipe.x + PIPE_W;
-        const throughGap = s.y > pipe.gapY && s.y < pipe.gapY + PIPE_GAP;
-        if (withinX && !throughGap) return end();
+      const r = EDGE / e.h;
+      if (e.birdY < r) {
+        e.birdY = r;
+        e.vy = 0;
       }
+      if (e.birdY > 1 - r) return false;
 
-      // Draw
-      ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = "#050505";
-      ctx.fillRect(0, 0, W, H);
-
-      ctx.fillStyle = "#2de2d6";
-      for (const pipe of s.pipes) {
-        ctx.fillRect(pipe.x, 0, PIPE_W, pipe.gapY);
-        ctx.fillRect(pipe.x, pipe.gapY + PIPE_GAP, PIPE_W, H);
+      const reach = CANDLE_W / 2 + HIT_PAD;
+      for (const c of e.candles) {
+        if (Math.abs(c.x - bx) > reach) continue;
+        if (e.birdY - r < c.center - c.half) return false;
+        if (e.birdY + r > c.center + c.half) return false;
       }
-
-      ctx.fillStyle = "#ffc016";
-      ctx.beginPath();
-      ctx.arc(46, s.y, 8, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = "rgba(242,242,242,.9)";
-      ctx.font = "bold 22px ui-sans-serif, system-ui";
-      ctx.textAlign = "center";
-      ctx.fillText(String(s.score), W / 2, 34);
-
-      raf.current = requestAnimationFrame(frame);
+      return true;
     };
 
-    raf.current = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf.current);
-  }, [running, end]);
+    const frame = (now: number) => {
+      // The console positions and scales the screen surface every frame, so the
+      // canvas can still be 0x0 when the effect first runs — and a
+      // ResizeObserver bound to a canvas that never changes size again will
+      // not rescue it. Re-measure until we have a box.
+      if (e.w <= 0 || e.h <= 0) measure();
+      const dt = Math.min(0.05, (now - e.last) / 1000);
+      e.last = now;
+      if (e.running) {
+        if (!step(dt)) {
+          e.running = false;
+          endRef.current();
+        }
+      }
+      draw();
+      e.raf = requestAnimationFrame(frame);
+    };
+
+    // `fill` is the one thing a fresh run needs from in here.
+    (engine.current as unknown as { fill: () => void }).fill = fill;
+
+    measure();
+    e.last = performance.now();
+    e.raf = requestAnimationFrame(frame);
+    const ro = new ResizeObserver(measure);
+    ro.observe(canvas);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(e.raf);
+      e.running = false;
+    };
+    // `endRef` is a stable ref; naming it keeps the rule happy without
+    // rebuilding the canvas, which must be set up exactly once.
+  }, [endRef]);
+
+
+  const start = useCallback(() => {
+    const e = engine.current;
+    e.birdY = 0.42;
+    e.angle = -0.35;
+    e.vy = FLAP;
+    e.score = 0;
+    e.elapsed = 0;
+    e.candles = [];
+    e.lastCenter = 0.42;
+    e.spawnX = e.w + e.w * 0.12;
+    (engine.current as unknown as { fill: () => void }).fill();
+    e.last = performance.now();
+    e.running = true;
+    setScore(0);
+    setPhase("playing");
+    haptics.press("high");
+  }, []);
+
+  const flap = useCallback(() => {
+    const e = engine.current;
+    if (!e.running) {
+      start();
+      return;
+    }
+    e.vy = FLAP;
+    haptics.press("low");
+  }, [start]);
 
   useProgramConsole({
-    main: { label: running ? "FLAP" : "PLAY", pulse: true, onPress: flap },
-    status: {
-      left: running ? `SCORE ${score}` : "FLAPPY PIPER",
-      right: `BEST ${best}`,
+    main: {
+      label: phase === "playing" ? "FLAP" : phase === "over" ? "PLAY AGAIN" : "PLAY",
+      pulse: true,
+      onPress: flap,
     },
+    status: { left: "FLAPPY PIPER", right: `BEST ${best}` },
   });
 
-  if (!running) {
-    return (
-      <MinigameBoard
-        title="Flappy Piper"
-        best={best}
-        lastScore={lastScore}
-      />
-    );
-  }
+  const kicker =
+    lastScore > 0 && lastScore >= best ? "Top of the board" : "Run over";
 
   return (
-    <ScreenRoot className="items-center justify-center">
-      <canvas
-        ref={canvasRef}
-        width={W}
-        height={H}
-        className="h-auto w-full rounded-md"
-      />
-    </ScreenRoot>
+    <div className="relative flex h-full w-full flex-col overflow-hidden bg-black text-text">
+      <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
+
+      {/* HUD */}
+      <div className="pointer-events-none relative z-10 px-[var(--screen-rim,24px)] pt-[18px]">
+        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">
+          Score
+        </div>
+        <div className="tnum text-4xl font-extrabold leading-none text-text">
+          {score}
+        </div>
+        <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">
+          Best <span className="tnum text-text-2">{best}</span>
+        </div>
+      </div>
+
+      {phase === "intro" && (
+        <div className="absolute inset-0 z-20 flex flex-col justify-center bg-black/93 p-[var(--screen-rim,24px)] backdrop-blur-[1px]">
+          <div className="flex items-center gap-2.5">
+            <Bird size={26} strokeWidth={2.4} className="text-brand-500" />
+            <div className="text-4xl font-extrabold leading-none tracking-tight text-text">
+              Flappy Piper
+            </div>
+          </div>
+          <p className="mt-2 max-w-[82%] text-sm leading-snug text-text-2">
+            Tap to lift the chip, let it fall, and slip through the candle gaps.
+            It moves calmly, but one bad line ends the run.
+          </p>
+          <div className="mt-4 text-[11px] font-bold uppercase tracking-[0.16em] text-text-3">
+            Press the <span className="text-brand-500">big button</span>
+          </div>
+        </div>
+      )}
+
+      {phase === "over" && (
+        <div className="absolute inset-0 z-20 flex flex-col justify-center bg-black/95 p-[var(--screen-rim,24px)]">
+          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-brand-500">
+            {kicker}
+          </div>
+          <div className="tnum text-5xl font-extrabold leading-none text-text">
+            {lastScore}
+          </div>
+          <div className="mt-1 text-[11px] uppercase tracking-[0.14em] text-text-3">
+            Best <span className="tnum text-text">{best}</span>
+          </div>
+          <div className="mt-4 text-[11px] font-bold uppercase tracking-[0.16em] text-text-3">
+            Press the <span className="text-brand-500">big button</span>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
