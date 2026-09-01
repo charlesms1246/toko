@@ -19,7 +19,7 @@ export default function DevGamesPage() {
           <TapTarget
             key={game}
             href={`/games/${game}`}
-            className="flex w-full items-center gap-3 border-b border-[var(--color-line)] px-4 py-3.5 last:border-b-0"
+            className="surface-skeuo rounded-card mb-1.5 flex w-full items-center gap-3 p-4 text-left"
           >
             <span className="text-brand-500">
               <GameIcon game={game} size={24} />
@@ -39,7 +39,7 @@ export default function DevGamesPage() {
           <TapTarget
             key={game}
             href={`/games/${game}`}
-            className="flex w-full items-center gap-3 border-b border-[var(--color-line)] px-4 py-3.5 last:border-b-0"
+            className="surface-skeuo rounded-card mb-1.5 flex w-full items-center gap-3 p-4 text-left"
           >
             <span className="text-[var(--color-premium-500)]">
               <GameIcon game={game} size={24} />

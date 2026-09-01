@@ -106,10 +106,13 @@ export default function GamesPage() {
       min: 0,
       max: entries.length - 1,
       step: 1,
-      value: clamped,
+      // Inverted against the index, exactly as the reference's own hub does it.
+      // The hardware convention is "drag up, value up"; on a list, up means
+      // *up the list*, so the knob counts the other way and the two agree.
+      value: entries.length - 1 - clamped,
       label: "SELECT",
-      format: (v) => `${pad(v + 1)}/${pad(entries.length)}`,
-      onChange: step,
+      format: (v) => `${pad(entries.length - v)}/${pad(entries.length)}`,
+      onChange: (v) => step(entries.length - 1 - v),
     },
     status: { left: "SELECT GAME", right: `$${formatCollateral(balance)}` },
   });
