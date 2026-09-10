@@ -290,7 +290,10 @@ function labelTexture(text: string): THREE.CanvasTexture {
   ctx.textBaseline = "middle";
   ctx.font = `700 34px ${SILKSCREEN_FONT}`;
   ctx.letterSpacing = "3px";
-  ctx.fillText(text, 128, 34);
+  // The play key's caption is whatever the route programmed — "PLAY" but also
+  // "TAKE THE DEAL". Condensing beats clipping; the pill captions are short
+  // enough that this never fires for them.
+  ctx.fillText(text, 128, 34, 236);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
@@ -317,13 +320,73 @@ function capLabelTexture(text: string): THREE.CanvasTexture {
   ctx.lineJoin = "round";
   ctx.strokeStyle = "rgba(8,8,6,0.92)";
   ctx.lineWidth = 7;
-  ctx.strokeText(text, 128, 34);
+  ctx.strokeText(text, 128, 34, 236);
   ctx.fillStyle = "#ffffff";
-  ctx.fillText(text, 128, 34);
+  ctx.fillText(text, 128, 34, 236);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
+
+/**
+ * The thumbwheel drum, with its detent values printed around the circumference.
+ *
+ * The bezel over this pocket has a rectangular window cut in it, so the drum is
+ * read the way a real slot wheel is: the selected value fills the window and the
+ * next one peeks in below. The drum was previously blank, which left the console
+ * with a control that changes the stake and shows nothing.
+ *
+ * Orientation matters and is not obvious. On a `CylinderGeometry` side, `u` runs
+ * around the circumference and `v` runs along the axis. The mount rotates the
+ * cylinder a quarter turn about z, so the axis lies horizontal — which means `u`
+ * reads as *vertical* travel on screen and `v` as horizontal. Text that should
+ * read left-to-right therefore has to be drawn rotated a quarter turn, running
+ * along the texture's y.
+ */
+function wheelDrumTexture(slots: string[], ink: string): THREE.CanvasTexture {
+  const n = Math.max(1, slots.length);
+  const slot = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = slot * n;
+  canvas.height = 384;
+  const ctx = canvas.getContext("2d")!;
+
+  // The drum is a dark part in every preset, so it carries its own ground
+  // rather than taking the shell colour — a stake has to stay readable when the
+  // body is bone and when it is graphite.
+  ctx.fillStyle = "#0b0b0c";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = ink;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `700 132px ${SILKSCREEN_FONT}`;
+  slots.forEach((text, i) => {
+    ctx.save();
+    ctx.translate(i * slot + slot / 2, canvas.height / 2);
+    // A QUARTER TURN CLOCKWISE, not anticlockwise. The cylinder's `u` winds the
+    // opposite way round from the guess above, so the other sign puts every
+    // glyph on its head — "25" reads as "S2" through the window.
+    ctx.rotate(Math.PI / 2);
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  });
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  return texture;
+}
+
+/**
+ * The width the screen's UI is authored against, in CSS pixels.
+ *
+ * Every type size and gap inside the glass is a fixed pixel value tuned at this
+ * width; `--screen-content-scale` then maps that layout onto whatever width the
+ * device is actually drawn at. Change this and the whole screen re-proportions,
+ * which is the point — one number, not a sweep of media queries.
+ */
+const AUTHOR_W = 390;
 
 /** A tiny studio scene baked to an environment map — no HDRI file. */
 function buildEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
@@ -394,6 +457,19 @@ export interface ConsoleCanvasProps {
    * the screen you are on has programmed them to do.
    */
   actionLabels?: { action1?: string; action2?: string };
+  /**
+   * What the big key does right now. The cap carries the brand mark, so this
+   * reads as silkscreen beneath it — the same treatment MENU and HOME get.
+   */
+  mainLabel?: string;
+  /**
+   * The thumbwheel's detent values, already formatted, plus which one is
+   * selected. They are printed around the drum, so the value shows through the
+   * bezel's window the way a real slot wheel reads. Without them the drum spins
+   * and says nothing.
+   */
+  wheelSlots?: string[];
+  wheelIndex?: number;
   /** Attract mode — dims the device slightly behind the PRESS START marquee. */
   idle?: boolean;
   /**
@@ -424,6 +500,9 @@ export default function ConsoleCanvas({
   screenElRef,
   keyGlow,
   actionLabels,
+  mainLabel,
+  wheelSlots,
+  wheelIndex = 0,
   idle = false,
   exportMode = false,
   className,
@@ -437,7 +516,6 @@ export default function ConsoleCanvas({
     renderer: THREE.WebGLRenderer;
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
-    tilt: THREE.Group;
     device: THREE.Group;
     keys: KeyMesh[];
     keyGlowPlanes: Map<ButtonKey, THREE.Mesh>;
@@ -446,6 +524,9 @@ export default function ConsoleCanvas({
     knobMat: THREE.MeshStandardMaterial;
     knobSpin: THREE.Group;
     wheelSpin: THREE.Group;
+    wheelDrumMat: THREE.MeshStandardMaterial;
+    /** The drum's eased spin target, driven by `wheelIndex`. */
+    wheelTarget: { value: number };
     logoMats: THREE.MeshStandardMaterial[];
     logoEyeMats: THREE.MeshStandardMaterial[];
     backPlateMat: THREE.MeshBasicMaterial;
@@ -455,6 +536,7 @@ export default function ConsoleCanvas({
       mat: THREE.MeshBasicMaterial;
       text: string;
     }[];
+    mainCaption: { mat: THREE.MeshBasicMaterial; text: string };
     envMap: THREE.Texture;
     invalidate: () => void;
     setKeyColors: (theme: Theme) => void;
@@ -529,12 +611,12 @@ export default function ConsoleCanvas({
     fill.position.set(...LIGHTS.fill.position);
     scene.add(fill);
 
-    // Group hierarchy: tilt (pointer/orientation lean) > device (model space)
-    const tilt = new THREE.Group();
-    scene.add(tilt);
+    // The device sits square to the camera. There is no lean group any more —
+    // see `onPointerMove` for why a rotated device and a DOM screen cannot both
+    // be right.
     const device = new THREE.Group();
     device.position.z = GROUP_Z;
-    tilt.add(device);
+    scene.add(device);
 
     const centerY = bodyCenterY(0);
     const centerX = toX(585);
@@ -824,6 +906,47 @@ export default function ConsoleCanvas({
       disposables.push(mesh.geometry, mat);
     });
 
+    /**
+     * The play key's caption, silkscreened under the cap.
+     *
+     * The cap itself carries the brand mark and no text, as the reference's
+     * does — the big key is "the thing you came here to press" and says so with
+     * the mark. But every screen programs `main.label` (PLAY, TAKE, PRESS, CASH
+     * OUT, ANTE UP) and none of it reached the player, because the label was
+     * passed to nothing. It reads here instead, in the same ink and the same
+     * place as MENU and HOME, because what a key does is exactly what a key
+     * caption is for.
+     *
+     * Sits in the gap between the cap and the knob pocket below it, which is
+     * about a quarter of a world unit — hence the tight plane.
+     */
+    const playSpecForCaption = BUTTON_SPECS[BUTTON_KEYS.indexOf("play")];
+    const mainCaptionMat = new THREE.MeshBasicMaterial({
+      map: capLabelTexture(""),
+      color: new THREE.Color("#ffffff"),
+      transparent: true,
+      opacity: 1,
+    });
+    const mainCaptionMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(
+        playSpecForCaption.w * 0.86,
+        playSpecForCaption.w * 0.16,
+      ),
+      mainCaptionMat,
+    );
+    // Below the mark, ON the cap, and parented to it so it travels with the
+    // key. The shell has no room for it: the gap between this cap and the knob
+    // pocket under it is a fraction of a unit, and a caption placed there is
+    // half swallowed by the pocket wall.
+    mainCaptionMesh.position.set(
+      0,
+      -playSpecForCaption.h * 0.3,
+      playSpecForCaption.depth / 2 + 0.08,
+    );
+    const playCapForCaption = keys.find((k) => k.userData.key === "play");
+    (playCapForCaption ?? device).add(mainCaptionMesh);
+    disposables.push(mainCaptionMesh.geometry, mainCaptionMat);
+
     // Pill captions
     const labelMats: THREE.MeshBasicMaterial[] = [];
     (
@@ -991,6 +1114,9 @@ export default function ConsoleCanvas({
       bumpMap: knobBump,
       bumpScale: 12,
     });
+    // The printed values arrive from `wheelSlots`; until a screen programs the
+    // wheel the drum stays bare, which is the honest state for a control with
+    // nothing assigned to it.
     const wheelDrumGeo = new THREE.CylinderGeometry(0.37, 0.37, 0.76, 64, 1, false);
     const wheelDrum = new THREE.Mesh(wheelDrumGeo, wheelDrumMat);
     wheelDrum.castShadow = true;
@@ -1231,13 +1357,24 @@ export default function ConsoleCanvas({
         // Points 2 and 3 are the inner corner where the aperture steps up.
         if ((i === 2 || i === 3) && sy < stepY) stepY = sy;
       });
-      const w = maxX - minX + 8;
-      const h = maxY - minY + 8;
-      el.style.left = `${minX - 4}px`;
-      el.style.top = `${minY - 4}px`;
+      // A hair of bleed so no seam shows between the DOM surface and the bevel
+      // that overhangs it. It has to be PROPORTIONAL: a flat 4px was about 1% of
+      // the aperture on a phone, which is enough to see the black surface
+      // standing proud of the frame all the way round.
+      const bleed = Math.max(1, Math.min(4, (maxX - minX) * 0.004));
+      const w = maxX - minX + bleed * 2;
+      const h = maxY - minY + bleed * 2;
+      el.style.left = `${minX - bleed}px`;
+      el.style.top = `${minY - bleed}px`;
       el.style.width = `${w}px`;
       el.style.height = `${h}px`;
-      const scale = Math.max(0.4, Math.min(1, w / 340));
+      // The content is authored against AUTHOR_W and scaled to whatever width
+      // the device is actually drawn at. The clamp used to stop at 1, so above
+      // 340px the transform did nothing and the layout simply got wider while
+      // every font size stayed a fixed pixel value — which is why type shrank
+      // relative to the glass as the window grew. It scales up now, so the
+      // screen looks the same at every size, which is what a screen does.
+      const scale = Math.max(0.4, w / AUTHOR_W);
       el.style.setProperty("--screen-content-scale", scale.toFixed(4));
 
       // The aperture is an L: the bottom-right is notched out for the Play key.
@@ -1285,6 +1422,75 @@ export default function ConsoleCanvas({
         host.style.setProperty("--device-top", `${dMinY}px`);
         host.style.setProperty("--device-bottom", `${height - dMaxY}px`);
         host.style.setProperty("--device-width", `${dMaxX - dMinX}px`);
+
+        // The aperture, published the same way and for the same reason.
+        //
+        // `--device-*` is the whole hardware — shell, keys and chin. A portal
+        // that wants to cover only the GLASS could not, because the screen rect
+        // lived in inline styles on the surface element and nothing outside
+        // could see it. That is why the menu used to swallow the keys and the
+        // chin and take the console off screen with it.
+        host.style.setProperty("--screen-left", `${minX - bleed}px`);
+        host.style.setProperty("--screen-top", `${minY - bleed}px`);
+        host.style.setProperty("--screen-right", `${width - (maxX + bleed)}px`);
+        host.style.setProperty("--screen-bottom", `${height - (maxY + bleed)}px`);
+        host.style.setProperty("--screen-width", `${w}px`);
+
+        // Every control, published as a rect the onboarding tour can point at.
+        //
+        // The tour names five keys, the dial and the stake wheel, and until now
+        // it pointed at none of them — it was a modal at the bottom of the
+        // VIEWPORT describing hardware that might not even be under it. The
+        // reference hung `data-tour-anchor` on zero-size elements over these
+        // same positions; publishing the rects does the same job and survives
+        // the portal, which is where the tour actually lives.
+        const anchor = (name: string, cx: number, cy: number, hw: number, hh: number) => {
+          let aMinX = Infinity;
+          let aMinY = Infinity;
+          let aMaxX = -Infinity;
+          let aMaxY = -Infinity;
+          for (const [ax, ay] of [
+            [cx - hw, cy - hh],
+            [cx + hw, cy - hh],
+            [cx + hw, cy + hh],
+            [cx - hw, cy + hh],
+          ]) {
+            projected.set(ax, ay, 0.2).applyMatrix4(device.matrixWorld).project(camera);
+            const px = (projected.x * 0.5 + 0.5) * width;
+            const py = (-projected.y * 0.5 + 0.5) * height;
+            if (px < aMinX) aMinX = px;
+            if (px > aMaxX) aMaxX = px;
+            if (py < aMinY) aMinY = py;
+            if (py > aMaxY) aMaxY = py;
+          }
+          host.style.setProperty(`--anchor-${name}-x`, `${aMinX}px`);
+          host.style.setProperty(`--anchor-${name}-y`, `${aMinY}px`);
+          host.style.setProperty(`--anchor-${name}-w`, `${aMaxX - aMinX}px`);
+          host.style.setProperty(`--anchor-${name}-h`, `${aMaxY - aMinY}px`);
+        };
+        BUTTON_KEYS.forEach((key, i) => {
+          const spec = BUTTON_SPECS[i];
+          const pos = BUTTON_POS[i];
+          anchor(key, toX(pos.x) + spec.dx, toY(pos.y) + spec.dy, spec.w / 2, spec.h / 2);
+        });
+        anchor(
+          "knob",
+          toX(KNOB_POCKET.px),
+          toY(KNOB_POCKET.py),
+          KNOB_POCKET.w / 2,
+          KNOB_POCKET.h / 2,
+        );
+        anchor(
+          "amount",
+          toX(WHEEL_POCKET.px),
+          toY(WHEEL_POCKET.py),
+          WHEEL_POCKET.w / 2,
+          WHEEL_POCKET.h / 2,
+        );
+        host.style.setProperty("--anchor-screen-x", `${minX - bleed}px`);
+        host.style.setProperty("--anchor-screen-y", `${minY - bleed}px`);
+        host.style.setProperty("--anchor-screen-w", `${w}px`);
+        host.style.setProperty("--anchor-screen-h", `${h}px`);
       }
     };
 
@@ -1319,16 +1525,6 @@ export default function ConsoleCanvas({
         }
       }
 
-      // Lean toward the pointer
-      if (
-        Math.abs(tilt.rotation.x - tiltTarget.x) > 1e-4 ||
-        Math.abs(tilt.rotation.y - tiltTarget.y) > 1e-4
-      ) {
-        tilt.rotation.x += (tiltTarget.x - tilt.rotation.x) * Math.min(1, dt * 6);
-        tilt.rotation.y += (tiltTarget.y - tilt.rotation.y) * Math.min(1, dt * 6);
-        animating = true;
-      }
-
       // Knob / wheel settle
       if (Math.abs(knobSpin.rotation.y - knobTarget.value) > 1e-4) {
         knobSpin.rotation.y +=
@@ -1349,7 +1545,6 @@ export default function ConsoleCanvas({
       }
     };
 
-    const tiltTarget = { x: 0, y: 0 };
     const knobTarget = { value: 0 };
     const wheelTarget = { value: 0 };
 
@@ -1441,19 +1636,20 @@ export default function ConsoleCanvas({
 
         if (steps !== 0) {
           dragging.emitted = detents;
-          const turn =
-            dragging.kind === "knob"
-              ? (Math.PI * 2) / KNOB.snapInterval
-              : (Math.PI * 2) / 12;
-          // The drum rolls with the thumb. `steps` is the *value* delta and
+          const turn = (Math.PI * 2) / KNOB.snapInterval;
+          // The knob rolls with the thumb. `steps` is the *value* delta and
           // already carries the "up means more" inversion, so the visible spin
           // takes the same sign as the pointer's travel instead.
-          const spin = steps * turn;
           if (dragging.kind === "knob") {
-            knobTarget.value += spin;
+            knobTarget.value += steps * turn;
             handlers.current.onKnobStep?.(steps);
           } else {
-            wheelTarget.value += spin;
+            // The drum is NOT spun from the drag. It carries printed values now,
+            // so its angle has to be whatever the selected slot is — spinning it
+            // by accumulated drag would let the picture drift off the value the
+            // moment a step is clamped at either end of the ladder. The step
+            // goes out, the new index comes back as a prop, and the effect below
+            // sets the angle. One render of latency buys a drum that cannot lie.
             handlers.current.onWheelStep?.(steps);
           }
         }
@@ -1461,12 +1657,16 @@ export default function ConsoleCanvas({
         return;
       }
 
-      // Idle lean
-      const rect = canvas.getBoundingClientRect();
-      const nx = (event.clientX - rect.left) / rect.width - 0.5;
-      const ny = (event.clientY - rect.top) / rect.height - 0.5;
-      tiltTarget.y = nx * 0.34;
-      tiltTarget.x = ny * 0.18;
+      // No idle lean. The device used to yaw and pitch toward the pointer on
+      // every move, which cannot work here: the screen is DOM, positioned from
+      // the *axis-aligned bounding box* of the projected aperture, and a DOM
+      // rect has no rotation. Under yaw that box is strictly larger than the
+      // aperture, so the black surface grew and overhung the bezel — the screen
+      // visibly came unstuck from the device it is meant to sit in.
+      //
+      // The reference turns the console only while it is being held (pointer
+      // down, `grab`/`grabbing` cursors), which is why it always looks seated.
+      // A lean is not worth the registration of the one surface that matters.
     };
 
     const releaseKey = () => {
@@ -1486,8 +1686,6 @@ export default function ConsoleCanvas({
     };
 
     const onPointerLeave = () => {
-      tiltTarget.x = 0;
-      tiltTarget.y = 0;
       dragging = null;
       releaseKey();
     };
@@ -1541,7 +1739,6 @@ export default function ConsoleCanvas({
       renderer,
       scene,
       camera,
-      tilt,
       device,
       keys,
       keyGlowPlanes,
@@ -1550,11 +1747,14 @@ export default function ConsoleCanvas({
       knobMat,
       knobSpin,
       wheelSpin,
+      wheelDrumMat,
+      wheelTarget,
       logoMats,
       logoEyeMats,
       backPlateMat,
       labelMats,
       actionCaptions,
+      mainCaption: { mat: mainCaptionMat, text: "" },
       envMap,
       invalidate,
       setKeyColors,
@@ -1712,6 +1912,73 @@ export default function ConsoleCanvas({
     });
     s.invalidate();
   }, [a1, a2]);
+
+  // ── Play-key silkscreen ────────────────────────────────────────────────────
+  const mainText = mainLabel ?? "";
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s || s.mainCaption.text === mainText) return;
+    s.mainCaption.mat.map?.dispose();
+    s.mainCaption.mat.map = capLabelTexture(mainText);
+    s.mainCaption.mat.needsUpdate = true;
+    s.mainCaption.text = mainText;
+    s.invalidate();
+  }, [mainText]);
+
+  // ── Thumbwheel drum ────────────────────────────────────────────────────────
+  // The values are printed around the drum and the selected one is turned into
+  // the bezel's window. Both halves key off the same slot list, so the picture
+  // and the value cannot disagree.
+  const slotKey = (wheelSlots ?? []).join("\u0000");
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    const slots = slotKey ? slotKey.split("\u0000") : [];
+    s.wheelDrumMat.map?.dispose();
+    // PRINTED IN DESCENDING ORDER, so the drum follows the thumb.
+    //
+    // The console's convention is "drag up, the value goes up" — the same as the
+    // knob. On a wheel with values ascending upward, honouring that forces the
+    // surface to roll DOWNWARD as you drag up, because the next-larger value
+    // sits above the window and has to come down into it. That reads as the
+    // control fighting your thumb.
+    //
+    // Printing them the other way round puts the next-larger value BELOW the
+    // window, so a drag upward rolls the surface upward to fetch it. The value
+    // still climbs with the drag; the drum now moves with it.
+    s.wheelDrumMat.map = slots.length
+      ? wheelDrumTexture([...slots].reverse(), "#f2f2f2")
+      : null;
+    // `map` is MULTIPLIED by `color`, and the drum's own colour is near-black —
+    // so a printed drum has to drop to white or the numbers are multiplied into
+    // the ground and vanish. The texture carries its own dark background, so the
+    // part still reads as the same black drum.
+    s.wheelDrumMat.color.set(slots.length ? 0xffffff : HARDWARE_COLORS.wheelDrum);
+    // Ridges are what makes it read as a wheel, but at full depth they chew the
+    // glyphs apart. Enough relief to catch the key light, not enough to distort.
+    s.wheelDrumMat.bumpScale = slots.length ? 3 : 12;
+    s.wheelDrumMat.needsUpdate = true;
+    s.invalidate();
+  }, [slotKey]);
+
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    const count = slotKey ? slotKey.split("\u0000").length : 0;
+    // A bare drum has nothing to align, so leave it where it is.
+    if (count < 2) return;
+    // One slot per detent, plus HALF a slot of phase.
+    //
+    // Without the half, the window frames the seam between two values instead of
+    // a value: at index 0 it showed the top of "1" and the bottom of "25" at
+    // once. A slot's centre is at (i + 0.5) / count around the drum, not i /
+    // count, and that is where the window has to land.
+    // The print order is reversed (see the texture effect), so the selected
+    // value's slot is counted from the far end.
+    const slotAt = count - 1 - wheelIndex;
+    s.wheelTarget.value = -((slotAt + 0.5) / count) * Math.PI * 2;
+    s.invalidate();
+  }, [slotKey, wheelIndex]);
 
   // ── Key bloom targets ──────────────────────────────────────────────────────
   const glowKey = JSON.stringify(keyGlow ?? {});

@@ -1,14 +1,11 @@
 "use client";
 
 /**
- * The roll ladder on the console — Press and Breakout.
+ * The roll ladder on the console — Press.
  *
  * Each rung is a real Round staked with the previous rung's payout. Win
- * and the console offers PRESS or FOLD; lose and the ladder ends there.
- *
- * Press lets you pick a side each rung. Breakout locks the side chosen at the
- * start, which is what makes it a call on the move continuing rather than a
- * fresh bet every window.
+ * and the console offers PRESS or FOLD; lose and the ladder ends there. You
+ * pick a side afresh on every rung.
  */
 
 import { useState } from "react";
@@ -36,14 +33,8 @@ import { useSpot } from "@/lib/api/hooks";
 import { formatPrice } from "@/lib/api/math";
 import * as markets from "@/lib/dreamdex/markets";
 
-export default function LadderConsole({
-  title,
-  lockSide,
-}: {
-  title: string;
-  lockSide: boolean;
-}) {
-  const ladder = useRollLadder(lockSide);
+export default function LadderConsole({ title }: { title: string }) {
+  const ladder = useRollLadder();
   const spot = useSpot(ladder.round.window?.asset ?? "BTC");
   const { round } = ladder;
   const [side, setSide] = useState<Side>("up");
@@ -54,14 +45,16 @@ export default function LadderConsole({
   useProgramConsole({
     main: ladder.canPress
       ? { label: "PRESS", pulse: true, onPress: ladder.press }
-      : live
-        ? { label: "RIDING", disabled: true }
-        : {
-            label: round.status === "pending" ? "…" : "START",
-            loading: round.status === "pending",
-            disabled: !round.canEnter || !ask,
-            onPress: () => ladder.start(side),
-          },
+      : ladder.finished
+        ? { label: "NEW LADDER", pulse: true, onPress: ladder.clear }
+        : live
+          ? { label: "RIDING", disabled: true }
+          : {
+              label: round.status === "pending" ? "…" : "START",
+              loading: round.status === "pending",
+              disabled: !round.canEnter || !ask,
+              onPress: () => ladder.start(side),
+            },
     action1: ladder.canPress
       ? { label: "FOLD", onPress: ladder.fold }
       : {

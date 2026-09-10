@@ -121,6 +121,27 @@ export default function ConsoleStage({
 
   const status = controls.status;
 
+  /**
+   * The thumbwheel's detents, formatted, so the drum can print them.
+   *
+   * The dial is an index range with a `format`, so the slots are just that range
+   * walked. Capped because the drum has to stay legible: a wheel with dozens of
+   * detents is a knob, and printing it would produce a blur rather than a
+   * readout. Above the cap the drum stays bare rather than lying.
+   */
+  const wheel = useMemo(() => {
+    const dial = controls.numberWheel;
+    if (!dial || !dial.format || dial.step <= 0) return null;
+    const count = Math.round((dial.max - dial.min) / dial.step) + 1;
+    if (count < 2 || count > 12) return null;
+    return {
+      slots: Array.from({ length: count }, (_, i) =>
+        dial.format!(dial.min + i * dial.step),
+      ),
+      index: Math.round((dial.value - dial.min) / dial.step),
+    };
+  }, [controls.numberWheel]);
+
   return (
     <div className="console-stage" style={{ background: ambient }}>
       <div
@@ -158,6 +179,9 @@ export default function ConsoleStage({
             action1: controls.action1?.label,
             action2: controls.action2?.label,
           }}
+          mainLabel={controls.main?.label}
+          wheelSlots={wheel?.slots}
+          wheelIndex={wheel?.index ?? 0}
           onPress={handlePress}
           onKnobStep={(steps) => stepDial("knob", steps)}
           onWheelStep={(steps) => stepDial("numberWheel", steps)}

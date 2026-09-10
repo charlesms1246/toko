@@ -1,16 +1,16 @@
 "use client";
 
 /**
- * The roll ladder — Press and Breakout.
+ * The roll ladder — Press.
  *
  * A rung is one real Round. Win it and the payout becomes the stake for
  * the next rung, so the multiple compounds across consecutive windows; lose a
  * rung and the ladder ends with it. Folding stops and keeps what the last rung
  * paid.
  *
- * This is what "tighten the band, or fold" and "call the break before it
- * happens" become on a venue with one strike per window: you cannot buy a band,
- * but you can stake a win on the next window, and that is the same ratchet.
+ * This is what "tighten the band, or fold" becomes on a venue with one strike
+ * per window: you cannot buy a band, but you can stake a win on the next
+ * window, and that is the same ratchet.
  *
  * Two rules it holds to:
  *
@@ -55,29 +55,30 @@ export interface RollLadder {
   start: (side: Side) => void;
   press: () => void;
   fold: () => void;
+  /** Clear a finished ladder and go back to the start. */
+  clear: () => void;
 }
 
 const BASE_CONTRACTS = 1;
 const SLIPPAGE = 0.02;
 
-/**
- * @param lockSide Breakout rolls the *same* direction each rung — that is what
- *   makes it a call on continuation rather than a fresh bet each time.
- */
-export function useRollLadder(lockSide: boolean): RollLadder {
-  const round = useRound();
+export function useRollLadder(): RollLadder {
   const [banked, setBanked] = useState<Rung[]>([]);
   const [stake, setStake] = useState(BASE_CONTRACTS);
-  const [lockedSide, setLockedSide] = useState<Side | null>(null);
   const [folded, setFolded] = useState(false);
   const [started, setStarted] = useState(false);
+  // A rung's result is the player's to act on. The round's own five-second
+  // auto-reset would take PRESS and FOLD away mid-decision and drop the rungs
+  // already banked, so a ladder in progress holds its result until pressed.
+  const round = useRound(null, 0, started);
 
   const justWon = round.status === "won";
   const justLost = round.status === "lost" || round.status === "void";
 
   const buyAt = useCallback(
     (side: Side, contracts: number) => {
-      const offer = side === "up" ? round.book.yesAsks[0] : round.book.noAsks[0];
+      const offer =
+        side === "up" ? round.book.yesAsks[0] : round.book.noAsks[0];
       if (!offer) return;
       const limit =
         side === "up" ? offer.price + SLIPPAGE : 1 - offer.price - SLIPPAGE;
@@ -92,10 +93,9 @@ export function useRollLadder(lockSide: boolean): RollLadder {
       setFolded(false);
       setStarted(true);
       setStake(BASE_CONTRACTS);
-      setLockedSide(lockSide ? side : null);
       buyAt(side, BASE_CONTRACTS);
     },
-    [buyAt, lockSide],
+    [buyAt],
   );
 
   /** Bank the rung that just won, then stake its payout on the next window. */
@@ -107,10 +107,17 @@ export function useRollLadder(lockSide: boolean): RollLadder {
     // A winning contract redeems for exactly 1, so the payout in contracts is
     // the stake for the next rung.
     setStake(contracts);
-    const side = lockedSide ?? round.side ?? "up";
     round.reset();
-    buyAt(side, contracts);
-  }, [buyAt, justWon, lockedSide, round]);
+    buyAt(round.side ?? "up", contracts);
+  }, [buyAt, justWon, round]);
+
+  /** Both endings — folded, or broke on a rung — clear the same way. */
+  const clear = useCallback(() => {
+    setBanked([]);
+    setFolded(false);
+    setStarted(false);
+    round.reset();
+  }, [round]);
 
   const fold = useCallback(() => {
     if (justWon && round.entryCost != null) {
@@ -139,5 +146,6 @@ export function useRollLadder(lockSide: boolean): RollLadder {
     start,
     press,
     fold,
+    clear,
   };
 }

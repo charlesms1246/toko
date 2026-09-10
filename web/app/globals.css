@@ -131,6 +131,14 @@ body {
   inset: 0;
   top: env(safe-area-inset-top);
   bottom: env(safe-area-inset-bottom);
+  /*
+   * Clip the surround. It is inset by NEGATIVE hundreds of pixels so its drift
+   * animation never shows an edge, which without this grows the document's
+   * scroll width to about three viewports and hands the page a horizontal
+   * scrollbar — most visible on a phone, where the console then sits in a
+   * canvas you can slide sideways off.
+   */
+  overflow: hidden;
 }
 
 /*

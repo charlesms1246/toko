@@ -17,6 +17,7 @@
  */
 
 import { getClient } from "./client";
+import { createPoller } from "./poller";
 
 export interface Window {
   marketId: string;
@@ -109,21 +110,17 @@ export async function load(): Promise<void> {
   }
 }
 
-let poll: ReturnType<typeof setInterval> | null = null;
+const poller = createPoller();
 
 /**
  * Keep the window list fresh. A 1m window rolls every minute, so this refreshes
  * often enough to pick up the successor without hammering the indexer.
+ *
+ * Six screens share this one poll, so the interval is refcounted: it stops when
+ * the last of them unmounts, not the first.
  */
 export function startPolling(everyMs = 5000): () => void {
-  void load();
-  poll ??= setInterval(() => void load(), everyMs);
-  return () => {
-    if (poll) {
-      clearInterval(poll);
-      poll = null;
-    }
-  };
+  return poller.track("markets", everyMs, load);
 }
 
 /** Seconds until a window locks. Negative once it has. */

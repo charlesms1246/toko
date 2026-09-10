@@ -9,7 +9,15 @@
  */
 
 import { useCallback, useState, useSyncExternalStore } from "react";
-import { createWalletClient, http, isAddress, parseAbi, parseUnits, type Address } from "viem";
+import {
+  createWalletClient,
+  formatUnits,
+  http,
+  isAddress,
+  parseAbi,
+  parseUnits,
+  type Address,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import TapTarget from "@/components/ui/TapTarget";
 import { MenuRow } from "@/components/menu/MenuUI";
@@ -32,6 +40,11 @@ export default function WithdrawPage() {
   const [lastTx, setLastTx] = useState<string | null>(null);
 
   const balance = Number(state.collateral) / 10 ** COLLATERAL.decimals;
+  // What MAX writes. Formatted from the raw balance, so it is the balance
+  // exactly: `toFixed(2)` rounds half up, which can land above the balance and
+  // make the form reject its own MAX, and rounds down otherwise, stranding dust
+  // that MAX is there to sweep.
+  const maxAmount = formatUnits(state.collateral, COLLATERAL.decimals);
   const value = Number(amount);
   const valid =
     Number.isFinite(value) && value > 0 && value <= balance && isAddress(to);
@@ -94,7 +107,7 @@ export default function WithdrawPage() {
         <button
           type="button"
           className="shrink-0 rounded-full border border-[var(--color-line-strong)] px-3 py-1 text-[11px] font-bold text-text-2"
-          onClick={() => setAmount(balance.toFixed(2))}
+          onClick={() => setAmount(maxAmount)}
         >
           MAX
         </button>

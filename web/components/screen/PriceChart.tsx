@@ -162,8 +162,25 @@ export default function PriceChart({
           </svg>
 
           {view.entryY != null && (
+            // The tag rides with its own line, so when the strike sits near the
+            // top of the range it climbs into the top-right corner — where a
+            // screen's `StageReadout` also anchors. Above the threshold it
+            // moves to the other rim rather than being clamped down or hidden:
+            // the label has to stay on the level it names, and both of those
+            // would put it somewhere the entry price is not.
+            //
+            // Unreproduced as an overlap, but the near miss is real: a window
+            // with the entry line at about 31% put this tag within a few pixels
+            // of a full-height readout. The threshold is a percentage against a
+            // readout measured in pixels, so it cannot be exact — it is set
+            // wide enough to cover the stage heights this renders at, and errs
+            // toward flipping early because the left rim costs nothing.
             <span
-              className="pointer-events-none absolute right-[var(--screen-rim,12px)] font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-white/55"
+              className={`pointer-events-none absolute font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-white/55 ${
+                view.entryY < 35
+                  ? "left-[var(--screen-rim,12px)]"
+                  : "right-[var(--screen-rim,12px)]"
+              }`}
               style={{ top: `calc(${view.entryY}% - 12px)` }}
             >
               Entry

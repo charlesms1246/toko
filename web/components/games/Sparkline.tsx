@@ -5,7 +5,7 @@ import type { PricePoint } from "@/lib/api/prices";
 
 /**
  * The 60-second price trace shown on the console screen. Optional horizontal
- * markers draw the strike (Lucky / Moonshot) or the band edges (Range).
+ * markers draw the strike.
  */
 export default function Sparkline({
   points,

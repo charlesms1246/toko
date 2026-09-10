@@ -38,6 +38,7 @@ import {
   MAKER_GAS_LIMIT,
 } from "./config";
 import { getClient } from "./client";
+import { getTrader } from "./trader";
 import { exportKey } from "./wallet";
 import type { Window } from "./markets";
 
@@ -104,22 +105,6 @@ export function snapSize(size: bigint, grid: Grid): bigint {
   return snapped < grid.minQuantity ? 0n : snapped;
 }
 
-let trader: unknown = null;
-
-function getTrader() {
-  if (trader) return trader;
-  const client = getClient();
-  const key = exportKey();
-  if (!client || !key) return null;
-  trader = client.createTrader({
-    privateKey: key,
-    decimals: COLLATERAL.decimals,
-    // Without this the SDK's 10M default demands 0.6 STT of balance to sign.
-    gas: GAS_LIMIT,
-  });
-  return trader;
-}
-
 export interface OrderOutcome {
   ok: boolean;
   hash?: string;
@@ -139,11 +124,17 @@ const expiryNs = (w: Window) => BigInt(w.expiry) * 1_000_000_000n;
 function summarise(res: any): OrderOutcome {
   const fills = (res.fills ?? []) as { quantityFilled: bigint; fillPrice: bigint }[];
   const filled = fills.reduce((sum, f) => sum + BigInt(f.quantityFilled ?? 0n), 0n);
+  // Size-weighted, not the first level touched: an order that sweeps several
+  // levels would otherwise report the best price it reached as the blended one.
+  const paid = fills.reduce(
+    (sum, f) => sum + BigInt(f.quantityFilled ?? 0n) * BigInt(f.fillPrice ?? 0n),
+    0n,
+  );
   return {
     ok: filled > 0n,
     hash: res.hash,
     filled,
-    fillPrice: fills[0]?.fillPrice,
+    fillPrice: filled > 0n ? paid / filled : undefined,
   };
 }
 
@@ -201,8 +192,9 @@ export async function buy(
 /**
  * Rest a bid on the book instead of taking one.
  *
- * This is what makes Pin and co-op play *maker* games: the order sits at the
- * called price and fills only if the market comes to it. Two consequences:
+ * This is what makes Lucky's rest-instead-of-fail path and co-op play *maker*
+ * moves: the order sits at the called price and fills only if the market comes
+ * to it. Two consequences:
  *
  * - Escrow is locked for as long as it rests. It is released by a fill, a
  *   cancel, or the order ageing out.
@@ -284,26 +276,35 @@ export async function cancel(pool: string, orderId: bigint): Promise<OrderOutcom
   }
 }
 
-/** Order ids this wallet has resting on a pool, straight from the pool. */
-export async function ownOpenOrders(pool: string): Promise<bigint[]> {
+/**
+ * Order ids this wallet has resting on a pool, straight from the pool.
+ *
+ * `null` means the read did not happen. An empty array is a real answer —
+ * nothing resting — and callers act on it, so a dropped RPC read must not be
+ * able to impersonate one.
+ */
+export async function ownOpenOrders(pool: string): Promise<bigint[] | null> {
   const key = exportKey();
-  if (!key) return [];
+  if (!key) return null;
   return openOrdersOf(pool, privateKeyToAccount(key).address);
 }
 
 /**
- * Order ids *any* address has resting on a pool.
+ * Order ids *any* address has resting on a pool. `null` when the read failed.
  *
  * Co-op needs this: the person opening a challenge link has to know whether the
  * challenger's bid is still on the book, and that is somebody else's order.
  */
-export async function openOrdersOf(pool: string, address: Address): Promise<bigint[]> {
+export async function openOrdersOf(
+  pool: string,
+  address: Address,
+): Promise<bigint[] | null> {
   const client = getClient();
-  if (!client) return [];
+  if (!client) return null;
   try {
     return (await client.getOwnOpenOrdersOnchain(pool, address)) as bigint[];
   } catch {
-    return [];
+    return null;
   }
 }
 

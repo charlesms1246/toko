@@ -135,9 +135,16 @@ const erc20 = parseAbi([
   "function faucet(uint256 amount)",
 ]);
 
+/** Counts refreshes so a slow reply cannot overwrite a newer balance. */
+let latestRead = 0;
+
 export async function refresh(): Promise<void> {
   const address = ensureWallet();
   if (!address) return;
+  // Called from mount effects, after every order, and from `ensureFunded`, so
+  // reads overlap. Only the newest may write: a reply that arrives late carries
+  // a pre-trade balance, and screens read this straight after awaiting a trade.
+  const mine = ++latestRead;
   set({ loading: true, error: null });
   try {
     const [gas, collateral] = await Promise.all([
@@ -149,8 +156,10 @@ export async function refresh(): Promise<void> {
         args: [address],
       }) as Promise<bigint>,
     ]);
+    if (mine !== latestRead) return;
     set({ gas, collateral, loading: false });
   } catch (err) {
+    if (mine !== latestRead) return;
     set({
       loading: false,
       error: err instanceof Error ? err.message : "Could not read balances",
@@ -228,6 +237,28 @@ const lastClaim = (): number => {
   }
 };
 
+export interface GrantStatus {
+  amount: number;
+  kind: "signup" | "weekly";
+  nextAt: number;
+}
+
+const readGrant = (): GrantStatus => {
+  const last = lastClaim();
+  return {
+    amount: last ? WEEKLY_GRANT : SIGNUP_GRANT,
+    kind: last ? "weekly" : "signup",
+    nextAt: last ? last + GRANT_INTERVAL_MS : 0,
+  };
+};
+
+let grant: GrantStatus | null = null;
+
+function setGrant(next: GrantStatus) {
+  grant = next;
+  listeners.forEach((fn) => fn());
+}
+
 /**
  * How many players a referral code has actually brought in.
  *
@@ -251,23 +282,20 @@ export async function invitedCount(code: string): Promise<number | null> {
 /**
  * What the next claim would be, and when it unlocks.
  *
- * `nextAt` of 0 means there is nothing to wait for. Deliberately free of
- * `Date.now()` so a screen can call it while rendering — reading the clock
- * during render is what the React Compiler's purity rule rejects, so the caller
- * compares against its own ticking clock.
+ * The schedule lives in local storage, so it is read once here and published to
+ * subscribers rather than read during render — the same impurity the rest of the
+ * app routes around with `useSyncExternalStore`. `nextAt` of 0 means there is
+ * nothing to wait for; it is deliberately free of `Date.now()`, so a screen
+ * compares it against its own ticking clock.
  */
-export function grantStatus(): {
-  amount: number;
-  kind: "signup" | "weekly";
-  nextAt: number;
-} {
-  const last = typeof window === "undefined" ? 0 : lastClaim();
-  return {
-    amount: last ? WEEKLY_GRANT : SIGNUP_GRANT,
-    kind: last ? "weekly" : "signup",
-    nextAt: last ? last + GRANT_INTERVAL_MS : 0,
-  };
+export function hydrateGrant() {
+  if (grant || typeof window === "undefined") return;
+  setGrant(readGrant());
 }
+
+/** Null until `hydrateGrant` has read the schedule on the client. */
+export const getGrantSnapshot = () => grant;
+export const getGrantServerSnapshot = (): GrantStatus | null => null;
 
 /**
  * Mint the player's collateral: `SIGNUP_GRANT` the first time, `WEEKLY_GRANT`
@@ -288,7 +316,7 @@ export async function requestCollateral(): Promise<GrantResult> {
   if (!account || !address) return { ok: false, reason: "No wallet yet" };
   if (needsGas(state.gas)) return { ok: false, reason: "Needs STT for gas first" };
 
-  const status = grantStatus();
+  const status = grant ?? readGrant();
   if (Date.now() < status.nextAt) {
     const days = Math.ceil((status.nextAt - Date.now()) / (24 * 60 * 60 * 1000));
     return {
@@ -319,6 +347,7 @@ export async function requestCollateral(): Promise<GrantResult> {
     } catch {
       // not persisted — the schedule restarts, which only ever helps the player
     }
+    setGrant(readGrant());
     await refresh();
     return {
       ok: true,

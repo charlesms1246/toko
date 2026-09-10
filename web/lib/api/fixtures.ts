@@ -34,21 +34,11 @@ export const ACHIEVEMENTS: AchievementDef[] = [
 export const achievementImage = (slug: string) =>
   `/assets/achievements/achievement-${slug.replace(/_/g, "-")}.webp`;
 
-/**
- * One line each, describing what the game actually does now.
- *
- * Four of these still described the pre-integration mechanics — Pin paying for
- * the closest call, Press tightening a *band* (that was Range, which no longer
- * exists) — which is a promise the game does not keep.
- */
+/** One line each, describing what the game actually does now. */
 export const GAME_TAGLINES: Record<GameId, string> = {
   lucky: "Pick a side. Pick a payout.",
-  moonshot: "Aim far. Get paid far.",
-  pin: "Name your price. Wait for the market to come to you.",
   snipe: "The offer slides toward zero. Take it before it is pulled.",
   press: "Roll a win into the next window, or fold.",
-  rush: "Take the deal, or hold it to the buzzer.",
-  breakout: "Call the move continuing, window after window.",
   duel: "Post your odds. Someone takes the other side.",
 };
 

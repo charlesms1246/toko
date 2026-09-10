@@ -16,9 +16,14 @@
  * Nothing here is modelled. The countdown is the window's real expiry, the
  * prices are the resting book, and the result comes from the oracle.
  *
- * Lucky and Moonshot are the same instrument at different ends of the price
- * range, so they are the same screen with a different ladder — Moonshot's rungs
- * only fill when a side is a heavy underdog, which is what makes it a moonshot.
+ * One ladder spans the whole range, from the market price out to the deep tail
+ * where a side trades at a cent or two. The far rungs only fill when the book
+ * agrees that side is a heavy underdog — that is what makes them long shots,
+ * and it is a turn of the knob rather than a different game.
+ *
+ * When a limit finds nobody, the same bid can be **rested** on the book instead
+ * of dead-ending: it fills only if the market comes to it, and the escrow comes
+ * back by itself when the window closes.
  */
 
 import { useState } from "react";
@@ -71,15 +76,33 @@ export default function RoundConsole({
   const target = LADDER[rung];
   const settled = ["won", "lost", "void"].includes(round.status);
   const live = round.status === "open";
+  const resting = round.status === "resting";
 
-  const ask = book.best(
-    side === "up" ? round.book.yesAsks : round.book.noAsks,
-  );
+  const ask = book.best(side === "up" ? round.book.yesAsks : round.book.noAsks);
   const marketMultiple = ask ? book.multipleAt(ask.price) : null;
+
+  /**
+   * What the book will actually pay for the position right now — the live bid
+   * on the side held, times what is held. This is the deal on offer, and it is
+   * a real bid with real size behind it, not an estimate.
+   */
+  const bid = live
+    ? book.best(round.side === "up" ? round.book.yesBids : round.book.noBids)
+    : null;
+  const contracts = Number(round.held) / 1e6;
+  const dealValue = bid ? bid.price * contracts : null;
+
+  /**
+   * A limit that found nobody can wait on the book instead. `MKT` has no price
+   * of its own to rest at, so it is the one rung that cannot.
+   */
+  const canRest = round.noLiquidity && target.price != null;
 
   /** The YES-terms limit this press would send. */
   const limitFor = (s: Side): number => {
-    const offer = book.best(s === "up" ? round.book.yesAsks : round.book.noAsks);
+    const offer = book.best(
+      s === "up" ? round.book.yesAsks : round.book.noAsks,
+    );
     if (target.price == null) {
       // MARKET: cross the offer, converting for the down side.
       if (!offer) return s === "up" ? 0.99 : 0.01;
@@ -94,25 +117,42 @@ export default function RoundConsole({
     round.buy(s, limitFor(s), size);
   };
 
+  /** Leave the same bid on the book rather than dead-ending on an empty one. */
+  const park = (s: Side) => {
+    setSide(s);
+    if (!round.canEnter) return;
+    round.rest(s, limitFor(s), size);
+  };
+
   useProgramConsole({
     main: live
-      ? { label: "CASH OUT", pulse: true, onPress: round.sell }
-      : {
-          label: round.status === "pending" ? "…" : "PLAY",
-          loading: round.status === "pending",
-          disabled: !round.canEnter,
-          onPress: () => fire(side),
-        },
+      ? dealValue != null
+        ? {
+            label: `CASH OUT $${dealValue.toFixed(2)}`,
+            pulse: true,
+            onPress: round.sell,
+          }
+        : { label: "NO BID", disabled: true }
+      : resting
+        ? { label: "WAITING", disabled: true }
+        : canRest
+          ? { label: "REST IT", pulse: true, onPress: () => park(side) }
+          : {
+              label: round.status === "pending" ? "…" : "PLAY",
+              loading: round.status === "pending",
+              disabled: !round.canEnter,
+              onPress: () => fire(side),
+            },
     action1: {
       label: "LONG",
-      pulse: !live && side === "up",
-      disabled: live || round.status === "pending",
+      pulse: !live && !resting && side === "up",
+      disabled: live || resting || !round.canEnter,
       onPress: () => fire("up"),
     },
     action2: {
       label: "SHORT",
-      pulse: !live && side === "down",
-      disabled: live || round.status === "pending",
+      pulse: !live && !resting && side === "down",
+      disabled: live || resting || !round.canEnter,
       onPress: () => fire("down"),
     },
     knob: {
@@ -122,7 +162,7 @@ export default function RoundConsole({
       value: rung,
       label: "PAYOUT",
       format: (v) => LADDER[v].label,
-      onChange: (v) => !live && setRung(v),
+      onChange: (v) => !live && !resting && setRung(v),
     },
     numberWheel: {
       min: 0,
@@ -131,7 +171,7 @@ export default function RoundConsole({
       value: sizeIdx,
       label: "SIZE",
       format: (v) => `${SIZES[v]}`,
-      onChange: (v) => !live && setSizeIdx(v),
+      onChange: (v) => !live && !resting && setSizeIdx(v),
     },
     status: {
       left: round.window
@@ -237,44 +277,44 @@ export default function RoundConsole({
 
   // ── Live position ────────────────────────────────────────────────────────
   if (live && round.window) {
-    const bid = book.best(
-      round.side === "up" ? round.book.yesBids : round.book.noBids,
-    );
-    const markNow = bid ? (Number(round.held) / 1e6) * bid.price : null;
     const cost = round.entryCost != null ? Number(round.entryCost) / 1e6 : null;
-    const pnl = markNow != null && cost != null ? markNow - cost : null;
+    const pnl = dealValue != null && cost != null ? dealValue - cost : null;
 
     return (
       <Shell>
         {header}
         <TileRow cols={3}>
-          <Tile label="Contracts" value={(Number(round.held) / 1e6).toFixed(2)} />
-          <Tile label="Paid" value={cost != null ? `$${cost.toFixed(2)}` : "—"} />
+          <Tile label="Contracts" value={contracts.toFixed(2)} />
+          <Tile
+            label="Paid"
+            value={cost != null ? `$${cost.toFixed(2)}` : "—"}
+          />
           <Tile
             label="To win"
-            value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
+            value={`$${contracts.toFixed(2)}`}
             tone="brand"
           />
         </TileRow>
         <Stage>
           {chart}
           <GhostCount>{round.secsLeft.toFixed(0)}</GhostCount>
-          <StageReadout label={pnl != null && pnl >= 0 ? "Ahead" : "Behind"}>
+          <StageReadout label="The deal">
             <span
               className={`tnum text-[30px] font-extrabold leading-none ${
                 pnl != null && pnl >= 0 ? "text-up" : "text-down"
               }`}
             >
-              {markNow == null ? "—" : `$${markNow.toFixed(2)}`}
+              {dealValue == null ? "no bid" : `$${dealValue.toFixed(2)}`}
             </span>
             <span className="font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-text-3">
-              bid
+              on the book now
             </span>
           </StageReadout>
         </Stage>
         <Footer>
           <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
-            {round.side === "up" ? "Long" : "Short"} · holding to the buzzer
+            {round.side === "up" ? "Long" : "Short"} · take the deal, or hold to
+            the buzzer
           </div>
           <div className="tnum mt-0.5 text-[15px] font-extrabold text-text">
             {pnl == null
@@ -289,7 +329,45 @@ export default function RoundConsole({
     );
   }
 
-  // ── Idle ─────────────────────────────────────────────────────────────────
+  // ── The bid is on the book, waiting ──────────────────────────────────────
+  // Nobody was selling at the price asked, so the bid was left resting instead.
+  // It fills only if the market comes to it; if the window closes first the
+  // escrow returns and the console goes back to idle on its own.
+  if (resting && round.window) {
+    const distance =
+      ask && target.price != null ? ask.price - target.price : null;
+    return (
+      <Shell>
+        {header}
+        <TileRow cols={3}>
+          <Tile label="Resting at" value={target.label} tone="brand" />
+          <Tile label="Market" value={ask ? ask.price.toFixed(3) : "—"} />
+          <Tile
+            label="Must fall"
+            value={distance != null && distance > 0 ? distance.toFixed(3) : "—"}
+          />
+        </TileRow>
+        <Stage>
+          {chart}
+          <GhostCount>{round.secsLeft.toFixed(0)}</GhostCount>
+        </Stage>
+        <Footer>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+            On the book · fills if the market comes
+          </div>
+          <div className="tnum mt-0.5 text-[15px] font-extrabold text-text">
+            {round.entryCost != null
+              ? `$${formatCollateral(round.entryCost)} held`
+              : "—"}
+            <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-text-3">
+              back when the window closes
+            </span>
+          </div>
+        </Footer>
+      </Shell>
+    );
+  }
+
   // ── Idle ─────────────────────────────────────────────────────────────────
   // The reference's game-screen composition: a bordered header carrying the
   // live price, a tile strip, the chart running full-bleed behind everything,
@@ -347,11 +425,13 @@ export default function RoundConsole({
       </Stage>
 
       <Footer>
-        <div className="flex items-center gap-1">
+        {/* Eight rungs on a narrow footer: they shrink to fit rather than
+            pushing the far end of the ladder under the big key. */}
+        <div className="flex items-center gap-0.5">
           {LADDER.map((rungOption, i) => (
             <span
               key={rungOption.label}
-              className={`tnum flex-1 border px-1 py-0.5 text-center text-[11px] font-extrabold ${
+              className={`tnum min-w-0 flex-1 border px-0.5 py-0.5 text-center text-[10px] font-extrabold ${
                 i === rung
                   ? "border-brand-500 bg-brand-500 text-black"
                   : "border-white/10 text-text-3"
@@ -362,15 +442,19 @@ export default function RoundConsole({
           ))}
         </div>
         <div className="mt-2 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">
-          {round.message
-            ? round.message
-            : !round.window
-              ? "finding a window"
-              : round.balance === 0n
-                ? "fund your wallet"
-                : round.secsLeft <= 6
-                  ? "window closing"
-                  : `${side === "up" ? "long" : "short"} · press play`}
+          {canRest
+            ? `${round.message} · rest it instead?`
+            : round.message
+              ? round.message
+              : !round.window
+                ? "finding a window"
+                : round.balance === 0n
+                  ? "fund your wallet"
+                  : round.secsLeft <= 6
+                    ? "window closing"
+                    : !round.canEnter
+                      ? "nobody quoting"
+                      : `${side === "up" ? "long" : "short"} · press play`}
         </div>
         <div className="tnum mt-0.5 text-[15px] font-extrabold text-text">
           {ask ? `$${(ask.price * size).toFixed(2)}` : "—"}

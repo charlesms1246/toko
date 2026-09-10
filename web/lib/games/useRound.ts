@@ -89,6 +89,11 @@ export interface Round {
   entryCost: bigint | null;
   /** True when a press would be accepted right now. */
   canEnter: boolean;
+  /**
+   * True when the last press found nothing to take. The bid was good, the book
+   * was empty — which is the one failure worth offering to `rest` through.
+   */
+  noLiquidity: boolean;
   message: string | null;
   buy: (side: Side, limitPrice: number, contracts: number) => void;
   /** Place a bid that waits for the market instead of taking it. */
@@ -103,11 +108,6 @@ export interface Round {
 }
 
 /**
- * A ticking clock. Exported because screens that show their own countdown need
- * one too, and reading `Date.now()` during render is what the React Compiler's
- * purity rule rejects.
- */
-export /**
  * Markets that have already turned a press away with nothing on the other side.
  *
  * Module-level and unbounded on purpose: a market id is only ever live for
@@ -125,6 +125,11 @@ function pickWindow(intervalSec: number | null, minSecsLeft: number) {
     : markets.nextToClose(windows, intervalSec, minSecsLeft);
 }
 
+/**
+ * A ticking clock. Exported because screens that show their own countdown need
+ * one too, and reading `Date.now()` during render is what the React Compiler's
+ * purity rule rejects.
+ */
 export function useNow(everyMs = 200) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -143,10 +148,14 @@ export function useNow(everyMs = 200) {
  * @param minSecsLeft Only use a window with at least this long to run. A
  *   challenge whose offer stands for half an hour needs a window that outlasts
  *   it, and which series that turns out to be is not worth the caller deciding.
+ * @param holdResult Keep a settled round on screen until the caller resets it.
+ *   A ladder spans windows, so the five-second auto-reset would take the PRESS
+ *   and FOLD keys away mid-decision and discard the rungs already cleared.
  */
 export function useRound(
   intervalSec: number | null = null,
   minSecsLeft = 0,
+  holdResult = false,
 ): Round {
   const now = useNow();
 
@@ -176,6 +185,7 @@ export function useRound(
   const [restingOrderId, setRestingOrderId] = useState<bigint | null>(null);
   const [filledOnArrival, setFilledOnArrival] = useState(false);
   const [cashedOut, setCashedOut] = useState(false);
+  const [noLiquidity, setNoLiquidity] = useState(false);
   /** The window the open position belongs to — not necessarily the live one. */
   const [playing, setPlaying] = useState<markets.Window | null>(null);
 
@@ -299,6 +309,7 @@ export function useRound(
       setSide(nextSide);
       setMessage(null);
       setPayout(null);
+      setNoLiquidity(false);
 
       void (async () => {
         const active = execution.current();
@@ -314,8 +325,11 @@ export function useRound(
           if (result.noLiquidity) thin.add(target.marketId);
           setStatus("idle");
           setSide(null);
+          setNoLiquidity(!!result.noLiquidity);
           setMessage(
-            result.noLiquidity ? "Nobody on the other side" : result.error ?? "Order failed",
+            result.noLiquidity
+              ? "Nobody on the other side"
+              : (result.error ?? "Order failed"),
           );
           return;
         }
@@ -345,6 +359,7 @@ export function useRound(
       setSide(nextSide);
       setMessage(null);
       setPayout(null);
+      setNoLiquidity(false);
 
       void (async () => {
         const active = execution.current();
@@ -427,11 +442,18 @@ export function useRound(
     void (async () => {
       const active = execution.current();
       const before = active.balance();
-      const result = await active.sell(playing, side, orders.toRawPrice(limit), held);
+      const result = await active.sell(
+        playing,
+        side,
+        orders.toRawPrice(limit),
+        held,
+      );
       if (!result.ok) {
         setStatus("open");
         setMessage(
-          result.noLiquidity ? "Nobody bidding right now" : result.error ?? "Sell failed",
+          result.noLiquidity
+            ? "Nobody bidding right now"
+            : (result.error ?? "Sell failed"),
         );
         return;
       }
@@ -457,16 +479,18 @@ export function useRound(
     setRestingOrderId(null);
     setFilledOnArrival(false);
     setCashedOut(false);
+    setNoLiquidity(false);
     // Paper play has no on-chain positions to re-read.
     if (!execution.current().paper) void positions.refresh();
   }, []);
 
   // Return the console to idle a few seconds after a result.
   useEffect(() => {
+    if (holdResult) return;
     if (status !== "won" && status !== "lost" && status !== "void") return;
     const timer = setTimeout(reset, 5000);
     return () => clearTimeout(timer);
-  }, [status, reset]);
+  }, [holdResult, status, reset]);
 
   return {
     window,
@@ -483,6 +507,7 @@ export function useRound(
     payout,
     entryCost,
     canEnter,
+    noLiquidity,
     message,
     buy,
     rest,

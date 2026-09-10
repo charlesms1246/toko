@@ -68,19 +68,28 @@ export default function MenuDrawer({
         overConsole ? "items-end" : "bg-black/80 backdrop-blur-md"
       }`}
       style={{
-        // Seated on the device rather than on the page. It is portalled to
-        // <body> to escape the screen's clipping, so it takes the hardware's
+        // Seated in the SCREEN, not on the whole device. It is portalled to
+        // <body> to escape the screen's own clipping, so it takes the aperture's
         // projected rect from the canvas instead of filling the viewport —
         // otherwise the menu is the one part of the app that is not a console.
-        left: "var(--device-left, 0px)",
-        right: "var(--device-right, 0px)",
-        top: "var(--device-top, 0px)",
-        bottom: "var(--device-bottom, 0px)",
+        //
+        // It used to inset to `--device-*`, which is the entire hardware
+        // bounding box, so opening the menu covered the keys and the chin and
+        // the console disappeared. The glass is the part a menu belongs in.
+        left: "var(--screen-left, 0px)",
+        right: "var(--screen-right, 0px)",
+        top: "var(--screen-top, 0px)",
+        bottom: "var(--screen-bottom, 0px)",
         borderRadius: "clamp(12px, 3.5vw, 26px)",
       }}
     >
+      {/* No `max-w-*`: the panel is as wide as the glass. A fixed 448px inside a
+          variable-width aperture left the menu floating with blurred console
+          down both sides on a desktop, and filling it exactly on a phone — the
+          same screen composed two different ways for no reason the player can
+          see. */}
       <div
-        className={`flex w-full max-w-md flex-col ${
+        className={`flex w-full flex-col ${
           overConsole
             ? "max-h-[82%] bg-gradient-to-t from-black via-black/96 to-transparent pt-6"
             : "h-full bg-[#0d0d0f]"

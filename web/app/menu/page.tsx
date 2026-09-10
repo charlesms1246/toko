@@ -3,23 +3,34 @@
 import Image from "next/image";
 import { MenuRow, MenuSection, StatTile } from "@/components/menu/MenuUI";
 import { useEffect, useSyncExternalStore } from "react";
-import { useUser } from "@/lib/api/hooks";
+import { useBalance, useUser } from "@/lib/api/hooks";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
 import * as statsStore from "@/lib/dreamdex/stats";
 import * as wallet from "@/lib/dreamdex/wallet";
+import * as demo from "@/lib/demo";
 import { formatUsd } from "@/lib/api/math";
 
 export default function MenuHub() {
   const user = useUser();
-  const walletState = useSyncExternalStore(
-    wallet.subscribe,
-    wallet.getSnapshot,
-    wallet.getServerSnapshot,
-  );
   const { stats } = useSyncExternalStore(
     statsStore.subscribe,
     statsStore.getSnapshot,
     statsStore.getServerSnapshot,
+  );
+  /**
+   * THE BALANCE COMES THROUGH THE EXECUTION SEAM, not straight off the wallet.
+   *
+   * `useBalance` reads whichever ledger is live — the paper one in Demo Mode,
+   * the chain one otherwise. Reading `wallet.getSnapshot().collateral` here
+   * bypassed the seam, so a demo player saw the console say $100.00 and this
+   * card say $0.00 in the same breath, against a real address they had never
+   * funded. The seam exists precisely so the two cannot disagree.
+   */
+  const balance = useBalance();
+  const { active: demoing } = useSyncExternalStore(
+    demo.subscribe,
+    demo.getSnapshot,
+    demo.getServerSnapshot,
   );
 
   useEffect(() => {
@@ -46,7 +57,7 @@ export default function MenuHub() {
             <div className="flex min-w-0 items-baseline gap-0.5">
               <span className="text-xl font-black text-text-3">$</span>
               <span className="tnum truncate text-[34px] font-black leading-none text-text">
-                {formatCollateral(walletState.collateral)}
+                {formatCollateral(balance)}
               </span>
             </div>
           </div>
@@ -59,23 +70,37 @@ export default function MenuHub() {
             />
           </div>
         </div>
+        {/* In Demo Mode there is no address worth naming. A wallet exists, but
+            it has never been funded or traded, and printing it under a paper
+            balance invites the reader to believe the two are connected. */}
         <div className="mt-2 truncate text-[11px] font-bold text-text-3">
-          @{user.handle} · {user.address.slice(0, 10)}…{user.address.slice(-6)}
+          {demoing
+            ? "Demo · paper balance"
+            : `@${user.handle} · ${user.address.slice(0, 10)}…${user.address.slice(-6)}`}
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-3 gap-2">
-        <StatTile
-          label="Net P&L"
-          value={formatUsd(netPnl, true)}
-          tone={netPnl >= 0 ? "up" : "down"}
-        />
-        <StatTile
-          label="Win rate"
-          value={`${(stats.winRate * 100).toFixed(0)}%`}
-        />
-        <StatTile label="Streak" value={String(stats.currentStreak)} tone="brand" />
-      </div>
+      {/* These tiles are a record of settled chain rounds. A demo player has not
+          made one, so an all-zero record is not theirs — it is a real wallet's,
+          shown to somebody who is not using it. Hidden rather than zeroed. */}
+      {!demoing && (
+        <div className="mb-6 grid grid-cols-3 gap-2">
+          <StatTile
+            label="Net P&L"
+            value={formatUsd(netPnl, true)}
+            tone={netPnl >= 0 ? "up" : "down"}
+          />
+          <StatTile
+            label="Win rate"
+            value={`${(stats.winRate * 100).toFixed(0)}%`}
+          />
+          <StatTile
+            label="Streak"
+            value={String(stats.currentStreak)}
+            tone="brand"
+          />
+        </div>
+      )}
 
       <MenuSection title="Wallet">
         <MenuRow

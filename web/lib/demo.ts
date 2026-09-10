@@ -262,12 +262,23 @@ export function fill(marketId: string, side: "up" | "down", cost: bigint, size: 
   });
 }
 
-/** Give up contracts and take the proceeds. */
+/**
+ * Give up contracts and take the proceeds.
+ *
+ * Clamped to what is held, and the proceeds are scaled by the same ratio. A
+ * paper balance credited for contracts that were never owned is an invented
+ * number, so the floor lives here rather than in whichever caller sized the
+ * fill.
+ */
 export function close(marketId: string, side: "up" | "down", proceeds: bigint, size: bigint) {
   update((l) => {
-    l.balance += proceeds;
+    if (size <= 0n) return;
     const k = key(marketId, side === "up" ? 0 : 1);
-    l.positions[k] = (l.positions[k] ?? 0n) - size;
+    const have = l.positions[k] ?? 0n;
+    const sold = size > have ? have : size;
+    if (sold <= 0n) return;
+    l.balance += (proceeds * sold) / size;
+    l.positions[k] = have - sold;
     if (l.positions[k] <= 0n) delete l.positions[k];
   });
 }

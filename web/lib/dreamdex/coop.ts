@@ -160,11 +160,16 @@ export function decode(code: string): Challenge | null {
   try {
     const raw = JSON.parse(b64url.decode(code));
     if (typeof raw.f !== "string" || typeof raw.i !== "number") return null;
+    // The price is checked too, not just the address and id. A mangled `p` is
+    // `NaN` here, and a `NaN` challenge reads out on the accept screen as
+    // "Costs up to $NaN" rather than as the broken link it is.
+    const yesPrice = Number(raw.p) / 1000;
+    if (!(yesPrice > 0) || !(yesPrice < 1)) return null;
     return {
       id: raw.i,
       from: raw.f as Address,
       side: raw.s === 1 ? "up" : "down",
-      yesPrice: Number(raw.p) / 1000,
+      yesPrice,
       size: Number(raw.q) || 1,
       marketId: typeof raw.m === "string" ? raw.m : undefined,
       handle: typeof raw.h === "string" ? raw.h : undefined,
@@ -729,10 +734,12 @@ export function keepAlive(opts: {
 
       // Gone from the book: taken by somebody, since we are the only one who
       // cancels it. Only trustworthy while the window is still live — an
-      // expired window drops the order without anyone taking it.
+      // expired window drops the order without anyone taking it — and only when
+      // the read actually happened. `null` is a dropped read, not an empty
+      // book: acting on it would retire an offer that is still resting.
       if (windowSecsLeft > rollLead) {
         const own = await orders.ownOpenOrders(window.poolAddress);
-        if (!own.some((id) => id === orderId)) {
+        if (own && !own.some((id) => id === orderId)) {
           finish("taken", "Somebody took it");
           return;
         }

@@ -19,7 +19,6 @@ import {
   explorerTx,
 } from "@/lib/dreamdex/config";
 import * as wallet from "@/lib/dreamdex/wallet";
-import { useIsMounted } from "@/lib/react/hooks";
 import { useNow } from "@/lib/games/useRound";
 
 /** How long until the next weekly claim, in the coarsest useful unit. */
@@ -42,18 +41,23 @@ export default function WalletPage() {
   const [busy, setBusy] = useState<"gas" | "collateral" | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [lastTx, setLastTx] = useState<string | null>(null);
-  const mounted = useIsMounted();
   // Ticks so the countdown moves, and so readiness is never decided by reading
   // the clock mid-render.
   const now = useNow(30_000);
 
+  const grant = useSyncExternalStore(
+    wallet.subscribe,
+    wallet.getGrantSnapshot,
+    wallet.getGrantServerSnapshot,
+  );
+
   useEffect(() => {
     wallet.ensureWallet();
     void wallet.refresh();
+    // The schedule lives in local storage, so it is only knowable on the client.
+    wallet.hydrateGrant();
   }, []);
 
-  // The schedule lives in local storage, so it is only knowable on the client.
-  const grant = mounted ? wallet.grantStatus() : null;
   const grantReady = grant != null && now >= grant.nextAt;
 
   const fundGas = useCallback(async () => {
