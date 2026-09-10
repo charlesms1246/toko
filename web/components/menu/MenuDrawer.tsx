@@ -81,6 +81,12 @@ export default function MenuDrawer({
         top: "var(--screen-top, 0px)",
         bottom: "var(--screen-bottom, 0px)",
         borderRadius: "clamp(12px, 3.5vw, 26px)",
+        // Clipped to the aperture's L. The bottom-right of the glass is notched
+        // out for the Play key, and this panel is portalled ABOVE the canvas —
+        // so without the cut it paints over the key and the console loses its
+        // primary control the moment you open the menu.
+        clipPath:
+          "polygon(0 0, 100% 0, 100% var(--screen-cut-y, 100%), var(--screen-cut-x, 100%) var(--screen-cut-y, 100%), var(--screen-cut-x, 100%) 100%, 0 100%)",
       }}
     >
       {/* No `max-w-*`: the panel is as wide as the glass. A fixed 448px inside a

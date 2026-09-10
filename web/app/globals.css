@@ -407,6 +407,27 @@ body {
   display: none;
 }
 
+/*
+ * Nothing inside the glass gets a browser scrollbar.
+ *
+ * A scrollbar is the one element on these screens that belongs to the page
+ * rather than to the device — it breaks the illusion harder than anything else
+ * on the surface, and every list in here is scrolled by the knob or a thumb
+ * anyway. Scoped to the screen so ordinary page chrome outside the console is
+ * untouched, and applied here rather than as a class on each screen so a new
+ * one cannot forget it.
+ */
+.console-screen-surface *,
+.console-screen-surface {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.console-screen-surface *::-webkit-scrollbar,
+.console-screen-surface::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── Keyframes ─────────────────────────────────────────────────────────── */
 
 @keyframes toko-drift {

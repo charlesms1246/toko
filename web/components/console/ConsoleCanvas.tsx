@@ -300,14 +300,41 @@ function labelTexture(text: string): THREE.CanvasTexture {
 }
 
 /**
- * The same silkscreen, but two-tone: white letters with a dark halo.
+ * WCAG relative luminance for a `#rrggbb` string, 0 (black) to 1 (white).
  *
- * An action cap can be any colour a preset or a game asks for, and a selected
- * key blooms almost to white — so a single-tone caption disappears on one state
- * or the other. Carrying both tones in the texture means the material is not
- * tinted at all and the label reads on every cap.
+ * Used to pick a legend ink that survives every preset. Nothing here needs the
+ * full contrast-ratio formula — one threshold against the cap is enough, and it
+ * keeps the decision in one readable line.
  */
-function capLabelTexture(text: string): THREE.CanvasTexture {
+function relativeLuminance(hex: string): number {
+  const n = parseInt(hex.replace("#", ""), 16);
+  if (!Number.isFinite(n)) return 0;
+  const lin = (c: number) => {
+    const s = c / 255;
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return (
+    0.2126 * lin((n >> 16) & 255) +
+    0.7152 * lin((n >> 8) & 255) +
+    0.0722 * lin(n & 255)
+  );
+}
+
+/**
+ * The moulded cap label.
+ *
+ * Set the way the reference sets it: plain semibold, normal tracking, white,
+ * over a soft shadow rather than an outline. It used to be 800 weight with 3px
+ * of letterspacing and a 7px dark stroke, which made a key cap look like a
+ * sticker — the halo read as a second colour and the tracking pushed short
+ * words like PREV and NEXT out to the cap's edges. A moulded key has its legend
+ * printed on it, not stuck to it.
+ *
+ * The shadow still earns its place: an action cap is whatever colour a preset
+ * or a game asks for, so white alone can drop out on a pale one. A soft shadow
+ * separates it without becoming an outline.
+ */
+function capLabelTexture(text: string, capColor = "#000000"): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = 256;
   canvas.height = 64;
@@ -315,14 +342,19 @@ function capLabelTexture(text: string): THREE.CanvasTexture {
   ctx.clearRect(0, 0, 256, 64);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = `800 34px ${SILKSCREEN_FONT}`;
-  ctx.letterSpacing = "3px";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(8,8,6,0.92)";
-  ctx.lineWidth = 7;
-  ctx.strokeText(text, 128, 34, 236);
-  ctx.fillStyle = "#ffffff";
-  ctx.fillText(text, 128, 34, 236);
+  ctx.font = `600 40px ${SILKSCREEN_FONT}`;
+  ctx.letterSpacing = "0px";
+
+  // Ink chosen against the cap it will sit on. Presets run from bone to
+  // graphite, so a fixed white legend is invisible on a pale cap and a fixed
+  // dark one is invisible on a deep one. The old texture hid this behind a
+  // heavy outline — remove the outline and the choice has to be made honestly.
+  const light = relativeLuminance(capColor) < 0.5;
+  ctx.shadowColor = light ? "rgba(8,8,6,0.5)" : "rgba(255,255,255,0.45)";
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 1;
+  ctx.fillStyle = light ? "#ffffff" : "#15130f";
+  ctx.fillText(text, 128, 34, 240);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
@@ -535,8 +567,10 @@ export default function ConsoleCanvas({
       mesh: THREE.Mesh;
       mat: THREE.MeshBasicMaterial;
       text: string;
+      /** The cap colour the current texture's ink was chosen against. */
+      ink: string;
     }[];
-    mainCaption: { mat: THREE.MeshBasicMaterial; text: string };
+    mainCaption: { mat: THREE.MeshBasicMaterial; text: string; ink: string };
     envMap: THREE.Texture;
     invalidate: () => void;
     setKeyColors: (theme: Theme) => void;
@@ -885,11 +919,12 @@ export default function ConsoleCanvas({
       mesh: THREE.Mesh;
       mat: THREE.MeshBasicMaterial;
       text: string;
+      ink: string;
     }[] = [];
     ([1, 2] as const).forEach((i) => {
       const spec = BUTTON_SPECS[i];
-      // White ink: the caption now sits on the cap, which is the action colour
-      // in every preset, not on the body the silkscreen palette was chosen for.
+      // The texture carries its own ink, chosen against the cap colour, so the
+      // material is left untinted.
       const mat = new THREE.MeshBasicMaterial({
         map: capLabelTexture(""),
         color: new THREE.Color("#ffffff"),
@@ -902,7 +937,7 @@ export default function ConsoleCanvas({
       mesh.position.set(0, 0, spec.depth / 2 + 0.08);
       const cap = keys.find((k) => k.userData.key === BUTTON_KEYS[i]);
       (cap ?? device).add(mesh);
-      actionCaptions.push({ mesh, mat, text: "" });
+      actionCaptions.push({ mesh, mat, text: "", ink: "" });
       disposables.push(mesh.geometry, mat);
     });
 
@@ -1343,6 +1378,7 @@ export default function ConsoleCanvas({
       let maxX = -Infinity;
       let maxY = -Infinity;
       let stepY = Infinity;
+      let stepX = Infinity;
       screenPoints().forEach((p, i) => {
         projected
           .set(p.x, p.y, 0.06)
@@ -1356,6 +1392,9 @@ export default function ConsoleCanvas({
         if (sy > maxY) maxY = sy;
         // Points 2 and 3 are the inner corner where the aperture steps up.
         if ((i === 2 || i === 3) && sy < stepY) stepY = sy;
+        // Points 1 and 2 share the notch's left edge, where the aperture steps
+        // in for the Play key.
+        if ((i === 1 || i === 2) && sx < stepX) stepX = sx;
       });
       // A hair of bleed so no seam shows between the DOM surface and the bevel
       // that overhangs it. It has to be PROPORTIONAL: a flat 4px was about 1% of
@@ -1435,6 +1474,14 @@ export default function ConsoleCanvas({
         host.style.setProperty("--screen-right", `${width - (maxX + bleed)}px`);
         host.style.setProperty("--screen-bottom", `${height - (maxY + bleed)}px`);
         host.style.setProperty("--screen-width", `${w}px`);
+
+        // Where the aperture steps in for the Play key, measured from the
+        // screen rect's own top-left so a panel sized to the glass can clip
+        // itself to the L without doing any projection of its own. The menu is
+        // portalled above the canvas, so a plain rectangle over the glass
+        // covers the Play key and takes it off the device.
+        host.style.setProperty("--screen-cut-x", `${stepX - (minX - bleed)}px`);
+        host.style.setProperty("--screen-cut-y", `${stepY - (minY - bleed)}px`);
 
         // Every control, published as a rect the onboarding tour can point at.
         //
@@ -1517,11 +1564,24 @@ export default function ConsoleCanvas({
           k.userData.glow += (targetGlow - k.userData.glow) * Math.min(1, dt * 8);
           animating = true;
         }
-        mat.emissiveIntensity = k.userData.glow * 1.15;
+        /**
+         * The play key does not bloom.
+         *
+         * It is the biggest, most saturated part on the device and it pulses on
+         * nearly every screen, so at the shared intensity it washed to white and
+         * threw a halo over the shell around it — the mark and the caption on
+         * the cap both disappeared into it, and the reference's own key is flat
+         * colour with no bloom at all. It still lifts and presses, and it is
+         * still the only thing that size and that colour, which is all the
+         * emphasis a primary key needs.
+         */
+        const isPlay = k.userData.key === "play";
+        mat.emissiveIntensity = isPlay ? 0 : k.userData.glow * 1.15;
         const plane = keyGlowPlanes.get(k.userData.key);
         if (plane) {
-          (plane.material as THREE.MeshBasicMaterial).opacity =
-            k.userData.glow * 0.5;
+          (plane.material as THREE.MeshBasicMaterial).opacity = isPlay
+            ? 0
+            : k.userData.glow * 0.5;
         }
       }
 
@@ -1754,7 +1814,7 @@ export default function ConsoleCanvas({
       backPlateMat,
       labelMats,
       actionCaptions,
-      mainCaption: { mat: mainCaptionMat, text: "" },
+      mainCaption: { mat: mainCaptionMat, text: "", ink: "" },
       envMap,
       invalidate,
       setKeyColors,
@@ -1904,26 +1964,35 @@ export default function ConsoleCanvas({
     if (!s) return;
     [a1, a2].forEach((text, i) => {
       const caption = s.actionCaptions[i];
-      if (!caption || caption.text === text) return;
+      if (!caption || (caption.text === text && caption.ink === theme.action)) {
+        return;
+      }
       caption.mat.map?.dispose();
-      caption.mat.map = capLabelTexture(text);
+      caption.mat.map = capLabelTexture(text, theme.action);
       caption.mat.needsUpdate = true;
       caption.text = text;
+      caption.ink = theme.action;
     });
     s.invalidate();
-  }, [a1, a2]);
+  }, [a1, a2, theme.action]);
 
   // ── Play-key silkscreen ────────────────────────────────────────────────────
+  // Re-rendered when the preset changes too, not only when the label does: the
+  // ink is chosen against the cap it sits on, and the cap is the preset's.
   const mainText = mainLabel ?? "";
   useEffect(() => {
     const s = sceneRef.current;
-    if (!s || s.mainCaption.text === mainText) return;
+    if (!s) return;
+    if (s.mainCaption.text === mainText && s.mainCaption.ink === theme.main) {
+      return;
+    }
     s.mainCaption.mat.map?.dispose();
-    s.mainCaption.mat.map = capLabelTexture(mainText);
+    s.mainCaption.mat.map = capLabelTexture(mainText, theme.main);
     s.mainCaption.mat.needsUpdate = true;
     s.mainCaption.text = mainText;
+    s.mainCaption.ink = theme.main;
     s.invalidate();
-  }, [mainText]);
+  }, [mainText, theme.main]);
 
   // ── Thumbwheel drum ────────────────────────────────────────────────────────
   // The values are printed around the drum and the selected one is turned into
