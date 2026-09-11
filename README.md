@@ -85,9 +85,9 @@ limit price** and still reads as a multiple. 2x is 0.50, 3x is 0.33, 10x is 0.10
 `ConsoleControls` never changed.
 
 ![The knob's rungs on a price rail: 2x at 0.50, 3x at 0.33, 5x at 0.20, 10x at
-0.10, 25x at 0.04, 50x at 0.02, 100x at 0.01. Lucky covers 2x to 10x; Moonshot
-covers 5x to 100x. What you ask for is what you pay, and it is the market's odds
-on you.](docs/diagrams/the-knob.svg)
+0.10, 25x at 0.04, 50x at 0.02, 100x at 0.01. One ladder spans all of it, from
+the market price out to the deep tail. What you ask for is what you pay, and it
+is the market's odds on you.](docs/diagrams/the-knob.svg)
 
 Measured on Shannon rather than taken from the docs (`claude-docs/TESTNET_FACTS.md`):
 
@@ -111,24 +111,31 @@ day the venue moves on.
 
 ## The games
 
-All eight trade live windows. None of them are reskins of a house model.
+All four trade live windows. None of them are reskins of a house model.
 
 | Game | What it actually does |
 |---|---|
-| **Lucky** | The Round. One window is one round — the shortest live one; the knob is a limit price shown as its multiple |
-| **Moonshot** | Same instrument in the deep tail. Late in a window one side really does trade at 2–12 ¢ |
+| **Lucky** | The Round. One window is one round — the shortest live one; the knob is a limit price shown as its multiple, one ladder from `MKT` out to `100x` |
 | **Snipe** | The wall is the underdog's real offer sliding toward zero. Wait too long and the maker pulls its quotes |
-| **Rush** | The banker is the book — the live bid on your position is the deal. Take it or hold to settlement |
 | **Press** | A roll ladder: a win's payout stakes the next window. Press or fold |
-| **Breakout** | The same ladder with the side locked — a call on the move continuing |
-| **Pin** | **Maker.** Rests a bid at your called price; playing it *is* providing liquidity |
 | **Duel** | **Co-op.** Your challenge is a resting order. Whoever takes it buys the opposite side and the pool **mints a pair** — two buyers, no seller, no market maker |
 
 Plus two free minigames, which were always real; only their global leaderboard
 was fake, and that is gone.
 
-**Range was retired.** A band needs two strikes at one expiry and this venue has
-one. It is not hidden behind a flag — it is deleted.
+**The roster was eight, and four of them were the same game wearing a hat.**
+Moonshot was Lucky's knob at the deep end, Rush was Lucky's live screen, Breakout
+was Press with the side locked, and Pin was what Lucky already did when a limit
+found nobody. Each mechanic was carried into the base game and verified working
+*before* the page was deleted, so nothing a player could do became impossible:
+Lucky's ladder now runs `MKT` to `100x` (Moonshot), its live screen shows what
+the book will pay for the position right now (Rush), and an unfilled limit offers
+to **rest** on the real book instead of dead-ending (Pin). Playing that rest *is*
+providing liquidity, which is what this venue is short of.
+
+**Range was retired** earlier, for a different reason: a band needs two strikes
+at one expiry and this venue has one. Like the other four, it is not hidden
+behind a flag — it is deleted.
 
 ### Duel, and why it is the interesting one
 

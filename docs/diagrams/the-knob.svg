@@ -6,7 +6,7 @@
 <circle cx="20" cy="332" r="3.2" fill="#5f636b" fill-opacity="0.5"/><line x1="18.4" y1="332" x2="21.6" y2="332" stroke="#0d0d0c" stroke-width="1"/>
 <circle cx="880" cy="332" r="3.2" fill="#5f636b" fill-opacity="0.5"/><line x1="878.4" y1="332" x2="881.6" y2="332" stroke="#0d0d0c" stroke-width="1"/>
 <text x="38" y="34" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#efc03b" font-weight="700" text-anchor="start" letter-spacing="2.4" fill-opacity="1.0" xml:space="preserve">THE KNOB IS A LIMIT PRICE</text>
-<text x="862" y="34" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.5" fill="#8a8a8a" font-weight="400" text-anchor="end" letter-spacing="1.6" fill-opacity="1.0" xml:space="preserve">APP/GAMES/{LUCKY,MOONSHOT}</text>
+<text x="862" y="34" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.5" fill="#8a8a8a" font-weight="400" text-anchor="end" letter-spacing="1.6" fill-opacity="1.0" xml:space="preserve">APP/GAMES/LUCKY</text>
 <line x1="38" y1="46" x2="862" y2="46" stroke="#efc03b" stroke-width="1" stroke-opacity="0.22" stroke-linecap="square"/>
 <rect x="33" y="57" width="834" height="258" rx="10" fill="#0d0d0c" fill-opacity="1.0"/>
 <rect x="38" y="62" width="824" height="248" rx="6" fill="#191509" fill-opacity="1.0"/>
@@ -95,9 +95,9 @@
 <text x="792.0" y="132" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" fill="#efc03b" font-weight="700" text-anchor="middle" letter-spacing="0.8" fill-opacity="1.0" xml:space="preserve">100x</text>
 <text x="792.0" y="192" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#8a8a8a" font-weight="400" text-anchor="middle" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">0.01</text>
 <path d="M 108.0 204 L 108.0 210 L 389.40313351363915 210 L 389.40313351363915 204" fill="none" stroke="#ffc016" stroke-width="1.25" stroke-opacity="0.55" stroke-linecap="square" stroke-linejoin="round"/>
-<text x="248.70156675681957" y="226" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#ffc016" font-weight="700" text-anchor="middle" letter-spacing="2.2" fill-opacity="1.0" xml:space="preserve">LUCKY</text>
-<path d="M 268.2094005409176 236 L 268.2094005409176 242 L 792.0 242 L 792.0 236" fill="none" stroke="#efc03b" stroke-width="1.25" stroke-opacity="0.55" stroke-linecap="square" stroke-linejoin="round"/>
-<text x="530.1047002704588" y="258" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#efc03b" font-weight="700" text-anchor="middle" letter-spacing="2.2" fill-opacity="1.0" xml:space="preserve">MOONSHOT</text>
+<text x="248.70156675681957" y="226" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#ffc016" font-weight="700" text-anchor="middle" letter-spacing="2.2" fill-opacity="1.0" xml:space="preserve">LUCKY · THE BET</text>
+<path d="M 389.40313351363915 236 L 389.40313351363915 242 L 792.0 242 L 792.0 236" fill="none" stroke="#efc03b" stroke-width="1.25" stroke-opacity="0.55" stroke-linecap="square" stroke-linejoin="round"/>
+<text x="590.7015667568196" y="258" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#efc03b" font-weight="700" text-anchor="middle" letter-spacing="2.2" fill-opacity="1.0" xml:space="preserve">LUCKY · THE DEEP TAIL</text>
 <text x="108" y="106" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#8a8a8a" font-weight="700" text-anchor="start" letter-spacing="2.0" fill-opacity="1.0" xml:space="preserve">YOU ASK FOR</text>
 <text x="108" y="286" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#8a8a8a" font-weight="700" text-anchor="start" letter-spacing="2.0" fill-opacity="1.0" xml:space="preserve">YOU PAY, PER CONTRACT</text>
 <text x="792" y="286" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#8a8a8a" font-weight="700" text-anchor="end" letter-spacing="2.0" fill-opacity="1.0" xml:space="preserve">THE MARKET'S ODDS ON YOU</text>

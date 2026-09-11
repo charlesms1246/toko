@@ -167,7 +167,7 @@ write("the-round", W, H, o)
 
 # ── 2. The knob is a limit price ────────────────────────────────────────────
 W, H = 900, 352
-o = panel(W, H, "The knob is a limit price", "app/games/{lucky,moonshot}")
+o = panel(W, H, "The knob is a limit price", "app/games/lucky")
 o += screen(38, 62, W - 76, H - 104)
 
 RAIL_Y = 158
@@ -193,8 +193,10 @@ def span(y, a, b, name, col):
     return [path(f"M {xa} {y-6} L {xa} {y} L {xb} {y} L {xb} {y-6}", col, 1.25, 0.55),
             text((xa + xb) / 2, y + 16, name, 9.5, col, "700", "middle", 2.2)]
 
-o += span(RAIL_Y + 52, 0.50, 0.10, "LUCKY", BRAND)
-o += span(RAIL_Y + 84, 0.20, 0.01, "MOONSHOT", AMBER)
+# One ladder, one game. Lucky covers the whole rail: the near rungs are the
+# ordinary bet, the far end is the side the market has nearly written off.
+o += span(RAIL_Y + 52, 0.50, 0.10, "LUCKY · THE BET", BRAND)
+o += span(RAIL_Y + 84, 0.10, 0.01, "LUCKY · THE DEEP TAIL", AMBER)
 
 o.append(text(x0, RAIL_Y - 52, "YOU ASK FOR", 9, LABEL, "700", track=2.0))
 o.append(text(x0, RAIL_Y + 128, "YOU PAY, PER CONTRACT", 9, LABEL, "700", track=2.0))
@@ -455,7 +457,7 @@ o += node(90, 96, 268, 44, [("FOLD at any rung — stop and keep it", 10, INK, "
           accent=CREAM, dash="4 3")
 
 o.append(text(38, H - 22,
-  "YOU PICK A SIDE FRESH ON EVERY RUNG — IT NEVER ROLLS BY ITSELF. BREAKOUT IS THE SAME LADDER WITH THE SIDE LOCKED.",
+  "YOU PICK A SIDE FRESH ON EVERY RUNG — IT NEVER ROLLS BY ITSELF.",
   9.5, LABEL, track=1.0))
 write("play-ladder", W, H, o)
 
