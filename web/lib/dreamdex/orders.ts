@@ -23,13 +23,11 @@
 
 import {
   createPublicClient,
-  createWalletClient,
   http,
   maxUint256,
   parseAbi,
   type Address,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
 import {
   CHAIN,
   COLLATERAL,
@@ -39,7 +37,7 @@ import {
 } from "./config";
 import { getClient } from "./client";
 import { getTrader } from "./trader";
-import { exportKey } from "./wallet";
+import * as wallet from "./wallet";
 import type { Window } from "./markets";
 
 const ONE = BigInt(10 ** COLLATERAL.decimals);
@@ -143,6 +141,31 @@ function asOutcome(err: unknown): OrderOutcome {
   if (message.includes("ImmediateOrCancelNoFill")) {
     return { ok: false, filled: 0n, noLiquidity: true };
   }
+
+  /*
+   * A bare revert is not a sentence.
+   *
+   * The SDK hands back `placeBinaryOrder reverted: Transaction 0xa901… reverted
+   * (no revert data recoverable)`, and that went straight onto the glass, in
+   * caps, wrapping over four lines of a phone-width screen. It tells a player
+   * nothing they can act on.
+   *
+   * `ERRORS.md` has this shape four times over: a revert with no reason, and
+   * ~98% of the gas limit burned, is a GATE — the pool refusing — not a
+   * shortfall. The most common gate by far is the window locking between the
+   * press and the block. So the player is told that, and the raw string still
+   * goes to the console, because a swallowed error is how "failing constantly"
+   * becomes indistinguishable from "never reached".
+   */
+  if (/reverted/i.test(message)) {
+    console.error("[orders] reverted:", message);
+    return {
+      ok: false,
+      filled: 0n,
+      error: "The pool refused the order — the window may have just locked",
+    };
+  }
+
   return { ok: false, filled: 0n, error: message.replace(/^@somnia-chain\/markets-sdk: /, "") };
 }
 
@@ -284,9 +307,11 @@ export async function cancel(pool: string, orderId: bigint): Promise<OrderOutcom
  * able to impersonate one.
  */
 export async function ownOpenOrders(pool: string): Promise<bigint[] | null> {
-  const key = exportKey();
-  if (!key) return null;
-  return openOrdersOf(pool, privateKeyToAccount(key).address);
+  // The address, not the key — this reads, it does not sign, and a managed
+  // wallet has no key to offer.
+  const address = wallet.getSnapshot().address;
+  if (!address) return null;
+  return openOrdersOf(pool, address);
 }
 
 /**
@@ -358,18 +383,18 @@ export async function sell(
 const approved = new Set<string>();
 
 export async function preApprove(pool: string): Promise<void> {
-  const key = exportKey();
-  if (!key) return;
+  const signer = wallet.signer();
+  const owner = wallet.getSnapshot().address;
+  if (!signer || !owner) return;
   const spender = pool.toLowerCase();
   if (approved.has(spender)) return;
 
   try {
-    const account = privateKeyToAccount(key);
     const allowance = (await publicClient.readContract({
       address: COLLATERAL.address,
       abi: erc20Abi,
       functionName: "allowance",
-      args: [account.address, pool as Address],
+      args: [owner, pool as Address],
     })) as bigint;
 
     // Anything short of a full allowance gets topped up to max, matching what
@@ -379,12 +404,9 @@ export async function preApprove(pool: string): Promise<void> {
       return;
     }
 
-    const wallet = createWalletClient({
-      account,
+    const hash = await signer.writeContract({
+      account: owner,
       chain: CHAIN,
-      transport: http(HTTP_RPC_URL),
-    });
-    const hash = await wallet.writeContract({
       address: COLLATERAL.address,
       abi: erc20Abi,
       functionName: "approve",

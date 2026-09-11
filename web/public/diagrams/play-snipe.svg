@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 360" width="900" height="360" role="img" aria-label="play-snipe">
+<rect x="0" y="0" width="900" height="360" rx="18" fill="#141412" fill-opacity="1.0"/>
+<rect x="6" y="6" width="888" height="348" rx="14" fill="none" fill-opacity="1.0" stroke="#5f636b" stroke-width="1" stroke-opacity="0.28"/>
+<circle cx="20" cy="20" r="3.2" fill="#5f636b" fill-opacity="0.5"/><line x1="18.4" y1="20" x2="21.6" y2="20" stroke="#0d0d0c" stroke-width="1"/>
+<circle cx="880" cy="20" r="3.2" fill="#5f636b" fill-opacity="0.5"/><line x1="878.4" y1="20" x2="881.6" y2="20" stroke="#0d0d0c" stroke-width="1"/>
+<circle cx="20" cy="340" r="3.2" fill="#5f636b" fill-opacity="0.5"/><line x1="18.4" y1="340" x2="21.6" y2="340" stroke="#0d0d0c" stroke-width="1"/>
+<circle cx="880" cy="340" r="3.2" fill="#5f636b" fill-opacity="0.5"/><line x1="878.4" y1="340" x2="881.6" y2="340" stroke="#0d0d0c" stroke-width="1"/>
+<text x="38" y="34" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#efc03b" font-weight="700" text-anchor="start" letter-spacing="2.4" fill-opacity="1.0" xml:space="preserve">SNIPE — THE WALL SLIDES, THEN IT IS GONE</text>
+<text x="862" y="34" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.5" fill="#8a8a8a" font-weight="400" text-anchor="end" letter-spacing="1.6" fill-opacity="1.0" xml:space="preserve">ONE BUTTON, ONE MOMENT</text>
+<line x1="38" y1="46" x2="862" y2="46" stroke="#efc03b" stroke-width="1" stroke-opacity="0.22" stroke-linecap="square"/>
+<rect x="33" y="57" width="834" height="266" rx="10" fill="#0d0d0c" fill-opacity="1.0"/>
+<rect x="38" y="62" width="824" height="256" rx="6" fill="#191509" fill-opacity="1.0"/>
+<rect x="38" y="62" width="824" height="256" rx="6" fill="none" fill-opacity="1.0" stroke="#efc03b" stroke-width="1" stroke-opacity="0.18"/>
+<line x1="40" y1="65" x2="860" y2="65" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="69" x2="860" y2="69" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="73" x2="860" y2="73" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="77" x2="860" y2="77" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="81" x2="860" y2="81" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="85" x2="860" y2="85" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="89" x2="860" y2="89" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="93" x2="860" y2="93" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="97" x2="860" y2="97" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="101" x2="860" y2="101" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="105" x2="860" y2="105" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="109" x2="860" y2="109" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="113" x2="860" y2="113" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="117" x2="860" y2="117" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="121" x2="860" y2="121" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="125" x2="860" y2="125" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="129" x2="860" y2="129" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="133" x2="860" y2="133" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="137" x2="860" y2="137" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="141" x2="860" y2="141" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="145" x2="860" y2="145" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="149" x2="860" y2="149" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="153" x2="860" y2="153" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="157" x2="860" y2="157" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="161" x2="860" y2="161" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="165" x2="860" y2="165" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="169" x2="860" y2="169" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="173" x2="860" y2="173" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="177" x2="860" y2="177" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="181" x2="860" y2="181" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="185" x2="860" y2="185" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="189" x2="860" y2="189" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="193" x2="860" y2="193" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="197" x2="860" y2="197" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="201" x2="860" y2="201" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="205" x2="860" y2="205" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="209" x2="860" y2="209" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="213" x2="860" y2="213" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="217" x2="860" y2="217" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="221" x2="860" y2="221" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="225" x2="860" y2="225" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="229" x2="860" y2="229" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="233" x2="860" y2="233" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="237" x2="860" y2="237" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="241" x2="860" y2="241" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="245" x2="860" y2="245" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="249" x2="860" y2="249" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="253" x2="860" y2="253" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="257" x2="860" y2="257" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="261" x2="860" y2="261" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="265" x2="860" y2="265" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="269" x2="860" y2="269" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="273" x2="860" y2="273" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="277" x2="860" y2="277" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="281" x2="860" y2="281" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="285" x2="860" y2="285" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="289" x2="860" y2="289" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="293" x2="860" y2="293" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="297" x2="860" y2="297" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="301" x2="860" y2="301" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="305" x2="860" y2="305" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="309" x2="860" y2="309" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="313" x2="860" y2="313" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="100" y1="262" x2="800" y2="262" stroke="#efc03b" stroke-width="1" stroke-opacity="0.28" stroke-linecap="square"/>
+<line x1="100" y1="100" x2="100" y2="262" stroke="#efc03b" stroke-width="1" stroke-opacity="0.28" stroke-linecap="square"/>
+<path d="M 100.0 100.0 L 110.8 104.3 L 121.7 108.6 L 132.6 112.8 L 143.4 116.9 L 154.2 121.0 L 165.1 125.1 L 175.9 129.1 L 186.8 133.0 L 197.7 136.9 L 208.5 140.8 L 219.3 144.6 L 230.2 148.3 L 241.1 152.0 L 251.9 155.6 L 262.8 159.2 L 273.6 162.7 L 284.4 166.2 L 295.3 169.6 L 306.1 172.9 L 317.0 176.2 L 327.9 179.4 L 338.7 182.6 L 349.6 185.7 L 360.4 188.8 L 371.3 191.8 L 382.1 194.7 L 392.9 197.6 L 403.8 200.4 L 414.6 203.2 L 425.5 205.9 L 436.4 208.5 L 447.2 211.1 L 458.1 213.6 L 468.9 216.1 L 479.8 218.5 L 490.6 220.8 L 501.5 223.0 L 512.3 225.2 L 523.2 227.3 L 534.0 229.4 L 544.9 231.3 L 555.7 233.2 L 566.6 235.1 L 577.4 236.8 L 588.2 238.5 L 599.1 240.1 L 610.0 241.6 L 620.8 243.1 L 631.6 244.4 L 642.5 245.7 L 653.4 246.9 L 664.2 248.0 L 675.0 249.0 L 685.9 249.9 L 696.8 250.8 L 707.6 251.5 L 718.5 252.1 L 729.3 252.5 L 740.1 252.9 L 751.0 253.0" fill="none" stroke="#efc03b" stroke-width="2" stroke-opacity="0.85" stroke-linecap="square" stroke-linejoin="round"/>
+<rect x="751.0" y="100" width="49.0" height="162" rx="3" fill="#ff5a4d" fill-opacity="0.13" stroke="#ff5a4d" stroke-width="1" stroke-opacity="0.45" stroke-dasharray="3 3"/>
+<text x="775.5" y="90" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#ff5a4d" font-weight="700" text-anchor="middle" letter-spacing="1.2" fill-opacity="1.0" xml:space="preserve">QUOTES PULLED</text>
+<text x="775.5" y="181.0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#ff5a4d" font-weight="400" text-anchor="middle" letter-spacing="0.4" fill-opacity="1.0" xml:space="preserve">nothing</text>
+<text x="775.5" y="195.0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#ff5a4d" font-weight="400" text-anchor="middle" letter-spacing="0.4" fill-opacity="1.0" xml:space="preserve">left to take</text>
+<rect x="162.10000000000002" y="122.0902362287244" width="6" height="6" rx="0.5" fill="#ffc016" fill-opacity="1.0"/>
+<text x="165.10000000000002" y="111.0902362287244" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" fill="#ffc016" font-weight="700" text-anchor="middle" letter-spacing="0.8" fill-opacity="1.0" xml:space="preserve">3x</text>
+<rect x="389.95" y="194.62573140242426" width="6" height="6" rx="0.5" fill="#ffc016" fill-opacity="1.0"/>
+<text x="392.95" y="183.62573140242426" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" fill="#ffc016" font-weight="700" text-anchor="middle" letter-spacing="0.8" fill-opacity="1.0" xml:space="preserve">6x</text>
+<rect x="617.8000000000001" y="240.0815816282403" width="6" height="6" rx="0.5" fill="#ffc016" fill-opacity="1.0"/>
+<text x="620.8000000000001" y="229.0815816282403" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" fill="#ffc016" font-weight="700" text-anchor="middle" letter-spacing="0.8" fill-opacity="1.0" xml:space="preserve">20x</text>
+<text x="88" y="106" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#8a8a8a" font-weight="700" text-anchor="end" letter-spacing="1.4" fill-opacity="1.0" xml:space="preserve">OFFER</text>
+<text x="88" y="262" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#8a8a8a" font-weight="700" text-anchor="end" letter-spacing="1.4" fill-opacity="1.0" xml:space="preserve">0</text>
+<text x="100" y="282" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#8a8a8a" font-weight="700" text-anchor="start" letter-spacing="1.4" fill-opacity="1.0" xml:space="preserve">WINDOW OPENS</text>
+<text x="800" y="282" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#8a8a8a" font-weight="700" text-anchor="end" letter-spacing="1.4" fill-opacity="1.0" xml:space="preserve">IT CLOSES</text>
+<text x="100" y="304" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#f2f2f2" font-weight="400" text-anchor="start" letter-spacing="0.8" fill-opacity="1.0" xml:space="preserve">PRESS TAKE ANYWHERE ALONG THE LINE — LATER IS CHEAPER, AND RISKIER.</text>
+<text x="38" y="338" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#8a8a8a" font-weight="400" text-anchor="start" letter-spacing="1.3" fill-opacity="1.0" xml:space="preserve">THE LONGER YOU WAIT THE BIGGER THE MULTIPLE, UNTIL THE MARKET MAKER GOES HOME.</text>
+</svg>

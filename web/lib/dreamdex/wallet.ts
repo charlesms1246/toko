@@ -19,12 +19,14 @@
 
 import {
   createPublicClient,
+  createWalletClient,
   formatEther,
   formatUnits,
   http,
   parseAbi,
   type Address,
   type Hash,
+  type WalletClient,
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import {
@@ -98,6 +100,15 @@ function loadKey(): `0x${string}` | null {
  * Returns the address so callers can act on it without waiting for a render.
  */
 export function ensureWallet(): Address | null {
+  /*
+   * A managed wallet already IS the wallet — do not go looking for a key.
+   *
+   * Every funding path starts by calling this, and without this line the first
+   * one after a Privy login would have generated a burner and published ITS
+   * address over the managed one: the grant would land on a wallet the trader
+   * never signs with, and the player's balance would read as somebody else's.
+   */
+  if (managed) return managed.address;
   if (account) return account.address;
   if (typeof window === "undefined") return null;
 
@@ -121,9 +132,66 @@ export const getAccount = () => account;
 /**
  * Export the raw key so a player can move funds out or import elsewhere. This
  * is the only recovery path a burner has, so it must exist.
+ *
+ * **Null under a managed wallet, and that is the point of one.** Privy keeps the
+ * key in its own custody and hands out a provider, never the secret. Anything
+ * that needs to *sign* must go through `signer()` instead; only the reveal on
+ * `/menu/wallet` may ask for the key itself, and it has to handle null.
  */
 export function exportKey(): `0x${string}` | null {
+  if (managed) return null;
   return typeof window === "undefined" ? null : loadKey();
+}
+
+// ── Who signs ───────────────────────────────────────────────────────────────
+
+/**
+ * A managed wallet, when one is connected.
+ *
+ * This is the seam `wallet.ts` has documented since Phase 1 finally being used.
+ * `EmbeddedWallet` is a key in `localStorage`; a managed wallet (Privy) is an
+ * address plus a `WalletClient` over its provider, and the key never leaves the
+ * provider. Everything above this file asks for `signer()` and does not care
+ * which it got.
+ */
+let managed: { address: Address; client: WalletClient } | null = null;
+
+/** Hand the app a managed wallet. Called by the Privy bridge once it is ready. */
+export function attachManaged(address: Address, client: WalletClient) {
+  if (managed?.address === address) return;
+  managed = { address, client };
+  account = null;
+  set({ address, ready: true });
+  void refresh();
+}
+
+/** Drop the managed wallet — a logout. Leaves no address behind. */
+export function detachManaged() {
+  if (!managed) return;
+  managed = null;
+  set({ address: null, ready: true, gas: 0n, collateral: 0n });
+}
+
+/** True when the connected wallet is managed rather than a local burner. */
+export const isManaged = () => managed !== null;
+
+/**
+ * The thing that signs, whichever kind of wallet is connected.
+ *
+ * Three places write to the chain outside the SDK's trader — `preApprove`, the
+ * withdraw form, and the trader's own construction — and all of them used to
+ * build a client from the raw key. They go through here now, so a managed wallet
+ * needs no change in any of them.
+ */
+export function signer(): WalletClient | null {
+  if (managed) return managed.client;
+  ensureWallet();
+  if (!account) return null;
+  return createWalletClient({
+    account,
+    chain: CHAIN,
+    transport: http(HTTP_RPC_URL),
+  });
 }
 
 // ── Balances ────────────────────────────────────────────────────────────────
@@ -313,7 +381,8 @@ export const getGrantServerSnapshot = (): GrantStatus | null => null;
  */
 export async function requestCollateral(): Promise<GrantResult> {
   const address = ensureWallet();
-  if (!account || !address) return { ok: false, reason: "No wallet yet" };
+  const wallet = signer();
+  if (!wallet || !address) return { ok: false, reason: "No wallet yet" };
   if (needsGas(state.gas)) return { ok: false, reason: "Needs STT for gas first" };
 
   const status = grant ?? readGrant();
@@ -327,13 +396,9 @@ export async function requestCollateral(): Promise<GrantResult> {
   }
 
   try {
-    const { createWalletClient } = await import("viem");
-    const wallet = createWalletClient({
-      account,
-      chain: CHAIN,
-      transport: http(HTTP_RPC_URL),
-    });
     const hash = await wallet.writeContract({
+      account: address,
+      chain: CHAIN,
       address: COLLATERAL.address,
       abi: erc20,
       functionName: "faucet",
@@ -365,7 +430,11 @@ export async function requestCollateral(): Promise<GrantResult> {
 }
 
 /** Where first-run funding has got to. Every stage is a real transaction. */
-export type FundingStage = "gas" | "collateral" | "done";
+/**
+ * `signin` is not funding, but it is the first thing the funding screen waits
+ * on when a managed wallet is configured, and the screen needs a caption for it.
+ */
+export type FundingStage = "signin" | "gas" | "collateral" | "done";
 
 /**
  * Fund a brand-new wallet so a first-time visitor can actually trade.

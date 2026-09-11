@@ -48,12 +48,28 @@ export default function LadderConsole({ title }: { title: string }) {
         ? { label: "NEW LADDER", pulse: true, onPress: ladder.clear }
         : live
           ? { label: "RIDING", disabled: true }
-          : {
-              label: round.status === "pending" ? "…" : "START",
-              loading: round.status === "pending",
-              disabled: !round.canEnter || !ask,
-              onPress: () => ladder.start(side),
-            },
+          : !ask && round.status !== "pending"
+            ? // A dead key has to say why it is dead.
+              //
+              // It kept the label START while disabled, so selecting a side with
+              // no offer left the player pressing a button that looked ready and
+              // did nothing. `RoundConsole` already answers this with NO BID;
+              // this is the same answer for the other direction of the book.
+              { label: "NO OFFER", disabled: true }
+            : {
+                // "START" on a ladder that is already two rungs up reads as
+                // "begin again", which is exactly what it used to do. Mid-ladder
+                // this key places the NEXT rung with the rolled stake.
+                label:
+                  round.status === "pending"
+                    ? "…"
+                    : ladder.banked.length > 0
+                      ? "NEXT RUNG"
+                      : "START",
+                loading: round.status === "pending",
+                disabled: !round.canEnter,
+                onPress: () => ladder.start(side),
+              },
     action1: ladder.canPress
       ? { label: "FOLD", onPress: ladder.fold }
       : {
@@ -78,6 +94,9 @@ export default function LadderConsole({ title }: { title: string }) {
       <PriceChart
         bare
         asset={round.window?.asset ?? "BTC"}
+        side={round.side}
+        openedAt={round.openedAt}
+        next={round.next}
         entry={
           round.window?.strike != null
             ? markets.strikePrice(round.window.strike)

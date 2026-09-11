@@ -79,8 +79,26 @@ export default function RoundConsole({
   const live = round.status === "open";
   const resting = round.status === "resting";
 
-  const ask = book.best(side === "up" ? round.book.yesAsks : round.book.noAsks);
+  const askUp = book.best(round.book.yesAsks);
+  const askDown = book.best(round.book.noAsks);
+  const ask = side === "up" ? askUp : askDown;
   const marketMultiple = ask ? book.multipleAt(ask.price) : null;
+
+  /**
+   * Is pressing on this side worth anything right now?
+   *
+   * `round.canEnter` only asks whether the WINDOW is tradable — it is true when
+   * *either* side has an offer. Lucky was the one screen that stopped there, so
+   * with quotes on DOWN only, LONG stayed lit, took the press, and came back
+   * "nobody on the other side". Press and Snipe already guard on their own
+   * side's offer; this brings Lucky in line.
+   *
+   * A limit rung is still worth pressing with no offer — that is the rest
+   * mechanic, and the screen then offers REST IT. `MKT` has no price of its own,
+   * so without an offer there is genuinely nothing to do.
+   */
+  const playable = (s: Side) =>
+    target.price != null || !!(s === "up" ? askUp : askDown);
 
   /**
    * What the book will actually pay for the position right now — the live bid
@@ -141,19 +159,19 @@ export default function RoundConsole({
           : {
               label: round.status === "pending" ? "…" : "PLAY",
               loading: round.status === "pending",
-              disabled: !round.canEnter,
+              disabled: !round.canEnter || !playable(side),
               onPress: () => fire(side),
             },
     action1: {
       label: "LONG",
       pulse: !live && !resting && side === "up",
-      disabled: live || resting || !round.canEnter,
+      disabled: live || resting || !round.canEnter || !playable("up"),
       onPress: () => fire("up"),
     },
     action2: {
       label: "SHORT",
       pulse: !live && !resting && side === "down",
-      disabled: live || resting || !round.canEnter,
+      disabled: live || resting || !round.canEnter || !playable("down"),
       onPress: () => fire("down"),
     },
     knob: {
@@ -185,6 +203,9 @@ export default function RoundConsole({
       <PriceChart
         bare
         asset={round.window?.asset ?? "BTC"}
+        side={round.side}
+        openedAt={round.openedAt}
+        next={round.next}
         entry={
           round.window?.strike != null
             ? markets.strikePrice(round.window.strike)
@@ -380,6 +401,9 @@ export default function RoundConsole({
         <PriceChart
           bare
           asset={round.window?.asset ?? "BTC"}
+        side={round.side}
+        openedAt={round.openedAt}
+        next={round.next}
           entry={
             round.window?.strike != null
               ? markets.strikePrice(round.window.strike)

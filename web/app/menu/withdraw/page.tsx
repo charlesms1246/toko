@@ -10,19 +10,16 @@
 
 import { useCallback, useState, useSyncExternalStore } from "react";
 import {
-  createWalletClient,
   formatUnits,
-  http,
   isAddress,
   parseAbi,
   parseUnits,
   type Address,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
 import TapTarget from "@/components/ui/TapTarget";
 import { MenuRow } from "@/components/menu/MenuUI";
 import { useToast } from "@/components/ui/Toast";
-import { CHAIN, COLLATERAL, GAS_LIMIT, HTTP_RPC_URL, explorerTx } from "@/lib/dreamdex/config";
+import { CHAIN, COLLATERAL, GAS_LIMIT, explorerTx } from "@/lib/dreamdex/config";
 import * as wallet from "@/lib/dreamdex/wallet";
 
 const erc20 = parseAbi(["function transfer(address to, uint256 value) returns (bool)"]);
@@ -50,16 +47,16 @@ export default function WithdrawPage() {
     Number.isFinite(value) && value > 0 && value <= balance && isAddress(to);
 
   const send = useCallback(async () => {
-    const key = wallet.exportKey();
-    if (!key || !valid) return;
+    // Whoever signs — a burner's key or a managed wallet's provider. This used
+    // to build a client from the raw key, which a managed wallet does not have.
+    const client = wallet.signer();
+    const from = wallet.getSnapshot().address;
+    if (!client || !from || !valid) return;
     setBusy(true);
     try {
-      const client = createWalletClient({
-        account: privateKeyToAccount(key),
-        chain: CHAIN,
-        transport: http(HTTP_RPC_URL),
-      });
       const hash = await client.writeContract({
+        account: from,
+        chain: CHAIN,
         address: COLLATERAL.address,
         abi: erc20,
         functionName: "transfer",

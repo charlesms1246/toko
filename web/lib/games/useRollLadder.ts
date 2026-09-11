@@ -88,15 +88,32 @@ export function useRollLadder(): RollLadder {
     [round],
   );
 
+  /**
+   * Begin a ladder — or place the next rung of one already running.
+   *
+   * The distinction is the whole fix. `press` banks the rung it just won and
+   * then calls `buyAt`, which **returns silently when the book has no offer at
+   * that instant**. The ladder is then started, holding a banked rung, with the
+   * round idle — and the only key on screen is this one. It used to clear
+   * `banked` unconditionally, so the way out of a roll that could not be placed
+   * was to throw away the rung that had just been won. The money was never lost
+   * (a winning contract had already paid), but the ladder's record of it was,
+   * and that record is the entire game.
+   */
   const start = useCallback(
     (side: Side) => {
-      setBanked([]);
       setFolded(false);
       setStarted(true);
+      if (started) {
+        // Mid-ladder: this is the rolled stake going onto the next window.
+        buyAt(side, stake);
+        return;
+      }
+      setBanked([]);
       setStake(BASE_CONTRACTS);
       buyAt(side, BASE_CONTRACTS);
     },
-    [buyAt],
+    [buyAt, started, stake],
   );
 
   /** Bank the rung that just won, then stake its payout on the next window. */

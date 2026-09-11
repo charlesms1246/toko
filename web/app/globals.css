@@ -142,8 +142,19 @@ body {
    * Clips the surround, which is inset by NEGATIVE hundreds of pixels so its
    * drift never shows an edge. Without this the document's scroll width grows to
    * about three viewports and the page gets a horizontal scrollbar.
+   *
+   * `clip`, NOT `hidden`, and the difference is the whole bug. `hidden` makes an
+   * element a SCROLL CONTAINER — it just hides the scrollbars. With the surround
+   * running from -425px to +1337px this box had a 1486px scroll height inside an
+   * 882px viewport, so the moment anything in the menu was focused or scrolled
+   * into view the browser scrolled its nearest scrollable ancestor: this one, by
+   * 208px, taking the whole console up with it and off the top of the screen.
+   * Nothing could scroll it back, because the scrollbars are hidden.
+   *
+   * `clip` clips the paint and creates no scroll container, so there is nothing
+   * to scroll and the device cannot move.
    */
-  overflow: hidden;
+  overflow: clip;
   background: #0b0b0c;
 }
 

@@ -308,6 +308,9 @@ export default function DuelPage() {
       <PriceChart
         bare
         asset={round.window?.asset ?? "BTC"}
+        side={round.side}
+        openedAt={round.openedAt}
+        next={round.next}
         entry={
           round.window?.strike != null
             ? markets.strikePrice(round.window.strike)

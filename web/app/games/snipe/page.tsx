@@ -75,13 +75,18 @@ export default function SnipePage() {
   useProgramConsole({
     main: live
       ? { label: "CASH OUT", pulse: true, onPress: round.sell }
-      : {
-          label: round.status === "pending" ? "…" : "TAKE",
-          loading: round.status === "pending",
-          disabled: !round.canEnter || !wall,
-          pulse: !!wall && !closing,
-          onPress: take,
-        },
+      : !wall && round.status !== "pending"
+        ? // Same reasoning as Press: TAKE on a key that cannot take is a lie the
+          // player presses repeatedly. The wall being gone IS the game's central
+          // event, so the key should be the thing that says it.
+          { label: "NO WALL", disabled: true }
+        : {
+            label: round.status === "pending" ? "…" : "TAKE",
+            loading: round.status === "pending",
+            disabled: !round.canEnter,
+            pulse: !!wall && !closing,
+            onPress: take,
+          },
     /*
      * Snipe is the one game with a spare cap — there is nothing to choose here,
      * only when to press. So the right-hand cap is a display rather than a
@@ -107,6 +112,9 @@ export default function SnipePage() {
       <PriceChart
         bare
         asset={round.window?.asset ?? "BTC"}
+        side={round.side}
+        openedAt={round.openedAt}
+        next={round.next}
         entry={
           round.window?.strike != null
             ? markets.strikePrice(round.window.strike)
