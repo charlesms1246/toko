@@ -22,13 +22,15 @@
  * real leaderboard.
  */
 
+import { fromRaw, toRaw } from "@/lib/dreamdex/config";
+
 const MODE_KEY = "toko_demo_mode_v1";
 const LEDGER_KEY = "toko_demo_ledger_v1";
 /** What a finished demo run left behind, for the conversion moment. */
 const PAST_KEY = "toko_demo_past_v1";
 
 /** Hypothetical opening balance, in collateral units. Labelled everywhere. */
-export const OPENING_BALANCE = 100n * 1_000_000n;
+export const OPENING_BALANCE = toRaw(100);
 
 export interface Ledger {
   /** Hypothetical collateral, raw. */
@@ -226,9 +228,22 @@ export function clearPastRun() {
  * round is unfinished rather than quietly discard it.
  */
 export function hasOpenPlay(): boolean {
+  return openCount() > 0;
+}
+
+/**
+ * How many paper positions and resting bids are still on the books.
+ *
+ * Needed by name, not just as a boolean, because leaving demo discards them and
+ * the player is owed the number before they decide. Note these do NOT clear
+ * themselves: a position is only settled by `execution.claim`, which runs from
+ * the game screen that opened it. Walk away mid-window and the entry sits here
+ * for good, which is why the way out must never be an unconditional refusal.
+ */
+export function openCount(): number {
   return (
-    Object.values(state.ledger.positions).some((v) => v > 0n) ||
-    Object.keys(state.ledger.resting).length > 0
+    Object.values(state.ledger.positions).filter((v) => v > 0n).length +
+    Object.keys(state.ledger.resting).length
   );
 }
 
@@ -327,12 +342,9 @@ export function unrest(marketId: string, refund: bigint) {
 export function expireRest(marketId: string) {
   const pending = state.ledger.resting[marketId];
   if (!pending) return;
-  const escrow = BigInt(
-    Math.round(
-      (Number(pending.size) / 1e6) *
-        (pending.side === "up" ? pending.yesPrice : 1 - pending.yesPrice) *
-        1e6,
-    ),
+  const escrow = toRaw(
+    fromRaw(pending.size) *
+      (pending.side === "up" ? pending.yesPrice : 1 - pending.yesPrice),
   );
   unrest(marketId, escrow);
 }

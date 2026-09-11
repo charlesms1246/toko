@@ -316,7 +316,6 @@ export default function FlappyPiperPage() {
       pulse: true,
       onPress: flap,
     },
-    status: { left: "FLAPPY PIPER", right: `BEST ${best}` },
   });
 
   const isBest = lastScore > 0 && lastScore >= best;

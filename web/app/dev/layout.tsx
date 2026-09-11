@@ -14,7 +14,6 @@ export default function DevLayout({ children }: { children: React.ReactNode }) {
       backHref={isIndex ? undefined : "/dev"}
       screenLabel="Dev tools"
       wide
-      status={{ left: "DEV", right: isIndex ? "INDEX" : leaf.toUpperCase() }}
     >
       {children}
     </Panel>

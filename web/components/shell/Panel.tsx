@@ -21,7 +21,6 @@ export default function Panel({
   backHref,
   closeHref = "/games",
   screenLabel,
-  status,
   wide,
   children,
 }: {
@@ -31,7 +30,6 @@ export default function Panel({
   closeHref?: string;
   /** What the console screen shows while this panel is open. */
   screenLabel: string;
-  status?: { left?: string; right?: string };
   /**
    * Break out of the phone-width column. For the dev tools, which are internal
    * reference pages rather than part of the product surface — a catalogue is
@@ -43,7 +41,10 @@ export default function Panel({
   const mounted = useIsMounted();
   const router = useRouter();
 
-  useProgramConsole({ status: status ?? { left: screenLabel } });
+  // Clears the hardware while the panel is up: no main key, no action keys.
+  // There is no status caption any more — the console's chin carries moulded
+  // silkscreen only, so a panel has nothing to print there.
+  useProgramConsole({});
 
   const panel = (
     <div className="fixed inset-0 z-[45] flex justify-center bg-black/80 backdrop-blur-md">
@@ -91,7 +92,18 @@ export default function Panel({
           {screenLabel}
         </span>
       </ScreenRoot>
-      {mounted && createPortal(panel, document.body)}
+      {/*
+        Portalled into the app COLUMN, not the body.
+        
+        The product is a phone-width frame centred on a backdrop, and a panel
+        portalled to `document.body` lands outside it — spanning the whole desk
+        while the console sits in its column. `MenuDrawer` had the same bug and
+        it showed up worse there, because it also positions off `--device-*`,
+        which are insets in FRAME coordinates: applied to the viewport they
+        spread a 460px sheet across 1300px of page.
+      */}
+      {mounted &&
+        createPortal(panel, document.querySelector(".app-frame") ?? document.body)}
     </>
   );
 }

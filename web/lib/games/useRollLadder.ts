@@ -24,6 +24,7 @@
 
 import { useCallback, useState } from "react";
 import { useRound, type Round, type Side } from "./useRound";
+import { fromRaw } from "@/lib/dreamdex/config";
 
 export interface Rung {
   /** Contracts staked into this rung. */
@@ -101,8 +102,8 @@ export function useRollLadder(): RollLadder {
   /** Bank the rung that just won, then stake its payout on the next window. */
   const press = useCallback(() => {
     if (!justWon || round.entryCost == null) return;
-    const contracts = Number(round.held) / 1e6;
-    const cost = Number(round.entryCost) / 1e6;
+    const contracts = fromRaw(round.held);
+    const cost = fromRaw(round.entryCost);
     setBanked((prev) => [...prev, { contracts, cost }]);
     // A winning contract redeems for exactly 1, so the payout in contracts is
     // the stake for the next rung.
@@ -121,8 +122,8 @@ export function useRollLadder(): RollLadder {
 
   const fold = useCallback(() => {
     if (justWon && round.entryCost != null) {
-      const contracts = Number(round.held) / 1e6;
-      const cost = Number(round.entryCost) / 1e6;
+      const contracts = fromRaw(round.held);
+      const cost = fromRaw(round.entryCost);
       setBanked((prev) => [...prev, { contracts, cost }]);
     }
     setFolded(true);
@@ -134,11 +135,11 @@ export function useRollLadder(): RollLadder {
     round,
     banked,
     height: banked.length + (justWon ? 1 : 0),
-    nextStake: justWon ? Number(round.held) / 1e6 : stake,
+    nextStake: justWon ? fromRaw(round.held) : stake,
     atRisk:
       banked.reduce((sum, r) => sum + r.cost, 0) +
       (round.entryCost != null && round.status !== "idle"
-        ? Number(round.entryCost) / 1e6
+        ? fromRaw(round.entryCost)
         : 0),
     canPress: justWon && !folded,
     finished: justLost || folded,

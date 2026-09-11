@@ -64,7 +64,6 @@ export default function PerfPage() {
       title="Perf"
       backHref="/admin"
       screenLabel="Perf"
-      status={{ left: "PERF", right: latest ? `${latest.fps.toFixed(0)} FPS` : "—" }}
     >
       {!admin ? (
         <p className="py-10 text-center text-sm text-text-3">

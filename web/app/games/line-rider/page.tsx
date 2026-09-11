@@ -353,7 +353,6 @@ export default function LineRiderPage() {
         engine.current.target = v / 100;
       },
     },
-    status: { left: "LINE RIDER", right: `BEST ${best}` },
   });
 
   const isBest = lastScore > 0 && lastScore >= best;

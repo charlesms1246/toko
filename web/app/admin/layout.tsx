@@ -18,7 +18,6 @@ export default function AdminLayout({
       title={isIndex ? "Admin" : (pathname.split("/").pop() ?? "admin")}
       backHref={isIndex ? undefined : "/admin"}
       screenLabel="Admin"
-      status={{ left: "ADMIN", right: admin ? "OK" : "DENIED" }}
     >
       {admin ? (
         children

@@ -55,7 +55,6 @@ export default function ErrorsPage() {
       title="Errors"
       backHref="/admin"
       screenLabel="Errors"
-      status={{ left: "ERRORS", right: String(open) }}
     >
       {!admin ? (
         <p className="py-10 text-center text-sm text-text-3">

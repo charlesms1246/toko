@@ -34,10 +34,10 @@ import {
   Footer,
   GhostCount,
   Header,
+  Payoff,
   Shell,
   Splash,
   Stage,
-  StageReadout,
   Tile,
   TileRow,
 } from "@/components/screen/GameScreen";
@@ -47,6 +47,7 @@ import { useRound, type Side } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import * as markets from "@/lib/dreamdex/markets";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
+import { fromRaw } from "@/lib/dreamdex/config";
 
 /** A knob detent: `price` null means MARKET — cross whatever is resting. */
 export interface Rung {
@@ -89,7 +90,7 @@ export default function RoundConsole({
   const bid = live
     ? book.best(round.side === "up" ? round.book.yesBids : round.book.noBids)
     : null;
-  const contracts = Number(round.held) / 1e6;
+  const contracts = fromRaw(round.held);
   const dealValue = bid ? bid.price * contracts : null;
 
   /**
@@ -173,12 +174,6 @@ export default function RoundConsole({
       format: (v) => `${SIZES[v]}`,
       onChange: (v) => !live && !resting && setSizeIdx(v),
     },
-    status: {
-      left: round.window
-        ? `${round.window.asset} ${round.secsLeft.toFixed(0)}s`
-        : title.toUpperCase(),
-      right: `$${formatCollateral(round.balance)}`,
-    },
     lightShow: round.status === "settling" || settled,
   });
 
@@ -204,11 +199,10 @@ export default function RoundConsole({
     <Header
       eyebrow={`${title} · ${round.window?.asset ?? "—"}`}
       value={spot > 0 ? `$${formatPrice(spot)}` : "—"}
-      rightLabel={round.window ? "Ends in" : "Balance"}
-      rightValue={
-        round.window
-          ? `${round.secsLeft.toFixed(0)}s`
-          : `$${formatCollateral(round.balance)}`
+      rightLabel="Available"
+      rightValue={`$${formatCollateral(round.balance)}`}
+      rightNote={
+        round.window ? `Ends in ${round.secsLeft.toFixed(0)}s` : undefined
       }
     />
   );
@@ -218,7 +212,7 @@ export default function RoundConsole({
     const won = round.status === "won";
     const net =
       round.payout != null && round.entryCost != null
-        ? Number(round.payout - round.entryCost) / 1e6
+        ? fromRaw(round.payout - round.entryCost)
         : null;
     return (
       <Shell>
@@ -277,7 +271,7 @@ export default function RoundConsole({
 
   // ── Live position ────────────────────────────────────────────────────────
   if (live && round.window) {
-    const cost = round.entryCost != null ? Number(round.entryCost) / 1e6 : null;
+    const cost = round.entryCost != null ? fromRaw(round.entryCost) : null;
     const pnl = dealValue != null && cost != null ? dealValue - cost : null;
 
     return (
@@ -298,31 +292,19 @@ export default function RoundConsole({
         <Stage>
           {chart}
           <GhostCount>{round.secsLeft.toFixed(0)}</GhostCount>
-          <StageReadout label="The deal">
-            <span
-              className={`tnum text-[30px] font-extrabold leading-none ${
-                pnl != null && pnl >= 0 ? "text-up" : "text-down"
-              }`}
-            >
-              {dealValue == null ? "no bid" : `$${dealValue.toFixed(2)}`}
-            </span>
-            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-text-3">
-              on the book now
-            </span>
-          </StageReadout>
         </Stage>
         <Footer>
-          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
-            {round.side === "up" ? "Long" : "Short"} · take the deal, or hold to
-            the buzzer
-          </div>
-          <div className="tnum mt-0.5 text-[15px] font-extrabold text-text">
+          <Payoff
+            label={`${round.side === "up" ? "Long" : "Short"} · ${
+              cost != null ? `paid $${cost.toFixed(2)} → ` : ""
+            }on the book now`}
+            value={dealValue == null ? "no bid" : `$${dealValue.toFixed(2)}`}
+            tone={pnl != null && pnl < 0 ? "down" : "up"}
+          />
+          <div className="mt-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">
             {pnl == null
-              ? "—"
-              : `${pnl >= 0 ? "+" : "−"}$${Math.abs(pnl).toFixed(2)}`}
-            <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-text-3">
-              if you cash out
-            </span>
+              ? "take the deal, or hold to the buzzer"
+              : `${pnl >= 0 ? "+" : "−"}$${Math.abs(pnl).toFixed(2)} if you cash out · or hold to the buzzer`}
           </div>
         </Footer>
       </Shell>
@@ -375,16 +357,7 @@ export default function RoundConsole({
   // Play key.
   return (
     <Shell>
-      <Header
-        eyebrow={`${title} · ${round.window?.asset ?? "—"}`}
-        value={spot > 0 ? `$${formatPrice(spot)}` : "—"}
-        rightLabel={round.window ? "Ends in" : "Balance"}
-        rightValue={
-          round.window
-            ? `${round.secsLeft.toFixed(0)}s`
-            : `$${formatCollateral(round.balance)}`
-        }
-      />
+      {header}
 
       <TileRow cols={3}>
         <Tile
@@ -414,14 +387,6 @@ export default function RoundConsole({
           }
         />
         <Fx />
-        <StageReadout label={side === "up" ? "Up pays" : "Down pays"}>
-          <span className="tnum text-[30px] font-extrabold leading-none text-brand-500">
-            {marketMultiple ? `${marketMultiple.toFixed(2)}x` : "—"}
-          </span>
-          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-text-3">
-            live
-          </span>
-        </StageReadout>
       </Stage>
 
       <Footer>
@@ -441,7 +406,18 @@ export default function RoundConsole({
             </span>
           ))}
         </div>
-        <div className="mt-2 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">
+        <div className="mt-2">
+          <Payoff
+            /* No side prefix: the SIDE tile above already says which way. */
+            label={
+              ask
+                ? `$${(ask.price * size).toFixed(2)} → $${size.toFixed(2)}`
+                : "No offer on this side"
+            }
+            value={marketMultiple ? `${marketMultiple.toFixed(2)}x` : "—"}
+          />
+        </div>
+        <div className="mt-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">
           {canRest
             ? `${round.message} · rest it instead?`
             : round.message
@@ -455,12 +431,6 @@ export default function RoundConsole({
                     : !round.canEnter
                       ? "nobody quoting"
                       : `${side === "up" ? "long" : "short"} · press play`}
-        </div>
-        <div className="tnum mt-0.5 text-[15px] font-extrabold text-text">
-          {ask ? `$${(ask.price * size).toFixed(2)}` : "—"}
-          <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-text-3">
-            to play
-          </span>
         </div>
       </Footer>
     </Shell>

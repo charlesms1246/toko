@@ -140,12 +140,6 @@ export default function ChallengePage({
             disabled: !takeable || !funded,
             onPress: take,
           },
-    status: {
-      left: status?.open
-        ? `${status.open.window.asset} ${Math.max(0, status.open.windowSecsLeft).toFixed(0)}s`
-        : "CHALLENGE",
-      right: `$${wallet.formatCollateral(me.collateral)}`,
-    },
     lightShow: phase === "took",
   });
 
@@ -249,6 +243,13 @@ export default function ChallengePage({
       <ScreenRow
         label="Settles in"
         value={`${Math.max(0, Math.round(status.open.windowSecsLeft / 60))}m`}
+      />
+      {/* Carried here from the console's chin, which no longer prints live
+          data. This is the one screen where the balance had nowhere else to
+          be, and taking a challenge is the moment it matters most. */}
+      <ScreenRow
+        label="Your balance"
+        value={`$${wallet.formatCollateral(me.collateral)}`}
       />
       <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
         {error

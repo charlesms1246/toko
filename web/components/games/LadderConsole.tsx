@@ -14,18 +14,17 @@ import { useRollLadder } from "@/lib/games/useRollLadder";
 import type { Side } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
+import { fromRaw } from "@/lib/dreamdex/config";
 import PriceChart from "@/components/screen/PriceChart";
 import {
-  CentreRule,
-  CentreStat,
   Footer,
   Fx,
   GhostCount,
   Header,
+  Payoff,
   Shell,
   Splash,
   Stage,
-  StageCentre,
   Tile,
   TileRow,
 } from "@/components/screen/GameScreen";
@@ -71,12 +70,6 @@ export default function LadderConsole({ title }: { title: string }) {
           disabled: live || round.status === "pending",
           onPress: () => setSide("down"),
         },
-    status: {
-      left: round.window
-        ? `${round.window.asset} ${round.secsLeft.toFixed(0)}s`
-        : title.toUpperCase(),
-      right: `$${formatCollateral(round.balance)}`,
-    },
     lightShow: round.status === "settling" || ladder.canPress,
   });
 
@@ -99,11 +92,10 @@ export default function LadderConsole({ title }: { title: string }) {
     <Header
       eyebrow={`${title} · rung ${ladder.height + 1}`}
       value={spot > 0 ? `$${formatPrice(spot)}` : "—"}
-      rightLabel={round.window ? "Ends in" : "In the ladder"}
-      rightValue={
-        round.window
-          ? `${round.secsLeft.toFixed(0)}s`
-          : `$${ladder.atRisk.toFixed(2)}`
+      rightLabel="Available"
+      rightValue={`$${formatCollateral(round.balance)}`}
+      rightNote={
+        round.window ? `Ends in ${round.secsLeft.toFixed(0)}s` : undefined
       }
       badge={ladder.height > 0 ? `Rung ${ladder.height}` : undefined}
     />
@@ -186,14 +178,14 @@ export default function LadderConsole({ title }: { title: string }) {
             label="Staked"
             value={
               round.entryCost != null
-                ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
+                ? `$${fromRaw(round.entryCost).toFixed(2)}`
                 : "—"
             }
           />
           <Tile label="At risk" value={`$${ladder.atRisk.toFixed(2)}`} />
           <Tile
             label="Pays"
-            value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
+            value={`$${fromRaw(round.held).toFixed(2)}`}
             tone="brand"
           />
         </TileRow>
@@ -214,23 +206,18 @@ export default function LadderConsole({ title }: { title: string }) {
   return (
     <Shell>
       {header}
-      <Stage>
-        {chart}
-        <StageCentre>
-          <CentreStat
-            label={side === "up" ? "Up pays" : "Down pays"}
-            value={ask ? `${book.multipleAt(ask.price).toFixed(2)}x` : "—"}
-            tone={side === "up" ? "up" : "down"}
-          />
-          <CentreRule />
-          <CentreStat
-            label="First rung"
-            value={ask ? `$${ask.price.toFixed(2)}` : "—"}
-          />
-        </StageCentre>
-      </Stage>
+      <Stage>{chart}</Stage>
       <Footer>
-        <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+        <Payoff
+          label={
+            ask
+              ? `${side === "up" ? "Long" : "Short"} · $${ask.price.toFixed(2)} → $1.00 a rung`
+              : "No offer on this side"
+          }
+          value={ask ? `${book.multipleAt(ask.price).toFixed(2)}x` : "—"}
+          tone={side === "up" ? "up" : "down"}
+        />
+        <div className="mt-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
           {round.message
             ? round.message
             : !round.window

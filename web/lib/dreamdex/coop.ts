@@ -45,7 +45,7 @@ import * as orders from "./orders";
 import * as book from "./book";
 import * as positions from "./positions";
 import * as wallet from "./wallet";
-import { MAKER_GAS_LIMIT } from "./config";
+import { fromRaw, MAKER_GAS_LIMIT } from "./config";
 import { getClient } from "./client";
 
 export type Side = orders.Side;
@@ -321,8 +321,6 @@ interface RawOrder {
   expireTimestampNs: bigint;
 }
 
-const RAW = 1e6;
-
 /** One resting order, if it is a live TOKO challenge. */
 function toOpen(
   o: RawOrder,
@@ -340,8 +338,8 @@ function toOpen(
     id: idFromTag(o.userData),
     from: o.owner,
     side: isBid ? "up" : "down",
-    yesPrice: Number(o.price) / RAW,
-    size: Number(o.quantityRemaining) / RAW,
+    yesPrice: fromRaw(o.price),
+    size: fromRaw(o.quantityRemaining),
     marketId: window.marketId,
   };
 

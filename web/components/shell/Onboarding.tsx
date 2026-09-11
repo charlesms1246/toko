@@ -27,6 +27,7 @@ import { APP, LINKS } from "@/lib/api/fixtures";
 import { resumeAudio } from "@/lib/sound";
 import {
   COLLATERAL,
+  fromRaw,
   GAS,
   SIGNUP_GRANT,
   STT_FAUCETS,
@@ -94,16 +95,11 @@ export default function Onboarding({
                 "linear-gradient(to top, #000 34%, #000000f0 58%, #00000080 80%, #0000 100%)",
             }}
           />
-          <Image
-            src="/assets/logos/toko-mark.svg"
-            alt="TOKO"
-            width={112}
-            height={112}
-            unoptimized
-            className="relative z-10 mt-[max(28px,calc(env(safe-area-inset-top)+16px))] h-12 w-auto drop-shadow-[0_10px_30px_rgba(0,0,0,0.6)] sm:h-14"
-            priority
-          />
           <div className="flex-1" />
+          {/* No mark here. It was pinned to the top of the viewport, which put
+              it on the bezel once the landing framed the whole device; it then
+              moved down here and duplicated the one now on the console's own
+              screen. The device wears the mark, and the page carries the pitch. */}
           <div className="relative z-10 w-full max-w-sm px-6 pb-[max(28px,calc(env(safe-area-inset-bottom)+20px))] text-center">
             <h1 className="text-balance text-3xl font-extrabold leading-tight tracking-tight text-text">
               {APP.tagline}
@@ -234,7 +230,7 @@ export default function Onboarding({
                   </span>{" "}
                   in demo and finished on{" "}
                   <span className="font-bold text-text-2">
-                    ${(Number(past.balance) / 1e6).toFixed(2)}
+                    ${fromRaw(past.balance).toFixed(2)}
                   </span>
                   . From here it counts.
                 </p>

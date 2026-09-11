@@ -33,6 +33,17 @@ export const COLLATERAL = {
   decimals: 6,
 } as const;
 
+/**
+ * Raw collateral units <-> a decimal amount.
+ *
+ * The 6-vs-18 difference belongs here and nowhere else. Every screen that used
+ * to write `Number(raw) / 1e6` was quietly asserting testnet's decimals from a
+ * file that could not see the deployment.
+ */
+export const fromRaw = (raw: bigint) => Number(raw) / 10 ** COLLATERAL.decimals;
+export const toRaw = (amount: number) =>
+  BigInt(Math.round(amount * 10 ** COLLATERAL.decimals));
+
 /** Native gas token on Shannon. */
 export const GAS = { symbol: "STT", decimals: 18 } as const;
 

@@ -5,7 +5,7 @@
  *
  * A route mounts a partial control set with `useProgramConsole(...)` and the 3D
  * console reflects it: key captions and colors, what the knob scrolls, what the
- * thumbwheel sizes, and the status caption under the device.
+ * thumbwheel sizes, and the dials.
  */
 
 import {
@@ -46,18 +46,12 @@ export interface DialControl {
   onChange?: (value: number) => void;
 }
 
-export interface StatusControl {
-  left?: string;
-  right?: string;
-}
-
 export interface ConsoleControlsState {
   main: KeyControl | null;
   action1: KeyControl | null;
   action2: KeyControl | null;
   knob: DialControl | null;
   numberWheel: DialControl | null;
-  status: StatusControl | null;
   lightShow: boolean;
 }
 
@@ -67,7 +61,6 @@ export const DEFAULT_CONTROLS: ConsoleControlsState = {
   action2: null,
   knob: null,
   numberWheel: null,
-  status: null,
   lightShow: false,
 };
 
@@ -176,7 +169,6 @@ export function useProgramConsole(next: Partial<ConsoleControlsState>) {
       action2: key("action2"),
       knob: dial("knob"),
       numberWheel: dial("numberWheel"),
-      status: current.status ?? null,
       lightShow: current.lightShow ?? false,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

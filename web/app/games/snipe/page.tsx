@@ -18,18 +18,17 @@ import { useProgramConsole } from "@/lib/console/controls";
 import { useRound, ENTRY_CUTOFF_SECONDS } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
+import { fromRaw } from "@/lib/dreamdex/config";
 import PriceChart from "@/components/screen/PriceChart";
 import {
-  CentreRule,
-  CentreStat,
   Footer,
   Fx,
   GhostCount,
   Header,
+  Payoff,
   Shell,
   Splash,
   Stage,
-  StageCentre,
   Tile,
   TileRow,
 } from "@/components/screen/GameScreen";
@@ -83,12 +82,23 @@ export default function SnipePage() {
           pulse: !!wall && !closing,
           onPress: take,
         },
-    status: {
-      left: round.window
-        ? `${round.window.asset} ${round.secsLeft.toFixed(0)}s`
-        : "SNIPE",
-      right: `$${formatCollateral(round.balance)}`,
-    },
+    /*
+     * Snipe is the one game with a spare cap — there is nothing to choose here,
+     * only when to press. So the right-hand cap is a display rather than a
+     * blank: the asset this window is written on, struck as a coin, the way the
+     * reference sets little screens into its secondary keys.
+     *
+     * It is a readout, not a control, so it does nothing when pressed. The
+     * ticker is the live window's own asset; with no window there is no asset
+     * to name and the cap goes back to bare plastic.
+     */
+    action2: round.window
+      ? {
+          label: round.window.asset,
+          display: { mode: "token", ticker: round.window.asset },
+          disabled: true,
+        }
+      : null,
     lightShow: round.status === "settling" || settled,
   });
 
@@ -111,11 +121,10 @@ export default function SnipePage() {
     <Header
       eyebrow={`Snipe · ${round.window?.asset ?? "—"}`}
       value={spot > 0 ? `$${formatPrice(spot)}` : "—"}
-      rightLabel={round.window ? "Ends in" : "Balance"}
-      rightValue={
-        round.window
-          ? `${round.secsLeft.toFixed(0)}s`
-          : `$${formatCollateral(round.balance)}`
+      rightLabel="Available"
+      rightValue={`$${formatCollateral(round.balance)}`}
+      rightNote={
+        round.window ? `Ends in ${round.secsLeft.toFixed(0)}s` : undefined
       }
     />
   );
@@ -124,7 +133,7 @@ export default function SnipePage() {
     const won = round.status === "won";
     const net =
       round.payout != null && round.entryCost != null
-        ? Number(round.payout - round.entryCost) / 1e6
+        ? fromRaw(round.payout - round.entryCost)
         : null;
     return (
       <Shell>
@@ -184,13 +193,13 @@ export default function SnipePage() {
             label="Paid"
             value={
               round.entryCost != null
-                ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
+                ? `$${fromRaw(round.entryCost).toFixed(2)}`
                 : "—"
             }
           />
           <Tile
             label="Pays"
-            value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
+            value={`$${fromRaw(round.held).toFixed(2)}`}
             tone="brand"
           />
         </TileRow>
@@ -210,25 +219,19 @@ export default function SnipePage() {
   return (
     <Shell>
       {header}
-      <Stage>
-        {chart}
-        <StageCentre>
-          <CentreStat
-            label={wall ? `${wall.side === "up" ? "Up" : "Down"} pays` : "No quote"}
-            value={multiple ? `${multiple.toFixed(2)}x` : "—"}
-            tone={closing ? "down" : "brand"}
-          />
-          <CentreRule />
-          <CentreStat
-            label="Costs"
-            value={wall ? `$${(wall.ask.price * SIZE).toFixed(2)}` : "—"}
-            tone="up"
-          />
-        </StageCentre>
-      </Stage>
+      <Stage>{chart}</Stage>
       <Footer>
+        <Payoff
+          label={
+            wall
+              ? `${wall.side === "up" ? "Up" : "Down"} · $${(wall.ask.price * SIZE).toFixed(2)} → $${SIZE.toFixed(2)}`
+              : "No quote on either side"
+          }
+          value={multiple ? `${multiple.toFixed(2)}x` : "—"}
+          tone={closing ? "down" : "brand"}
+        />
         <div
-          className={`font-mono text-[10px] font-bold uppercase tracking-[0.16em] ${
+          className={`mt-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.16em] ${
             closing ? "text-down" : "text-text-3"
           }`}
         >

@@ -124,6 +124,59 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+
+/* ── The app column and its backdrop ───────────────────────────────────────
+ * The reference frames the whole product as a phone-width column centred on a
+ * page-filling backdrop. Everything — console, menus, games — composes inside
+ * the column at every viewport width, which is what keeps a screen designed for
+ * a phone from re-proportioning itself on a desktop.
+ */
+.app-shell {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+  min-height: 100dvh;
+  background: #0b0b0c;
+}
+
+.app-frame {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 460px;
+  height: 100dvh;
+  overflow: hidden;
+  background: #2c2a27;
+  /*
+   * Makes the column a containing block for `position: fixed` descendants.
+   * Without it the onboarding pitch, the menu sheet and the tour all measure
+   * themselves against the VIEWPORT and spill out either side of the frame —
+   * the console in its column, the copy across the whole desk.
+   *
+   * It also happens to make the console's published `--device-*` and
+   * `--screen-*` rects correct for those overlays, because the projection
+   * produces canvas-space coordinates and canvas space is now frame space.
+   */
+  transform: translateZ(0);
+}
+
+/* Only above the fold of a phone does the column have edges worth rounding. */
+/*
+ * The column is ALWAYS the full viewport height. It used to be capped at 940px
+ * and centred with `margin: auto` — a rule the reference does not have and that
+ * I invented. On a tall window that put the frame in a centred box whose top
+ * could ride above the fold and clip the console. `h-dvh` and nothing else is
+ * what the reference does, and it cannot drift.
+ */
+@media (min-width: 520px) {
+  .app-frame {
+    border-radius: 18px;
+    box-shadow: 0 40px 120px #000000a6;
+  }
+}
+
 /* ── The console stage + tiled surround ────────────────────────────────── */
 
 .console-stage {
@@ -426,6 +479,45 @@ body {
 .console-screen-surface *::-webkit-scrollbar,
 .console-screen-surface::-webkit-scrollbar {
   display: none;
+}
+
+
+/* ── The device layer ──────────────────────────────────────────────────────
+ * The canvas and the DOM screen live in here together so a drift or an angle
+ * can be one transform on both. Moving them separately — the device in 3D, the
+ * screen by re-projecting its rect each frame — leaves a frame of lag between
+ * the GL buffer and the style write, and the black glass visibly slides out of
+ * its bezel.
+ */
+.console-device-tilt,
+.console-device-float {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 46%;
+}
+
+.console-device-float {
+  will-change: transform;
+}
+
+.console-device-float[data-float="true"] {
+  animation: toko-hover 9s ease-in-out infinite;
+}
+
+/* A lazy figure, not a bounce: the two axes are on different beats so the path
+ * never repeats a straight line. */
+@keyframes toko-hover {
+  0%   { transform: translate3d(0, 0, 0); }
+  25%  { transform: translate3d(5px, -11px, 0); }
+  50%  { transform: translate3d(-3px, -16px, 0); }
+  75%  { transform: translate3d(-6px, -6px, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-device-float[data-float="true"] {
+    animation: none;
+  }
 }
 
 /* ── Keyframes ─────────────────────────────────────────────────────────── */
