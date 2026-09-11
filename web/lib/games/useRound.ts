@@ -31,7 +31,13 @@
  * either way — only whose money moves is different.
  */
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import * as markets from "@/lib/dreamdex/markets";
 import * as book from "@/lib/dreamdex/book";
 import * as orders from "@/lib/dreamdex/orders";
@@ -117,12 +123,27 @@ export interface Round {
  */
 const thin = new Set<string>();
 
-/** The same choice the hook renders from, made at press time. */
-function pickWindow(intervalSec: number | null, minSecsLeft: number) {
-  const windows = markets.getSnapshot().windows;
-  return intervalSec == null
-    ? markets.shortestRound(windows, minSecsLeft, thin)
-    : markets.nextToClose(windows, intervalSec, minSecsLeft);
+/**
+ * The window the screen actually priced, if it is still worth trading.
+ *
+ * `buy` and `rest` used to re-run the hook's own choice at press time instead.
+ * That reads a fresh snapshot, so when the venue rolled between the last render
+ * and the press it could return a DIFFERENT window from the one on screen — and
+ * the limit price in the player's hand came from the other pool's book. The
+ * order is a limit, so it can never fill worse than asked, but the multiple they
+ * were shown belonged to a market they did not trade.
+ *
+ * Resolving the id they were looking at makes the two agree, and makes the roll
+ * case say so rather than silently substituting. Keyed by `marketId`, never by
+ * pool, because pools recycle across windows.
+ */
+function tradableShown(marketId: string | null, minSecsLeft: number) {
+  if (!marketId) return null;
+  const shown = markets
+    .getSnapshot()
+    .windows.find((w) => w.marketId === marketId);
+  if (!shown) return null;
+  return shown.expiry - Date.now() / 1000 >= minSecsLeft ? shown : null;
 }
 
 /**
@@ -208,6 +229,20 @@ export function useRound(
   useEffect(() => {
     if (pool) return book.track(pool, 1200);
   }, [pool]);
+
+  /**
+   * The id of the window on screen, for the actions to trade against.
+   *
+   * Synced in an effect rather than during render, and deliberately the SAME
+   * commit that starts tracking the book above — so the id and the prices the
+   * player is reading always come from one window. An id, not the object,
+   * because the store rebuilds `Window`s every poll.
+   */
+  const shownIdRef = useRef<string | null>(null);
+  const shownId = window?.marketId ?? null;
+  useEffect(() => {
+    shownIdRef.current = shownId;
+  }, [shownId]);
 
   // Approve the window's pool while the console is idle. Every window is a new
   // pool, so without this each round pays for an `approve` ahead of its order —
@@ -300,9 +335,13 @@ export function useRound(
 
   const buy = useCallback(
     (nextSide: Side, limitPrice: number, contracts: number) => {
-      const target = pickWindow(intervalSec, minSecsLeft);
+      const target = tradableShown(shownIdRef.current, minSecsLeft);
       if (!target) {
-        setMessage("No live window");
+        // Two different failures, and they are not the same news: the venue is
+        // between windows, or the one being read just rolled out from under it.
+        setMessage(
+          shownIdRef.current ? "That window just closed" : "No live window",
+        );
         return;
       }
       setStatus("pending");
@@ -340,7 +379,7 @@ export function useRound(
         setStatus("open");
       })();
     },
-    [intervalSec, minSecsLeft],
+    [minSecsLeft],
   );
 
   const rest = useCallback(
@@ -350,9 +389,13 @@ export function useRound(
       contracts: number,
       options?: orders.RestOptions,
     ) => {
-      const target = pickWindow(intervalSec, minSecsLeft);
+      const target = tradableShown(shownIdRef.current, minSecsLeft);
       if (!target) {
-        setMessage("No live window");
+        // Two different failures, and they are not the same news: the venue is
+        // between windows, or the one being read just rolled out from under it.
+        setMessage(
+          shownIdRef.current ? "That window just closed" : "No live window",
+        );
         return;
       }
       setStatus("pending");
@@ -391,7 +434,7 @@ export function useRound(
         }
       })();
     },
-    [intervalSec, minSecsLeft],
+    [minSecsLeft],
   );
 
   // While a bid rests, the only thing that tells us it was taken is the

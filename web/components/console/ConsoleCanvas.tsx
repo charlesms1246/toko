@@ -279,6 +279,22 @@ function backPlateTexture(): THREE.CanvasTexture {
   return texture;
 }
 
+/**
+ * The cap face — the plate an action key wears, as fractions of the key itself.
+ *
+ * Both of the things that can sit on it are canvas textures, so this ratio has
+ * to be the same in three places: the plane, the legend texture and the token
+ * texture. It was not. `capLabelTexture` kept the 256x64 canvas it was copied
+ * from — the shape of the MENU/HOME pills, which really are 4:1 — and painted it
+ * onto a plane that is 1.54:1, so LONG and SHORT came out stretched to about two
+ * and a half times their proper height. Derived here, once, from the key spec.
+ */
+const CAP_FACE = { w: 0.9, h: 0.62 } as const;
+const CAP_TEX_W = 256;
+const CAP_TEX_H = Math.round(
+  (CAP_TEX_W * (BUTTON_SPECS[1].h * CAP_FACE.h)) / (BUTTON_SPECS[1].w * CAP_FACE.w),
+);
+
 /** Key captions (MENU / HOME) printed beside the pill keys. */
 function labelTexture(text: string): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
@@ -335,8 +351,8 @@ function relativeLuminance(hex: string): number {
  * body around it is.
  */
 function capDisplayTexture(display: TokenDisplay): THREE.CanvasTexture {
-  const W = 256;
-  const H = 174;
+  const W = CAP_TEX_W;
+  const H = CAP_TEX_H;
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -400,10 +416,10 @@ function capDisplayTexture(display: TokenDisplay): THREE.CanvasTexture {
  */
 function capLabelTexture(text: string, capColor = "#000000"): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 64;
+  canvas.width = CAP_TEX_W;
+  canvas.height = CAP_TEX_H;
   const ctx = canvas.getContext("2d")!;
-  ctx.clearRect(0, 0, 256, 64);
+  ctx.clearRect(0, 0, CAP_TEX_W, CAP_TEX_H);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = `600 40px ${SILKSCREEN_FONT}`;
@@ -418,7 +434,9 @@ function capLabelTexture(text: string, capColor = "#000000"): THREE.CanvasTextur
   ctx.shadowBlur = 6;
   ctx.shadowOffsetY = 1;
   ctx.fillStyle = light ? "#ffffff" : "#15130f";
-  ctx.fillText(text, 128, 34, 240);
+  // Width is unchanged from before — it was never the broken axis, and the
+  // clamp is what lets SHORT sit on the same cap as LONG.
+  ctx.fillText(text, CAP_TEX_W / 2, CAP_TEX_H / 2 + 2, 240);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
@@ -1052,7 +1070,7 @@ export default function ConsoleCanvas({
       // Sized to the cap face, not to a line of text: the same plane carries a
       // centred legend or a full inset panel, and only its texture changes.
       const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(spec.w * 0.9, spec.h * 0.62),
+        new THREE.PlaneGeometry(spec.w * CAP_FACE.w, spec.h * CAP_FACE.h),
         mat,
       );
       // Sat down onto the cap rather than floating over it, so the shell's own
@@ -1957,6 +1975,21 @@ export default function ConsoleCanvas({
       for (const d of disposables) d.dispose();
       envMap.dispose();
       renderer.dispose();
+      /*
+       * NO `renderer.forceContextLoss()` here, though `BUG_AUDIT.md` L7 asked
+       * for one. It breaks the app, and the reason is the case L7 cited in its
+       * favour.
+       *
+       * The `<canvas>` is React's, held by a ref, and it OUTLIVES this effect.
+       * Force-losing a context permanently poisons the element it belonged to —
+       * `getContext` returns null on it ever after — so StrictMode's second
+       * mount rebuilt the scene against a dead canvas and threw "Cannot read
+       * properties of null (reading 'precision')" from the `WebGLRenderer`
+       * constructor. Every route that draws the console was blank.
+       *
+       * `dispose()` is the right call for a canvas that is reused. The context
+       * goes when the element does.
+       */
       sceneRef.current = null;
     };
     // The scene is built once; theme and glow are applied by the effects below.

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Providers from "./providers";
+import Surround from "@/components/console/Surround";
 import AppShell from "@/components/shell/AppShell";
 import ConsoleStage from "@/components/console/ConsoleStage";
 import ScreenGate from "@/components/shell/ScreenGate";
@@ -42,8 +43,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="h-full overflow-hidden">
         <Providers>
           {/*
-            The app is a phone-width COLUMN on a backdrop, not a full-bleed
-            page.
+            On a desktop the app is a phone-shaped COLUMN on a backdrop. On a
+            phone it is the whole screen — the column only exists from 640px up,
+            which is what the reference does and what `globals.css` explains.
             
             The reference does this and it is upstream of a whole class of
             problems we had been fixing one at a time: a menu sized against a
@@ -52,13 +54,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             device out of its own page. Inside a column that is always
             phone-shaped, none of them arise.
             
-            `app-shell` fills the page behind the column. The console's own
-            tiled surround is the only backdrop — a photographic one was tried
-            here and removed: it was the reference's desk, it fought the tile
-            already drifting behind the device, and two backdrops is one too
-            many.
+            `app-shell` fills the page behind the column, and carries the one
+            backdrop: the tiled surround, around the phone rather than inside it.
+            A photographic desk was tried here and removed — it was the
+            reference's, and two backdrops is one too many.
           */}
           <div className="app-shell">
+            <Surround />
             <div className="app-frame">
               <AppShell>
                 <ConsoleStage>

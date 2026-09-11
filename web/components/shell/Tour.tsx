@@ -146,7 +146,13 @@ export default function Tour({ onDone }: { onDone: () => void }) {
             ? cardAbove
               ? { bottom: `calc(100% - ${rect.y - pad - 14}px)` }
               : { top: rect.y + rect.h + pad + 14 }
-            : { top: "50%", transform: "translate(-50%, -50%)" }
+            : // Y only. The class above centres X with Tailwind's `translate`
+              // PROPERTY, which composes with `transform` rather than being
+              // overridden by it — so a `translate(-50%, -50%)` here shifted the
+              // card by a full width, off the left edge of the column. The last
+              // stop is the one with no anchor, which is why it was the only
+              // card that went missing.
+              { top: "50%", transform: "translateY(-50%)" }
         }
       >
         <div className="flex items-center gap-2">

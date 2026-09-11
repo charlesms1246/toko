@@ -94,16 +94,6 @@ export const ESCROW_OPTIONS = [
 ] as const;
 
 /**
- * Fraction of the escrow after which an unclaimed challenge is pulled.
- *
- * Half the offer's life is long enough to find a taker; past that the collateral
- * is better back in the challenger's hands than sitting on a book nobody is
- * crossing. The pool's own expiry is the backstop for anyone who closes the app
- * before this fires.
- */
-export const REVERT_AT = 0.5;
-
-/**
  * What a challenge link carries.
  *
  * Keyed by `marketId`, never by pool — pools recycle across windows *and* across
@@ -485,28 +475,6 @@ async function findIn(
     }
   }
   return null;
-}
-
-/**
- * Who crossed a challenger's resting order, if anyone.
- *
- * The challenger is the *maker* here — they rested first — so their fills are
- * the rows where `maker` is their address, and the counterparty is the taker.
- */
-export async function crossedBy(
-  pool: string,
-  challenger: Address,
-): Promise<Address | undefined> {
-  const client = getClient();
-  if (!client) return undefined;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fills = (await client.getFills(pool, { limit: 100 })) as any[];
-    const mine = fills.find((f) => sameAddress(String(f.maker), challenger));
-    return mine ? (mine.taker as Address) : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /**

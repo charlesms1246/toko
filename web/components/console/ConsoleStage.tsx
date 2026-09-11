@@ -26,6 +26,7 @@ import { useConsoleControls } from "@/lib/console/controls";
 import type { ButtonKey } from "@/lib/console/geometry";
 import haptics from "@/lib/haptics";
 import * as onboarding from "@/lib/onboarding";
+import * as demo from "@/lib/demo";
 import { playKeyPress, playKeyRelease, type Voice } from "@/lib/sound";
 
 const VOICE: Record<ButtonKey, Voice> = {
@@ -58,7 +59,34 @@ export default function ConsoleStage({
     onboarding.getSnapshot,
     onboarding.getServerSnapshot,
   );
-  const landing = !onboarded;
+  const { active: demoing } = useSyncExternalStore(
+    demo.subscribe,
+    demo.getSnapshot,
+    demo.getServerSnapshot,
+  );
+
+  /**
+   * Is the landing pitch actually on screen?
+   *
+   * The same condition `AppShell` mounts `Onboarding` on, and it has to be,
+   * because everything below reshapes the stage *around that panel*. This used
+   * to read `!onboarded`, which is not the same thing: someone playing in Demo
+   * Mode has not onboarded either, so the console spent the whole demo angled,
+   * drifting, and squeezed into the top 58% of the frame to clear a pitch that
+   * was not there. Presenting itself is what the device does when nobody is
+   * holding it; the moment it is being played it should sit square, still, and
+   * fill its frame.
+   *
+   * This also keeps the tour honest for free. `Tour` only mounts once
+   * `onboarded || demoing`, so the landing is false whenever a card is up — and
+   * a card must not point at a moving target. The tour reads rects
+   * (`--anchor-*`) the console projects from the GL camera in canvas space,
+   * which know nothing about the CSS transforms below; a spotlight cut square
+   * around a device rotated 2.4 degrees and drifting up to 16px misses what it
+   * is naming.
+   */
+  const landing = !onboarded && !demoing;
+
   /**
    * The landing presents the console as an object: it sits at a slight angle and
    * drifts, the way the reference's does. Both are CSS on the layer that holds
@@ -185,12 +213,8 @@ export default function ConsoleStage({
 
   return (
     <div className="console-stage" style={{ background: ambient }}>
-      <div
-        className={`toko-surround ${
-          controls.lightShow ? "toko-surround-dim" : ""
-        }`}
-        style={{ opacity: 0.55 }}
-      />
+      {/* The tiled backdrop is NOT here — it belongs to the surface the console
+          sits on, not to the console. See `components/console/Surround.tsx`. */}
       {/* Ambient wash + vignette, tinted by the current console theme. */}
       <div
         aria-hidden
