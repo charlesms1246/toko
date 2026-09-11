@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" width="900" height="380" role="img" aria-label="play-duel">
+<rect x="0" y="0" width="900" height="380" rx="18" fill="#141412" fill-opacity="1.0"/>
+<rect x="6" y="6" width="888" height="368" rx="14" fill="none" fill-opacity="1.0" stroke="#5f636b" stroke-width="1" stroke-opacity="0.28"/>
+<circle cx="20" cy="20" r="3.2" fill="#5f636b" fill-opacity="0.5"/><line x1="18.4" y1="20" x2="21.6" y2="20" stroke="#0d0d0c" stroke-width="1"/>
+<circle cx="880" cy="20" r="3.2" fill="#5f636b" fill-opacity="0.5"/><line x1="878.4" y1="20" x2="881.6" y2="20" stroke="#0d0d0c" stroke-width="1"/>
+<circle cx="20" cy="360" r="3.2" fill="#5f636b" fill-opacity="0.5"/><line x1="18.4" y1="360" x2="21.6" y2="360" stroke="#0d0d0c" stroke-width="1"/>
+<circle cx="880" cy="360" r="3.2" fill="#5f636b" fill-opacity="0.5"/><line x1="878.4" y1="360" x2="881.6" y2="360" stroke="#0d0d0c" stroke-width="1"/>
+<text x="38" y="34" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#efc03b" font-weight="700" text-anchor="start" letter-spacing="2.4" fill-opacity="1.0" xml:space="preserve">DUEL — PLAY AGAINST A PERSON</text>
+<text x="862" y="34" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.5" fill="#8a8a8a" font-weight="400" text-anchor="end" letter-spacing="1.6" fill-opacity="1.0" xml:space="preserve">A CHALLENGE IS A REAL ORDER</text>
+<line x1="38" y1="46" x2="862" y2="46" stroke="#efc03b" stroke-width="1" stroke-opacity="0.22" stroke-linecap="square"/>
+<rect x="33" y="57" width="834" height="286" rx="10" fill="#0d0d0c" fill-opacity="1.0"/>
+<rect x="38" y="62" width="824" height="276" rx="6" fill="#191509" fill-opacity="1.0"/>
+<rect x="38" y="62" width="824" height="276" rx="6" fill="none" fill-opacity="1.0" stroke="#efc03b" stroke-width="1" stroke-opacity="0.18"/>
+<line x1="40" y1="65" x2="860" y2="65" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="69" x2="860" y2="69" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="73" x2="860" y2="73" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="77" x2="860" y2="77" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="81" x2="860" y2="81" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="85" x2="860" y2="85" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="89" x2="860" y2="89" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="93" x2="860" y2="93" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="97" x2="860" y2="97" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="101" x2="860" y2="101" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="105" x2="860" y2="105" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="109" x2="860" y2="109" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="113" x2="860" y2="113" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="117" x2="860" y2="117" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="121" x2="860" y2="121" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="125" x2="860" y2="125" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="129" x2="860" y2="129" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="133" x2="860" y2="133" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="137" x2="860" y2="137" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="141" x2="860" y2="141" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="145" x2="860" y2="145" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="149" x2="860" y2="149" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="153" x2="860" y2="153" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="157" x2="860" y2="157" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="161" x2="860" y2="161" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="165" x2="860" y2="165" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="169" x2="860" y2="169" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="173" x2="860" y2="173" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="177" x2="860" y2="177" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="181" x2="860" y2="181" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="185" x2="860" y2="185" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="189" x2="860" y2="189" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="193" x2="860" y2="193" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="197" x2="860" y2="197" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="201" x2="860" y2="201" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="205" x2="860" y2="205" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="209" x2="860" y2="209" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="213" x2="860" y2="213" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="217" x2="860" y2="217" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="221" x2="860" y2="221" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="225" x2="860" y2="225" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="229" x2="860" y2="229" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="233" x2="860" y2="233" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="237" x2="860" y2="237" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="241" x2="860" y2="241" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="245" x2="860" y2="245" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="249" x2="860" y2="249" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="253" x2="860" y2="253" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="257" x2="860" y2="257" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="261" x2="860" y2="261" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="265" x2="860" y2="265" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="269" x2="860" y2="269" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="273" x2="860" y2="273" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="277" x2="860" y2="277" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="281" x2="860" y2="281" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="285" x2="860" y2="285" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="289" x2="860" y2="289" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="293" x2="860" y2="293" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="297" x2="860" y2="297" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="301" x2="860" y2="301" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="305" x2="860" y2="305" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="309" x2="860" y2="309" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="313" x2="860" y2="313" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="317" x2="860" y2="317" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="321" x2="860" y2="321" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="325" x2="860" y2="325" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="329" x2="860" y2="329" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<line x1="40" y1="333" x2="860" y2="333" stroke="#efc03b" stroke-width="1" stroke-opacity="0.035" stroke-linecap="square"/>
+<rect x="70" y="100" width="236" height="74" rx="7" fill="#ffffff" fill-opacity="0.045" stroke="#34d399" stroke-width="1" stroke-opacity="0.34"/>
+<rect x="70" y="107" width="2.5" height="60" rx="1.5" fill="#34d399" fill-opacity="0.85"/>
+<text x="86" y="122" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" fill="#34d399" font-weight="700" text-anchor="start" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">YOU</text>
+<text x="86" y="138" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#f2f2f2" font-weight="400" text-anchor="start" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">pick a side and the odds</text>
+<text x="86" y="154" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#f2f2f2" font-weight="400" text-anchor="start" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">say how long it stands</text>
+<text x="86" y="170" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#8a8a8a" font-weight="400" text-anchor="start" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">5m · 30m · 1h · 4h</text>
+<rect x="332" y="100" width="236" height="74" rx="7" fill="#ffffff" fill-opacity="0.045" stroke="#ffc016" stroke-width="1" stroke-opacity="0.34"/>
+<rect x="332" y="107" width="2.5" height="60" rx="1.5" fill="#ffc016" fill-opacity="0.85"/>
+<text x="348" y="122" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" fill="#ffc016" font-weight="700" text-anchor="start" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">SHARE THE LINK</text>
+<text x="348" y="138" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#f2f2f2" font-weight="400" text-anchor="start" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">or leave it on the board</text>
+<text x="348" y="154" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#8a8a8a" font-weight="400" text-anchor="start" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">Menu → Open duels,</text>
+<text x="348" y="170" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#8a8a8a" font-weight="400" text-anchor="start" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">where anyone can take it</text>
+<rect x="594" y="100" width="236" height="74" rx="7" fill="#ffffff" fill-opacity="0.045" stroke="#ff5a4d" stroke-width="1" stroke-opacity="0.34"/>
+<rect x="594" y="107" width="2.5" height="60" rx="1.5" fill="#ff5a4d" fill-opacity="0.85"/>
+<text x="610" y="122" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" fill="#ff5a4d" font-weight="700" text-anchor="start" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">THEY TAKE IT</text>
+<text x="610" y="138" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#f2f2f2" font-weight="400" text-anchor="start" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">the opposite side,</text>
+<text x="610" y="154" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#f2f2f2" font-weight="400" text-anchor="start" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">at the odds you offered</text>
+<line x1="306" y1="137" x2="332" y2="137" stroke="#efc03b" stroke-width="1.25" stroke-opacity="0.5" stroke-linecap="square"/>
+<rect x="330.25" y="135.25" width="3.5" height="3.5" rx="0.5" fill="#efc03b" fill-opacity="0.9"/>
+<line x1="568" y1="137" x2="594" y2="137" stroke="#efc03b" stroke-width="1.25" stroke-opacity="0.5" stroke-linecap="square"/>
+<rect x="592.25" y="135.25" width="3.5" height="3.5" rx="0.5" fill="#efc03b" fill-opacity="0.9"/>
+<path d="M 450 174 L 450 206" fill="none" stroke="#efc03b" stroke-width="1.4" stroke-opacity="0.6" stroke-linecap="square" stroke-linejoin="round"/>
+<rect x="448.25" y="204.25" width="3.5" height="3.5" rx="0.5" fill="#efc03b" fill-opacity="0.9"/>
+<rect x="280" y="212" width="340" height="50" rx="7" fill="#ffc016" fill-opacity="0.07" stroke="#ffc016" stroke-width="1" stroke-opacity="0.34"/>
+<rect x="280" y="219" width="2.5" height="36" rx="1.5" fill="#ffc016" fill-opacity="0.85"/>
+<text x="296" y="241.0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#ffc016" font-weight="700" text-anchor="start" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">you are now on opposite sides of one window</text>
+<path d="M 450 262 L 450 288" fill="none" stroke="#efc03b" stroke-width="1.25" stroke-opacity="0.55" stroke-linecap="square" stroke-linejoin="round"/>
+<rect x="448.25" y="286.25" width="3.5" height="3.5" rx="0.5" fill="#efc03b" fill-opacity="0.9"/>
+<rect x="280" y="294" width="340" height="44" rx="7" fill="#ffffff" fill-opacity="0.045" stroke="#efc03b" stroke-width="1" stroke-opacity="0.34"/>
+<rect x="280" y="301" width="2.5" height="30" rx="1.5" fill="#efc03b" fill-opacity="0.85"/>
+<text x="296" y="320.0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.5" fill="#f2f2f2" font-weight="400" text-anchor="start" letter-spacing="0.6" fill-opacity="1.0" xml:space="preserve">the window closes — one of you is right</text>
+<text x="70" y="272" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#8a8a8a" font-weight="700" text-anchor="start" letter-spacing="1.8" fill-opacity="1.0" xml:space="preserve">NEEDS A</text>
+<text x="70" y="288" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.5" fill="#ff5a4d" font-weight="700" text-anchor="start" letter-spacing="0.8" fill-opacity="1.0" xml:space="preserve">REAL WALLET</text>
+<text x="70" y="306" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#8a8a8a" font-weight="400" text-anchor="start" letter-spacing="0.3" fill-opacity="1.0" xml:space="preserve">a pretend order has</text>
+<text x="70" y="318" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#8a8a8a" font-weight="400" text-anchor="start" letter-spacing="0.3" fill-opacity="1.0" xml:space="preserve">nothing to trade against</text>
+<text x="38" y="358" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#8a8a8a" font-weight="400" text-anchor="start" letter-spacing="1.1" fill-opacity="1.0" xml:space="preserve">WHILE IT WAITS THE CONSOLE KEEPS IT COMPETITIVE — AND HANDS YOUR MONEY BACK IF THE MARKET RUNS AWAY.</text>
+</svg>

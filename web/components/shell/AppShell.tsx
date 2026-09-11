@@ -9,7 +9,6 @@ import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Onboarding from "./Onboarding";
 import Tour from "./Tour";
-import DemoBadge from "./DemoBadge";
 import { resumeAudio } from "@/lib/sound";
 import * as onboarding from "@/lib/onboarding";
 import * as demo from "@/lib/demo";
@@ -53,8 +52,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      {/* `children` is the console itself. The gate that swaps a route's screen
+          for the attract screen lives INSIDE it — see `ScreenGate`. Swapping it
+          out here took the whole device off the page. */}
       {children}
-      <DemoBadge />
       {!onboarded && !demoing && (
         <Onboarding onDone={finishOnboarding} onDemo={startDemo} />
       )}

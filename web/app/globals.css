@@ -124,6 +124,114 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+
+/* ── The app column and its backdrop ───────────────────────────────────────
+ * The reference frames the whole product as a phone-width column centred on a
+ * page-filling backdrop. Everything — console, menus, games — composes inside
+ * the column at every viewport width, which is what keeps a screen designed for
+ * a phone from re-proportioning itself on a desktop.
+ */
+.app-shell {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+  min-height: 100dvh;
+  /*
+   * Clips the surround, which is inset by NEGATIVE hundreds of pixels so its
+   * drift never shows an edge. Without this the document's scroll width grows to
+   * about three viewports and the page gets a horizontal scrollbar.
+   *
+   * `clip`, NOT `hidden`, and the difference is the whole bug. `hidden` makes an
+   * element a SCROLL CONTAINER — it just hides the scrollbars. With the surround
+   * running from -425px to +1337px this box had a 1486px scroll height inside an
+   * 882px viewport, so the moment anything in the menu was focused or scrolled
+   * into view the browser scrolled its nearest scrollable ancestor: this one, by
+   * 208px, taking the whole console up with it and off the top of the screen.
+   * Nothing could scroll it back, because the scrollbars are hidden.
+   *
+   * `clip` clips the paint and creates no scroll container, so there is nothing
+   * to scroll and the device cannot move.
+   */
+  overflow: clip;
+  background: #0b0b0c;
+}
+
+/*
+ * Below 640px there is no column — the app IS the screen.
+ *
+ * This was ported wrong the first time, and the way it went wrong is worth
+ * keeping. The audit measured the reference's frame in a desktop window and
+ * wrote down what it saw: "max-width 720px, rendered 431px, radius 17px". Those
+ * are real numbers, but every one of them lives behind the reference's `sm:`
+ * prefix. Its base classes are `h-dvh w-full` — full bleed — and the column only
+ * exists at 640px and up. Transcribing the rendered state as if it were
+ * unconditional gave us a 460px cap at every width.
+ *
+ * It looked fine, which is why it survived: under 460px `width: 100%` wins and
+ * the cap does nothing, so a phone was never wrong. Only 460–640px was — a
+ * window size no phone reports in portrait and nobody thinks to drag to.
+ */
+.app-frame {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: #2c2a27;
+  /*
+   * Makes the column a containing block for `position: fixed` descendants.
+   * Without it the onboarding pitch, the menu sheet and the tour all measure
+   * themselves against the VIEWPORT and spill out either side of the frame —
+   * the console in its column, the copy across the whole desk.
+   *
+   * It also happens to make the console's published `--device-*` and
+   * `--screen-*` rects correct for those overlays, because the projection
+   * produces canvas-space coordinates and canvas space is now frame space.
+   */
+  transform: translateZ(0);
+}
+
+/*
+ * The column, at the reference's own breakpoint and by its own formula.
+ *
+ * The edges arrive WITH the column, not at a breakpoint of their own. A radius
+ * and a shadow describe the boundary of a thing; before 640px there is no
+ * boundary to describe. Ours used to appear at an invented 520px, which left a
+ * band where the frame was a column with square corners — a state the reference
+ * never has.
+ *
+ * The width comes from the viewport's HEIGHT (`46dvh`), which is what keeps the
+ * column phone-shaped instead of merely phone-wide: with `aspect-ratio` doing
+ * the rest, the frame holds 23:44 at any window. A fixed `max-width` could not,
+ * and that is why our device used to sit in a taller and taller column as the
+ * window grew, banded above and below.
+ *
+ * An earlier attempt at centring is the reason to be careful here: `height:
+ * min(100dvh, 940px)` with `margin: auto` put the frame in a box whose top could
+ * ride above the fold and clip the console. This cannot do that. Height is
+ * derived — `min(88vw, 46dvh) x 44/23` is at most `88dvh` — so the frame is
+ * always shorter than the viewport, and the shell centres it with flex rather
+ * than with a margin that can go negative. The 720px cap is safe for the same
+ * reason: it only binds above ~1565px of height, where 44/23 of it still fits.
+ */
+@media (min-width: 640px) {
+  .app-shell {
+    align-items: center;
+  }
+
+  .app-frame {
+    width: min(88vw, 46dvh);
+    max-width: 720px;
+    height: auto;
+    aspect-ratio: 23 / 44;
+    border: 1px solid #ffffff1a;
+    border-radius: min(1.8vw, 1.8dvh);
+    box-shadow: 0 40px 120px -20px #000000e6;
+  }
+}
+
 /* ── The console stage + tiled surround ────────────────────────────────── */
 
 .console-stage {
@@ -131,12 +239,25 @@ body {
   inset: 0;
   top: env(safe-area-inset-top);
   bottom: env(safe-area-inset-bottom);
+  /* Nothing inside the stage should paint past the frame. The surround used to
+   * be the reason this mattered; it now lives on `.app-shell`, which does its
+   * own clipping. */
+  overflow: hidden;
 }
 
 /*
- * Touch devices: the device should own the screen. Trim the framing margin the
- * camera leaves so the console fills a phone rather than floating in it, and
- * stop the browser treating a drag on the knob as a page gesture.
+ * Touch devices: stop the browser treating a drag on the knob or the thumbwheel
+ * as a page gesture, and stop a flick at the end of the dial's travel bouncing
+ * the whole app.
+ *
+ * This used to be introduced as trimming "the framing margin the camera leaves
+ * so the console fills a phone", which it has never done. The margin is the flat
+ * `* 1.06` in `frameCamera` (`ConsoleCanvas`), applied on every device alike. On
+ * a phone it is not even what leaves the gap: the viewport is far taller than
+ * the device is, so the fit is limited by WIDTH and the bands above and below
+ * are the aspect difference, which no margin change can close. Cropping or
+ * reshaping the device would — and that is a design decision, not a rule that
+ * belongs in a media query about touch.
  */
 @media (pointer: coarse) {
   .console-stage {
@@ -149,7 +270,18 @@ body {
   position: absolute;
   inset: -440px -760px;
   will-change: transform;
-  opacity: 1;
+  /*
+   * Below 640px the app IS the screen, so there is no surface around it to
+   * paper — the same gate, and the same reason, as the column itself.
+   */
+  display: none;
+  /*
+   * The opacity belongs HERE, not in a style attribute on the element. It used
+   * to be inline, which silently beat `.toko-surround-dim` on specificity and
+   * left the light show's dim doing nothing at all. Same class weight, declared
+   * after, so the dim wins now.
+   */
+  opacity: 0.55;
   background-color: #161616;
   background-image: url(/assets/images/toko-tile.svg);
   background-repeat: repeat;
@@ -160,6 +292,16 @@ body {
 
 .toko-surround-dim {
   opacity: 0;
+}
+
+/* Its own gate, and it has to live AFTER the rule above rather than in the
+ * column's media block higher up the file: same class weight, so source order
+ * decides, and declaring `display: block` first just loses to the `display:
+ * none` that follows it. */
+@media (min-width: 640px) {
+  .toko-surround {
+    display: block;
+  }
 }
 
 /* ── The CRT screen ────────────────────────────────────────────────────── */
@@ -397,6 +539,87 @@ body {
 
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/*
+ * Nothing inside the glass gets a browser scrollbar.
+ *
+ * A scrollbar is the one element on these screens that belongs to the page
+ * rather than to the device — it breaks the illusion harder than anything else
+ * on the surface, and every list in here is scrolled by the knob or a thumb
+ * anyway. Scoped to the screen so ordinary page chrome outside the console is
+ * untouched, and applied here rather than as a class on each screen so a new
+ * one cannot forget it.
+ */
+.console-screen-surface *,
+.console-screen-surface {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.console-screen-surface *::-webkit-scrollbar,
+.console-screen-surface::-webkit-scrollbar {
+  display: none;
+}
+
+
+/* ── The device layer ──────────────────────────────────────────────────────
+ * The canvas and the DOM screen live in here together so a drift or an angle
+ * can be one transform on both. Moving them separately — the device in 3D, the
+ * screen by re-projecting its rect each frame — leaves a frame of lag between
+ * the GL buffer and the style write, and the black glass visibly slides out of
+ * its bezel.
+ */
+.console-device-tilt,
+.console-device-float {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 46%;
+}
+
+.console-device-float {
+  will-change: transform;
+}
+
+.console-device-float[data-float="true"] {
+  animation: toko-hover 9s ease-in-out infinite;
+}
+
+/* Settling to rest, rather than snapping.
+ *
+ * The drift stops when the tour points at the device (see `ConsoleStage`), and
+ * cutting it on the frame the tour opens drops the console by however far the
+ * keyframe had carried it — up to 16px. Transitioning from wherever it had
+ * reached lands it instead.
+ *
+ * The angle deliberately does NOT transition, though it changes at the same
+ * moment. `onboarding`'s server snapshot says "onboarded", so the first client
+ * render is square and hydration is what flips the landing to 2.4 degrees — a
+ * transition there would rotate the console into place on every cold load. The
+ * snap is 2.4 degrees under a scrim; the load animation would be on every
+ * visit. */
+.console-device-float[data-float="false"] {
+  transition: transform 460ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* A lazy figure, not a bounce: the two axes are on different beats so the path
+ * never repeats a straight line. */
+@keyframes toko-hover {
+  0%   { transform: translate3d(0, 0, 0); }
+  25%  { transform: translate3d(5px, -11px, 0); }
+  50%  { transform: translate3d(-3px, -16px, 0); }
+  75%  { transform: translate3d(-6px, -6px, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-device-float[data-float="true"] {
+    animation: none;
+  }
+
+  .console-device-float[data-float="false"] {
+    transition: none;
+  }
 }
 
 /* ── Keyframes ─────────────────────────────────────────────────────────── */

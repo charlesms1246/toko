@@ -12,17 +12,18 @@
  * one your thumb reaches for.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useProgramConsole } from "@/lib/console/controls";
 import { Footer, Shell } from "@/components/screen/GameScreen";
 import GameIcon from "@/components/games/GameIcon";
 import { GAME_TAGLINES } from "@/lib/api/fixtures";
 import { GAME_LABELS, LAB_GAMES, LIVE_GAMES, MINIGAMES } from "@/lib/api/types";
-import { useBalance, useIsAdmin } from "@/lib/api/hooks";
+import { useBalance, useBalanceRead, useIsAdmin } from "@/lib/api/hooks";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
 import { playSfx } from "@/lib/sound";
 import * as demo from "@/lib/demo";
+import * as markets from "@/lib/dreamdex/markets";
 import { useUser } from "@/lib/api/hooks";
 import { COLLATERAL } from "@/lib/dreamdex/config";
 
@@ -45,10 +46,27 @@ interface Entry {
 export default function GamesPage() {
   const router = useRouter();
   const balance = useBalance();
+  const balanceRead = useBalanceRead();
   const admin = useIsAdmin();
   const user = useUser();
   const [index, setIndex] = useState(0);
   const rowsRef = useRef<(HTMLButtonElement | null)[]>([]);
+
+  /**
+   * The mode row's right slot.
+   *
+   * The reference shows a live player count there. We have no presence service
+   * and will not invent one, so the slot carries the other thing that is
+   * genuinely live and genuinely ours to know: how many windows the venue has
+   * open right now. Until the first poll lands there is no reading, and it says
+   * how many games there are instead of guessing.
+   */
+  const venue = useSyncExternalStore(
+    markets.subscribe,
+    markets.getSnapshot,
+    markets.getServerSnapshot,
+  );
+  useEffect(() => markets.startPolling(), []);
 
   const paper = demo.isActive();
   const openPlay = paper && demo.hasOpenPlay();
@@ -117,112 +135,125 @@ export default function GamesPage() {
       format: (v) => `${pad(entries.length - v)}/${pad(entries.length)}`,
       onChange: (v) => step(entries.length - 1 - v),
     },
-    status: { left: "SELECT GAME", right: `$${formatCollateral(balance)}` },
   });
 
   return (
-    <Shell>
-      <div className="flex min-h-0 flex-1 flex-col px-[var(--screen-rim,24px)] pt-[var(--screen-rim,24px)]">
-      <div className="flex items-center justify-between pb-2.5 font-mono text-[12px] font-semibold uppercase tracking-[0.12em] text-text-2">
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="relative inline-flex h-2 w-2 shrink-0">
-            <span
-              className={`absolute inset-0 animate-ping ${
-                paper ? "bg-brand-500/70" : "bg-up/70"
-              }`}
-            />
-            <span
-              className={`relative inline-block h-2 w-2 ${
-                paper ? "bg-brand-500" : "bg-up"
-              }`}
-            />
-          </span>
-          <span className="truncate">{paper ? "Demo" : "Live"}</span>
-        </span>
-        <span className="flex shrink-0 items-center gap-2 pl-3 text-text-3">
-          {entries.length} games
-        </span>
-      </div>
+    <Shell
+      mode={
+        venue.at === 0
+          ? `${entries.length} games`
+          : `${venue.windows.length} window${venue.windows.length === 1 ? "" : "s"} open`
+      }
+    >
+      {/* The mode row is `Shell`'s now — this screen had its own copy of it. */}
+      <div className="flex min-h-0 flex-1 flex-col px-[var(--screen-rim,24px)]">
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <Section
           title="Select game"
+          /*
+           * An open round CANNOT be attributed to a game.
+           *
+           * The demo ledger is keyed by market, and the same market is reachable
+           * from Lucky, Snipe, Press and Duel — so there is no game to point at.
+           * Two "In play" chips used to claim otherwise: one on the highlighted
+           * row, which made the tag follow the cursor down the list, and one
+           * beside the handle, which said a username was in play. Both are gone.
+           * The fact is true of the player, not of a row, so it is stated once,
+           * here. Menu -> Positions is where an open round actually lives.
+           */
           hint={openPlay ? "You have a round open" : "Tap or turn the knob"}
         />
         {entries.map((entry, i) => {
+          const on = i === clamped;
           const head = i === firstMinigame;
-          return (
-            <div key={entry.id}>
-              {head && (
-                <>
-                  <span className="mt-3 block h-px w-full bg-[var(--color-line-strong)]" />
-                  <Section title="Minigame" hint="Just for fun · No stake" />
-                </>
+          /* Filled while selected, as the reference marks its own list. */
+          const marker = (
+            <span
+              className={`shrink-0 font-mono ${
+                entry.minigame ? "text-[9px]" : "text-[11px]"
+              } ${on ? "text-brand-500" : "text-text-3/40"}`}
+            >
+              {on ? "\u25B6" : "\u203A"}
+            </span>
+          );
+          const row = (
+            <button
+              ref={(el) => {
+                rowsRef.current[i] = el;
+              }}
+              type="button"
+              onClick={() =>
+                on ? router.push(entry.href) : setIndex(i)
+              }
+              className={`relative flex w-full items-center text-left ${
+                entry.minigame ? "gap-2 py-1.5 pl-3" : "gap-3 py-2.5 pl-3"
+              } ${on ? "bg-brand-500/[0.13]" : ""}`}
+            >
+              {on && (
+                <span className="absolute inset-y-0 left-0 w-1 bg-brand-500" />
               )}
-              <button
-                ref={(el) => {
-                  rowsRef.current[i] = el;
-                }}
-                type="button"
-                onClick={() =>
-                  i === clamped ? router.push(entry.href) : setIndex(i)
-                }
-                className={`relative flex w-full items-center gap-3 py-2.5 pl-3 text-left ${
-                  i === clamped ? "bg-brand-500/[0.13]" : ""
-                }`}
-              >
-                {i === clamped && (
-                  <span className="absolute inset-y-0 left-0 w-1 bg-brand-500" />
-                )}
-                <span
-                  className={`tnum w-5 shrink-0 font-mono text-[14px] font-bold ${
-                    i === clamped ? "text-brand-500" : "text-text-3"
-                  }`}
-                >
-                  {pad(i + 1)}
-                </span>
-                {!entry.minigame && (
+              {entry.minigame ? (
+                /*
+                 * One line, no number, smaller: the layout says these are not
+                 * the main event, so no section heading has to say it.
+                 */
+                <>
+                  <span
+                    className={`shrink-0 text-[13px] font-bold uppercase leading-tight tracking-[0.02em] ${
+                      on ? "text-text" : "text-text-2"
+                    }`}
+                  >
+                    {entry.label}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-mono text-[10px] uppercase leading-tight tracking-[0.08em] text-text-3">
+                    {entry.tagline}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span
+                    className={`tnum w-5 shrink-0 font-mono text-[14px] font-bold ${
+                      on ? "text-brand-500" : "text-text-3"
+                    }`}
+                  >
+                    {pad(i + 1)}
+                  </span>
                   <span
                     className={`shrink-0 ${
-                      i === clamped ? "text-brand-500" : "text-text-3"
+                      on ? "text-brand-500" : "text-text-3"
                     }`}
                   >
                     <GameIcon game={entry.id as never} size={26} />
                   </span>
-                )}
-                <span className="min-w-0 flex-1">
-                  <span
-                    className={`block truncate uppercase leading-tight tracking-[0.02em] ${
-                      entry.minigame
-                        ? "text-[15px] font-bold"
-                        : "text-[18px] font-extrabold"
-                    } ${i === clamped ? "text-text" : "text-text-2"}`}
-                  >
-                    {entry.label}
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={`block truncate text-[18px] font-extrabold uppercase leading-tight tracking-[0.02em] ${
+                        on ? "text-text" : "text-text-2"
+                      }`}
+                    >
+                      {entry.label}
+                    </span>
+                    <span className="marquee-mask block truncate font-mono text-[11px] uppercase leading-tight tracking-[0.08em] text-text-3">
+                      {entry.tagline}
+                    </span>
                   </span>
-                  <span className="marquee-mask block truncate font-mono text-[11px] uppercase leading-tight tracking-[0.08em] text-text-3">
-                    {entry.tagline}
-                  </span>
-                </span>
-                {openPlay && i === clamped && (
-                  <span className="inline-flex shrink-0 items-center gap-1.5 border border-up/60 bg-up/15 px-1.5 py-1 font-mono text-[9px] font-bold uppercase leading-none tracking-[0.12em] text-up">
-                    <span className="h-1.5 w-1.5 bg-up motion-safe:animate-pulse" />
-                    In play
-                  </span>
-                )}
-                {entry.lab && (
-                  <span className="shrink-0 border border-[var(--color-premium-500)] px-1 py-px font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--color-premium-500)]">
-                    Lab
-                  </span>
-                )}
-                <span
-                  className={`shrink-0 font-mono ${
-                    entry.minigame ? "text-sm" : "text-lg"
-                  } ${i === clamped ? "text-brand-500" : "text-text-3/40"}`}
-                >
-                  ›
-                </span>
-              </button>
+                  {entry.lab && (
+                    <span className="shrink-0 border border-[var(--color-premium-500)] px-1 py-px font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--color-premium-500)]">
+                      Lab
+                    </span>
+                  )}
+                </>
+              )}
+              {marker}
+            </button>
+          );
+          return (
+            <div key={entry.id}>
+              {head && (
+                <span className="mt-3 mb-1 block h-px w-full bg-[var(--color-line-strong)]" />
+              )}
+              {row}
             </div>
           );
         })}
@@ -234,18 +265,17 @@ export default function GamesPage() {
             <span className="min-w-0 truncate text-[17px] font-extrabold lowercase leading-tight tracking-[0.02em] text-text">
               {user.handle ? `@${user.handle}` : "your rig"}
             </span>
-            {openPlay && (
-              <span className="tnum flex shrink-0 items-center border border-brand-500/60 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.08em] text-brand-500">
-                In play
-              </span>
-            )}
           </div>
           <div className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-text-2">
             Available
           </div>
           <div className="mt-0.5 leading-none">
             <span className="tnum text-[26px] font-extrabold tracking-tight text-text">
-              ${formatCollateral(balance)}
+              {/* A dash until the chain has answered. `0n` is what the store
+                  holds both before the first read and for an empty wallet, and
+                  printing it made a wallet with 497 tUSDC read $0.00 for a
+                  second on every load. */}
+              {balanceRead ? `$${formatCollateral(balance)}` : "—"}
             </span>
             <span className="ml-1 font-mono text-[11px] uppercase tracking-[0.1em] text-text-2">
               {COLLATERAL.symbol}

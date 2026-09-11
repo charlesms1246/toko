@@ -15,6 +15,7 @@ import { CHAIN, COLLATERAL, HTTP_RPC_URL } from "./config";
 import { OUTCOME_TOKEN } from "./orders";
 import { ensureWallet } from "./wallet";
 import type { Window } from "./markets";
+import { createPoller } from "./poller";
 
 const ONE = 10 ** COLLATERAL.decimals;
 
@@ -88,7 +89,7 @@ export function subscribe(fn: () => void) {
 export const getSnapshot = () => state;
 export const getServerSnapshot = () => SERVER_STATE;
 
-let poll: ReturnType<typeof setInterval> | null = null;
+const poller = createPoller();
 
 /** Follow one window's holding. Refreshes immediately after a trade. */
 export function track(window: Window, everyMs = 4000): () => void {
@@ -108,22 +109,11 @@ export function track(window: Window, everyMs = 4000): () => void {
     }
   };
 
-  // Always replace: `??=` would keep an interval closed over the previous window.
-  if (poll) clearInterval(poll);
-  void tick();
-  poll = setInterval(() => void tick(), everyMs);
-
-  refreshNow = tick;
-  return () => {
-    if (poll) {
-      clearInterval(poll);
-      poll = null;
-    }
-    refreshNow = null;
-  };
+  // Keyed on the market id: the poller replaces the interval when the window
+  // changes, and refcounts callers on the same window so the first unmount
+  // neither stops the poll nor takes `refresh` away from the second.
+  return poller.track(window.marketId, everyMs, tick);
 }
 
-let refreshNow: (() => Promise<void>) | null = null;
-
 /** Re-read the tracked holding straight away, after a fill. */
-export const refresh = () => refreshNow?.();
+export const refresh = () => poller.refresh();

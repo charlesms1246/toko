@@ -167,7 +167,7 @@ write("the-round", W, H, o)
 
 # ── 2. The knob is a limit price ────────────────────────────────────────────
 W, H = 900, 352
-o = panel(W, H, "The knob is a limit price", "app/games/{lucky,moonshot}")
+o = panel(W, H, "The knob is a limit price", "app/games/lucky")
 o += screen(38, 62, W - 76, H - 104)
 
 RAIL_Y = 158
@@ -193,8 +193,10 @@ def span(y, a, b, name, col):
     return [path(f"M {xa} {y-6} L {xa} {y} L {xb} {y} L {xb} {y-6}", col, 1.25, 0.55),
             text((xa + xb) / 2, y + 16, name, 9.5, col, "700", "middle", 2.2)]
 
-o += span(RAIL_Y + 52, 0.50, 0.10, "LUCKY", BRAND)
-o += span(RAIL_Y + 84, 0.20, 0.01, "MOONSHOT", AMBER)
+# One ladder, one game. Lucky covers the whole rail: the near rungs are the
+# ordinary bet, the far end is the side the market has nearly written off.
+o += span(RAIL_Y + 52, 0.50, 0.10, "LUCKY · THE BET", BRAND)
+o += span(RAIL_Y + 84, 0.10, 0.01, "LUCKY · THE DEEP TAIL", AMBER)
 
 o.append(text(x0, RAIL_Y - 52, "YOU ASK FOR", 9, LABEL, "700", track=2.0))
 o.append(text(x0, RAIL_Y + 128, "YOU PAY, PER CONTRACT", 9, LABEL, "700", track=2.0))
@@ -432,50 +434,7 @@ o.append(text(38, H - 22,
   9.5, LABEL, track=1.3))
 write("play-snipe", W, H, o)
 
-# ── 8. Rush — take the deal or hold ─────────────────────────────────────────
-W, H = 900, 360
-o = panel(W, H, "Rush — the book is the banker", "take the deal, or hold to the buzzer")
-o += screen(38, 62, W - 76, H - 104)
-
-gx0, gx1, gy0, gy1 = 120, 760, 104, 258
-o.append(line(gx0, gy1, gx1, gy1, AMBER, 1, 0.28))
-o.append(line(gx0, gy0, gx0, gy1, AMBER, 1, 0.28))
-o.append(text(gx0 - 12, gy0 + 5, "$1.00", 9.5, UP, "700", "end", 0.6))
-o.append(text(gx0 - 12, gy1 + 4, "$0", 9.5, DOWN, "700", "end", 0.6))
-o.append(line(gx0, gy0, gx1, gy0, UP, 1, 0.2, dash="3 4"))
-
-# The deal is the live bid on what you hold — it wanders with the market.
-walk = [0.42, 0.46, 0.44, 0.52, 0.58, 0.55, 0.63, 0.70, 0.66, 0.74, 0.81, 0.86]
-pts = [(gx0 + i * (gx1 - gx0) / (len(walk) - 1), gy1 - v * (gy1 - gy0)) for i, v in enumerate(walk)]
-o.append(path("M " + " L ".join(f"{x:.1f} {y:.1f}" for x, y in pts), BRAND, 2, 0.85))
-o.append(text(pts[0][0] + 6, pts[0][1] - 12, "what you paid", 9.5, LABEL, "400", track=0.4))
-o.append(tick(pts[0][0], pts[0][1], BRAND, 6, 1.0))
-
-mid = pts[7]
-o.append(tick(mid[0], mid[1], BRAND, 6, 1.0))
-o.append(path(f"M {mid[0]} {mid[1]} L {mid[0]} {mid[1]+30}", BLUE, 1.25, 0.55, dash="4 3"))
-o += node(mid[0] - 96, mid[1] + 34, 192, 36,
-          [("TAKE THE DEAL — bank it now", 10, INK, "400")], accent=BLUE, dash="4 3")
-
-end = pts[-1]
-o.append(tick(end[0], end[1], BRAND, 6, 1.0))
-o.append(path(f"M {end[0]} {end[1]} L {gx1 + 20} {end[1]}", AMBER, 1.25, 0.5))
-o += node(gx1 + 26, gy0 - 4, 106, 58, [("HOLD ON", 10, INK, "700"),
-                                       ("right → $1.00", 10, UP, "400"),
-                                       ("wrong → $0", 10, DOWN, "400")], accent=UP)
-
-o.append(text(gx0, gy1 + 22, "ANTE UP", 9, LABEL, "700", track=1.6))
-o.append(text(gx1, gy1 + 22, "THE BUZZER", 9, LABEL, "700", "end", 1.6))
-o.append(text(gx0, gy1 + 44,
-  "THE DEAL IS REAL: IT IS WHAT THE ORDER BOOK WILL PAY FOR YOUR POSITION RIGHT NOW.",
-  9.5, INK, "400", track=0.7))
-
-o.append(text(38, H - 22,
-  "THERE IS NO PUSH KEY — PUSHING IS DECLINING THE DEAL, SO A BUTTON FOR IT WOULD DO NOTHING.",
-  9.5, LABEL, track=1.2))
-write("play-rush", W, H, o)
-
-# ── 9. Press and Breakout — the ladder ──────────────────────────────────────
+# ── 8. Press — the ladder ───────────────────────────────────────────────────
 W, H = 900, 372
 o = panel(W, H, "Press — the ladder", "a win stakes the next window")
 o += screen(38, 62, W - 76, H - 104)
@@ -498,53 +457,11 @@ o += node(90, 96, 268, 44, [("FOLD at any rung — stop and keep it", 10, INK, "
           accent=CREAM, dash="4 3")
 
 o.append(text(38, H - 22,
-  "YOU PICK A SIDE FRESH ON EVERY RUNG — IT NEVER ROLLS BY ITSELF. BREAKOUT IS THE SAME LADDER WITH THE SIDE LOCKED.",
+  "YOU PICK A SIDE FRESH ON EVERY RUNG — IT NEVER ROLLS BY ITSELF.",
   9.5, LABEL, track=1.0))
 write("play-ladder", W, H, o)
 
-# ── 10. Pin — name your price and wait ──────────────────────────────────────
-W, H = 900, 400
-o = panel(W, H, "Pin — you make the offer", "your bid goes on the real book")
-o += screen(38, 62, W - 76, H - 104)
-
-lx, lw = 90, 200
-levels = [("0.68", "asks", 0.5), ("0.66", "", 0.5), ("0.64", "", 0.5)]
-for i, (p, tag, op_) in enumerate(levels):
-    y = 104 + i * 24
-    o.append(rect(lx, y, lw, 18, 3, fill=DOWN, op=0.10, stroke=DOWN, sw=1, sop=0.28))
-    o.append(text(lx + 12, y + 13, p, 10.5, DOWN, "400", track=0.6))
-o.append(text(lx + lw + 14, 117, "what sellers want", 9.5, LABEL, "400", track=0.4))
-
-o.append(line(lx - 10, 186, lx + lw + 10, 186, AMBER, 1.5, 0.7))
-o.append(text(lx + lw + 14, 190, "the market now", 9.5, AMBER, "400", track=0.4))
-
-for i, p in enumerate(["0.60", "0.58"]):
-    y = 200 + i * 24
-    o.append(rect(lx, y, lw, 18, 3, fill=UP, op=0.10, stroke=UP, sw=1, sop=0.28))
-    o.append(text(lx + 12, y + 13, p, 10.5, UP, "400", track=0.6))
-o.append(text(lx + lw + 14, 213, "what buyers offer", 9.5, LABEL, "400", track=0.4))
-
-o.append(rect(lx, 272, lw, 22, 3, fill=BRAND, op=0.16, stroke=BRAND, sw=1.25, sop=0.7))
-o.append(text(lx + 12, 287, "0.40  ← YOUR PIN", 11, BRAND, "700", track=0.6))
-o.append(path(f"M {lx + lw/2} 224 L {lx + lw/2} 268", BRAND, 1.25, 0.45, dash="4 3"))
-o.append(text(lx + lw / 2 + 10, 252, "how far it still has to travel", 9, LABEL, "400", track=0.4))
-
-o += node(500, 150, 320, 56, [
-    ("the market comes to you", 11.5, UP, "700"),
-    ("→ you are in the round, at your price", 10, LABEL, "400")], accent=UP)
-o += node(500, 236, 320, 56, [
-    ("the window closes first", 11.5, INK, "700"),
-    ("→ nothing happens, your money comes back", 10, LABEL, "400")], accent=CREAM, dash="4 3")
-o.append(path("M 300 283 L 470 283 L 470 178 L 500 178", UP, 1.25, 0.5))
-o.append(path("M 470 264 L 500 264", CREAM, 1.25, 0.4, dash="4 3"))
-o.append(tick(500, 178, UP)); o.append(tick(500, 264, CREAM))
-
-o.append(text(38, H - 22,
-  "PLAYING PIN IS PROVIDING LIQUIDITY — YOUR RESTING BID IS REAL DEPTH ANYONE CAN TRADE AGAINST.",
-  9.5, LABEL, track=1.2))
-write("play-pin", W, H, o)
-
-# ── 11. Duel — the player's view ────────────────────────────────────────────
+# ── 9. Duel — the player's view ─────────────────────────────────────────────
 W, H = 900, 380
 o = panel(W, H, "Duel — play against a person", "a challenge is a real order")
 o += screen(38, 62, W - 76, H - 104)

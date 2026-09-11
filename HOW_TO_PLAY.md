@@ -1,6 +1,6 @@
 # How to play TOKO
 
-Eight trading games and two arcade ones, all on the same handheld console. This
+Four trading games and two arcade ones, all on the same handheld console. This
 explains the one idea behind all of them, then each game in turn.
 
 If you want to start right now: open the app, tap **Try it first**, and go to
@@ -57,7 +57,7 @@ bottom.](docs/diagrams/play-console.svg)
 
 | Control | What it does |
 |---|---|
-| **Big key** (bottom right) | the main action — PLAY, TAKE, PRESS, CASH OUT. The label always says |
+| **Big key** (bottom right) | the main action — play, take, press, cash out. It carries the TOKO mark rather than a word; what it will do right now is on the screen above it |
 | **LONG** (left key) | pick the **up** side |
 | **SHORT** (right key) | pick the **down** side |
 | **Knob** (gold dial) | the payout you are asking for — drag it up or down |
@@ -93,32 +93,36 @@ the wallet screen. It is testnet money; it costs nothing and is worth nothing.
 One window, one round. Pick a side, pick a payout, press.
 
 1. **LONG** or **SHORT** — is the price going up or down by the end of the window?
-2. **Knob** — `MKT`, `2x`, `3x`, `5x`, `10x`. `MKT` takes whatever the market is
-   offering right now; the others say "only fill me at this price or better".
+2. **Knob** — `MKT`, `2x`, `3x`, `5x`, `10x`, `25x`, `50x`, `100x`. `MKT` takes
+   whatever the market is offering right now; the others say "only fill me at
+   this price or better".
 3. **Number wheel** — 1, 2, 5, 10 or 25 contracts.
-4. **PLAY**.
+4. **Press the big key.**
 
 Then wait. When the window closes the oracle settles it, and a winning contract
 pays $1 each, straight to your balance.
 
-While the round is live the big key becomes **CASH OUT** — sell back at whatever
-the book is bidding, instead of waiting. Usually worth less than holding; occasionally
-worth taking.
+The knob is one ladder from the market price out to the deep tail, and the far
+end is a different game in feel. Ask for `50x` and you are buying the side the
+market has nearly written off, for two cents. Most of those expire worthless.
+That is the deal, and it is best late in a window, when one side is trading at
+two or three cents because the outcome looks decided. It occasionally is not.
+
+**While the round is live, the screen shows the deal** — what the order book
+will actually pay for your position right now. Take it and bank whatever it is
+worth, or ignore it and hold to the buzzer for the full $1 if you are right. The
+deal moves as the market does. Early on it is close to what you paid; if the
+price runs your way it climbs toward $1, and if it runs against you it drains
+toward nothing. There is no separate key for holding, because holding *is*
+declining the deal.
 
 > **"Nobody on the other side"** means your order found no seller at your price.
-> Not an error — thin markets are normal here. Try `MKT`, or wait for the next
-> window.
-
-## Moonshot — Lucky's deep end
-
-The same game with a different knob: `5x`, `10x`, `25x`, `50x`, `100x`.
-
-You are buying the side the market has nearly written off. Most of these expire
-worthless. That is the deal — a few cents for a real shot at a hundred times it,
-priced by the market rather than invented by us.
-
-Best late in a window, when one side is trading at two or three cents because the
-outcome looks decided. It occasionally is not.
+> Not an error — thin markets are normal here. The console then offers to
+> **rest** the same bid instead: it goes onto the real order book and sits
+> there, and it fills only if the market comes to your price. If the window
+> closes first, nothing happens and your money comes straight back. Resting a
+> bid *is* providing liquidity, which is exactly what this venue is short of.
+> `MKT` is the one rung that cannot rest, because it has no price of its own.
 
 ## Snipe — one button, one moment
 
@@ -137,26 +141,6 @@ The catch is real. In the last couple of seconds the market maker withdraws its
 quotes entirely, and there is nothing left to take. Wait too long and the screen
 says so. This is the one game that is purely about timing.
 
-## Rush — deal or no deal
-
-Press **ANTE UP** to buy in. Now you hold a position, and the screen shows **the
-deal**: what the order book will actually pay you for it right now.
-
-- **TAKE THE DEAL** — sell now, bank whatever it is worth.
-- **Do nothing** — hold to the buzzer and collect the full $1 if you are right.
-
-![Rush over one window: the deal — what the book will pay for your position —
-starts at what you paid and wanders as the market moves. Take the deal at any
-point and bank it, or hold on to the buzzer for $1.00 if you are right and $0 if
-you are wrong.](docs/diagrams/play-rush.svg)
-
-There is no PUSH button, deliberately. Pushing *is* declining the deal, so a key
-for it would be a control that does nothing.
-
-The deal moves as the market does. Early on it is close to what you paid; if the
-price runs your way it climbs toward $1, and if it runs against you it drains
-toward nothing.
-
 ## Press — the ladder
 
 A rung is one round. Win it and the payout becomes the stake for the next one, so
@@ -172,38 +156,9 @@ two, $4 to rung three, $8 to rung four. Folding at any rung stops and keeps it.
 Losing a rung ends the ladder there.](docs/diagrams/play-ladder.svg)
 
 You choose a side fresh on every rung. It never rolls by itself, because every
-rung spends real money.
-
-## Breakout — the ladder, one direction
-
-Press with the side locked to whatever you chose at the start. You are calling a
-move to keep going, window after window, rather than betting each one
-independently.
-
-Same PRESS / FOLD, same compounding, less choice — which is the point.
-
-## Pin — name your price and wait
-
-The first game where you are the one making the offer.
-
-1. **Knob** — how far from the market you are calling: `0.40`, `0.30`, `0.20`,
-   `0.10`, `0.05`. Further out pays more.
-2. **LONG** or **SHORT**, then **PIN IT**.
-
-Your bid goes **onto the real order book** and sits there. It fills only if the
-market comes to your price. The screen shows how far it still has to travel.
-
-If it fills, you are in the round at your price. If the window closes first,
-nothing happens and your money comes straight back.
-
-![Pin: sellers are asking 0.68 down to 0.64, buyers are bidding 0.60 and 0.58,
-and your pin sits below all of it at 0.40 with the distance it still has to
-travel marked. If the market comes to you, you are in the round at your price; if
-the window closes first, nothing happens and your money comes
-back.](docs/diagrams/play-pin.svg)
-
-> Playing Pin *is* providing liquidity. Your resting bid is real depth that
-> anyone can trade against — which is exactly what this venue is short of.
+rung spends real money — and a cleared rung waits for you rather than timing
+out, so stepping away does not cost you what you have banked. When the ladder
+ends, either way, the big key starts a new one.
 
 ## Duel — play against a person
 
@@ -261,7 +216,7 @@ there is no server to hold one, and a fake one would be worse than none.
 | It says | It means |
 |---|---|
 | *Finding a window* | between rounds; the next one opens shortly |
-| *Nobody on the other side* | no seller at your price — normal on a thin book |
+| *Nobody on the other side* | no seller at your price — normal on a thin book. Rest the bid instead, or take `MKT` |
 | *Too late — quotes pulled* | inside the last seconds, the market maker has gone |
 | *Window closed* | waiting on the oracle, a few seconds |
 | *Voided* | no reliable settlement price; both sides get half back |

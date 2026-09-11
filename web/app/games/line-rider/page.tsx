@@ -65,7 +65,8 @@ export default function LineRiderPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [phase, setPhase] = useState<"intro" | "playing" | "over">("intro");
   const [hud, setHud] = useState({ score: 0, mult: 1, grip: 1 });
-  const [lastScore, setLastScore] = useState(0);
+  const [run, setRun] = useState({ score: 0, seconds: 0, peakMult: 1 });
+  const lastScore = run.score;
   const [knob, setKnob] = useState(50);
   const actions = useStoreActions();
   const best = useMinigameBest("line-rider");
@@ -86,6 +87,8 @@ export default function LineRiderPage() {
     pipY: 0.5,
     score: 0,
     mult: 1,
+    /** Highest multiplier the run actually reached. Read on the result screen. */
+    peakMult: 1,
     grip: 1,
     elapsed: 0,
     offFor: 0,
@@ -96,7 +99,14 @@ export default function LineRiderPage() {
 
   const end = useCallback(() => {
     const e = engine.current;
-    setLastScore(Math.round(e.score));
+    // The run's own numbers, captured before the engine is reset. Every one of
+    // them is something the run actually did — there is no rank here and no
+    // global board, because there is no server to hold one.
+    setRun({
+      score: Math.round(e.score),
+      seconds: e.elapsed,
+      peakMult: e.peakMult,
+    });
     setPhase("over");
     actions.submitMinigameScore("line-rider", Math.round(e.score));
     playLose();
@@ -237,6 +247,7 @@ export default function LineRiderPage() {
         e.offFor = 0;
         const q = 1 - clamp01(dist / tol);
         e.mult += dt * (MULT_BASE + MULT_BONUS * q);
+        if (e.mult > e.peakMult) e.peakMult = e.mult;
         e.score += dt * SCORE_RATE * e.mult * (0.5 + 0.5 * q);
         e.grip = Math.min(1, e.grip + dt * GRIP_GAIN);
       } else {
@@ -307,6 +318,7 @@ export default function LineRiderPage() {
     e.pipY = 0.5;
     e.score = 0;
     e.mult = 1;
+    e.peakMult = 1;
     e.grip = 1;
     e.elapsed = 0;
     e.offFor = 0;
@@ -341,11 +353,13 @@ export default function LineRiderPage() {
         engine.current.target = v / 100;
       },
     },
-    status: { left: "LINE RIDER", right: `BEST ${best}` },
   });
 
-  const kicker =
-    lastScore > 0 && lastScore >= best ? "Top of the board" : "Run over";
+  const isBest = lastScore > 0 && lastScore >= best;
+  const kicker = isBest ? "Top of the board" : "Run over";
+  /** This run as a share of the personal best, for the result screen's bar. */
+  const pctOfBest =
+    best > 0 ? Math.round(Math.min(1, lastScore / best) * 100) : 100;
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-black text-text">
@@ -402,17 +416,111 @@ export default function LineRiderPage() {
       )}
 
       {phase === "over" && (
-        <div className="absolute inset-0 z-20 flex flex-col justify-center bg-black/95 p-[var(--screen-rim,24px)]">
-          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-brand-500">
-            {kicker}
+        /*
+         * The result, laid out down the whole screen rather than clustered in
+         * the middle of it.
+         *
+         * Three bands — the verdict, what the run did, and what to press —
+         * spaced by `justify-between`, so a tall aperture reads as composed
+         * instead of half empty. The scrim is deliberately not opaque: the
+         * terrain you just crashed on stays visible behind the numbers, which
+         * is what the reference does with its own chart.
+         *
+         * Every figure is the run's own. There is no rank and no global board,
+         * because there is no server to hold one and a fabricated placing would
+         * be worse than none.
+         */
+        <div
+          className="absolute inset-0 z-20 flex flex-col justify-between p-[var(--screen-rim,24px)]"
+          style={{
+            // Not opaque. The terrain you just came off stays legible under the
+            // numbers, which is what gives the screen something to look at
+            // besides text — and it is the run's own last frame, not artwork.
+            background:
+              "linear-gradient(180deg,#000000e0 0%,#0000009e 44%,#000000ee 100%)",
+          }}
+        >
+          <div>
+            <div
+              className={`text-[11px] font-bold uppercase tracking-[0.2em] ${
+                isBest ? "text-brand-500" : "text-text-3"
+              }`}
+            >
+              {kicker}
+            </div>
+            <div
+              className="tnum text-[64px] font-extrabold leading-[0.9] text-text"
+              style={{
+                textShadow: isBest
+                  ? "0 0 18px rgba(255,192,22,.55), 0 0 48px rgba(255,192,22,.25)"
+                  : "0 0 22px rgba(255,255,255,.16)",
+              }}
+            >
+              {lastScore}
+            </div>
+            <div className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-text-3">
+              {isBest ? (
+                <>Your best yet</>
+              ) : (
+                <>
+                  Best <span className="tnum text-text-2">{best}</span> ·{" "}
+                  <span className="tnum text-text-2">{best - lastScore}</span> to
+                  beat it
+                </>
+              )}
+            </div>
           </div>
-          <div className="tnum text-5xl font-extrabold leading-none text-text">
-            {lastScore}
+
+          <div>
+            {/* This run measured against the best. A real comparison of two
+                real numbers — the only ranking this game can honestly draw. */}
+            <div className="flex items-baseline justify-between text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">
+              <span>This run</span>
+              <span className="tnum">{best > 0 ? `${pctOfBest}%` : "—"}</span>
+            </div>
+            <div className="mt-1.5 h-1.5 w-full overflow-hidden bg-white/10">
+              <div
+                className="h-full"
+                style={{
+                  width: `${pctOfBest}%`,
+                  background: isBest
+                    ? "var(--color-brand-500)"
+                    : lineColour(run.peakMult),
+                }}
+              />
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">
+                  Time on the line
+                </div>
+                <div className="tnum mt-0.5 text-2xl font-extrabold leading-none text-text">
+                  {run.seconds.toFixed(1)}
+                  <span className="ml-0.5 text-sm font-bold text-text-3">s</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">
+                  Top multiplier
+                </div>
+                <div
+                  className="tnum mt-0.5 text-2xl font-extrabold leading-none"
+                  style={{ color: lineColour(run.peakMult) }}
+                >
+                  {run.peakMult.toFixed(1)}
+                  <span className="ml-0.5 text-sm font-bold opacity-70">x</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="mt-1 text-[11px] uppercase tracking-[0.14em] text-text-3">
-            Best <span className="tnum text-text">{best}</span>
-          </div>
-          <div className="mt-4 text-[11px] font-bold uppercase tracking-[0.16em] text-text-3">
+
+          {/* Kept clear of the Play key's notch on the right, but free to sit
+              at the true bottom on the left, where there is no hardware. */}
+          <div
+            className="text-[11px] font-bold uppercase tracking-[0.16em] text-text-3"
+            style={{ paddingRight: "var(--screen-notch, 0px)" }}
+          >
             Press the <span className="text-brand-500">big button</span>
           </div>
         </div>

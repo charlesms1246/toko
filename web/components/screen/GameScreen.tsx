@@ -12,10 +12,20 @@
  * The chrome is theirs.
  */
 
+import ModeStrip from "./ModeStrip";
+
 /** The screen's ground. Every game screen's outermost element. */
-export function Shell({ children }: { children: React.ReactNode }) {
+export function Shell({
+  children,
+  mode,
+}: {
+  children: React.ReactNode;
+  /** Right-hand reading on the mode row. Ignored in demo, which needs the exit. */
+  mode?: React.ReactNode;
+}) {
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-black text-text">
+      <ModeStrip right={mode} />
       {children}
     </div>
   );
@@ -185,28 +195,44 @@ export const NOTICES = {
 // Play key. That last detail is what stops the bottom of the aperture reading
 // as dead space.
 
-/** The bordered header: eyebrow, one loud number, and a right-hand readout. */
+/**
+ * The bordered header: eyebrow, the spot reading, and a right-hand readout.
+ *
+ * The spot used to be the single largest element on the screen. It is a
+ * *reference* price — it tells you where the market is, not what a press is
+ * worth — so it stays here as the anchor and the action area carries the
+ * headline instead. See `Payoff`.
+ */
 export function Header({
   eyebrow,
   value,
   rightLabel,
   rightValue,
+  rightNote,
   badge,
 }: {
   eyebrow: React.ReactNode;
   value: React.ReactNode;
   rightLabel?: React.ReactNode;
   rightValue?: React.ReactNode;
+  /**
+   * A quiet second line under the right-hand readout.
+   *
+   * The right slot is the balance — what you have to play with. The countdown
+   * rides here beneath it: we need a clock (the reference has no window to run
+   * out) but it does not need to own the slot on its own.
+   */
+  rightNote?: React.ReactNode;
   badge?: React.ReactNode;
 }) {
   return (
-    <div className="shrink-0 border-b border-[var(--color-line-strong)] bg-black pt-[calc(var(--screen-rim,24px)+12px)]">
+    <div className="shrink-0 border-b border-[var(--color-line-strong)] bg-black">
       <div className="flex items-start justify-between gap-3 px-[var(--screen-rim,24px)] pb-4">
         <div className="min-w-0">
           <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
             {eyebrow}
           </div>
-          <div className="tnum truncate text-[34px] font-extrabold leading-none text-text">
+          <div className="tnum truncate text-[26px] font-bold leading-tight text-text-2">
             {value}
           </div>
         </div>
@@ -217,8 +243,13 @@ export function Header({
             </div>
           )}
           {rightValue != null && (
-            <div className="tnum text-xl font-bold leading-none text-text-2">
+            <div className="tnum text-xl font-bold leading-none text-text">
               {rightValue}
+            </div>
+          )}
+          {rightNote != null && (
+            <div className="tnum mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-text-3">
+              {rightNote}
             </div>
           )}
           {badge != null && (
@@ -341,6 +372,48 @@ export function Footer({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * The headline of the action area, and the largest thing on the screen.
+ *
+ * What a press is worth — the multiple, or what the book will pay for a
+ * position already held. It used to float over the chart as a `StageReadout`,
+ * where it fought the entry tag and the change reading for the same corner. The
+ * reference puts it under the chart, beneath a line naming what it costs and
+ * what it returns, and lets it be big there.
+ */
+export function Payoff({
+  label,
+  value,
+  tone = "brand",
+}: {
+  /** The line above — what this play costs and what it returns. */
+  label: React.ReactNode;
+  value: React.ReactNode;
+  tone?: "up" | "down" | "brand";
+}) {
+  const colour =
+    tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-brand-500";
+  const shadow =
+    tone === "up"
+      ? "var(--color-up)"
+      : tone === "down"
+        ? "var(--color-down)"
+        : "var(--color-brand-500)";
+  return (
+    <div>
+      <div className="truncate font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">
+        {label}
+      </div>
+      <div
+        className={`tnum truncate text-[42px] font-black leading-none ${colour}`}
+        style={{ textShadow: `0 0 16px ${shadow}` }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+/**
  * The countdown, thrown across the whole stage at 15% opacity behind the
  * chart. This is the reference's answer to "what does a live position look
  * like" — it does **not** swap to a data screen. The market keeps drawing and
@@ -359,8 +432,21 @@ export function GhostCount({ children }: { children: React.ReactNode }) {
 /** The centred idle pair — side on the left, multiple on the right. */
 export function StageCentre({ children }: { children: React.ReactNode }) {
   return (
-    <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center gap-8 px-[var(--screen-rim,24px)]">
-      {children}
+    <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center px-[var(--screen-rim,24px)]">
+      {/*
+        The pair sits on its own plate.
+        
+        It used to be bare text centred over the stage, so the price line ran
+        straight through the glyphs — on Snipe the payout and the cost were
+        drawn across the trace and neither was clean to read. A readout that
+        floats over live data needs a ground under it, and darkening a band of
+        the chart is cheaper than moving the readout somewhere the chart is not.
+        The blur keeps the line faintly visible behind, so it still reads as one
+        surface rather than a box dropped on top.
+      */}
+      <div className="flex items-center gap-8 rounded-lg bg-black/72 px-5 py-2.5 backdrop-blur-[3px]">
+        {children}
+      </div>
     </div>
   );
 }

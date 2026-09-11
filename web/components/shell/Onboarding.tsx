@@ -27,6 +27,7 @@ import { APP, LINKS } from "@/lib/api/fixtures";
 import { resumeAudio } from "@/lib/sound";
 import {
   COLLATERAL,
+  fromRaw,
   GAS,
   SIGNUP_GRANT,
   STT_FAUCETS,
@@ -34,6 +35,7 @@ import {
 } from "@/lib/dreamdex/config";
 import * as demo from "@/lib/demo";
 import * as wallet from "@/lib/dreamdex/wallet";
+import * as signin from "@/lib/dreamdex/signin";
 
 type Step = "landing" | "starting" | "username" | "funding" | "customize";
 
@@ -51,6 +53,12 @@ export default function Onboarding({
   /** What they did in demo, if they came that way. Read once, on mount. */
   const [past] = useState(() => demo.pastRun());
   const [fundError, setFundError] = useState<string | null>(null);
+  /**
+   * Separate from `fundError` on purpose. That screen is all about a gas
+   * shortfall — faucet links, "send it to your wallet address" — and none of it
+   * is true when somebody simply closed the login.
+   */
+  const [needsSignIn, setNeedsSignIn] = useState(false);
   const { setUsername } = useStoreActions();
   const { custom, set } = useConsoleTheme();
   const funds = useSyncExternalStore(
@@ -69,9 +77,25 @@ export default function Onboarding({
     setStep("funding");
     setStage(null);
     setFundError(null);
-    void wallet.ensureFunded(setStage).then((result) => {
+    setNeedsSignIn(false);
+    void (async () => {
+      /*
+       * Sign in first, and only here — the moment someone decides to play for
+       * real. Demo Mode never reaches this function, so it never meets Privy at
+       * all, which is the point: you can hold the console before you have an
+       * account.
+       *
+       * A no-op when no app id is configured, so the burner path is unchanged.
+       */
+      setStage("signin");
+      const ok = await signin.signIn();
+      if (!ok) {
+        setNeedsSignIn(true);
+        return;
+      }
+      const result = await wallet.ensureFunded(setStage);
       if (!result.ok) setFundError(result.reason ?? "Could not fund your wallet");
-    });
+    })();
   };
 
   return (
@@ -79,7 +103,15 @@ export default function Onboarding({
       className={`fixed inset-0 z-[60] flex flex-col items-center ${
         step === "landing"
           ? "pointer-events-none"
-          : "justify-center bg-black/92 px-6 backdrop-blur-md"
+          : step === "customize"
+            ? // The skin picker's whole subject is the DEVICE. Centring it in an
+              // opaque scrim, the way the other steps are, hid the one thing the
+              // player is being asked to look at — they were choosing a colour
+              // for a machine they could not see. Same correction `/menu/customize`
+              // already carries: dock to the bottom, gradient instead of a
+              // blackout, console live above it.
+              "justify-end px-6 pb-[max(28px,calc(env(safe-area-inset-bottom)+20px))]"
+            : "justify-center bg-black/92 px-6 backdrop-blur-md"
       }`}
     >
       {step === "landing" && (
@@ -94,16 +126,11 @@ export default function Onboarding({
                 "linear-gradient(to top, #000 34%, #000000f0 58%, #00000080 80%, #0000 100%)",
             }}
           />
-          <Image
-            src="/assets/logos/toko-mark.svg"
-            alt="TOKO"
-            width={112}
-            height={112}
-            unoptimized
-            className="relative z-10 mt-[max(28px,calc(env(safe-area-inset-top)+16px))] h-12 w-auto drop-shadow-[0_10px_30px_rgba(0,0,0,0.6)] sm:h-14"
-            priority
-          />
           <div className="flex-1" />
+          {/* No mark here. It was pinned to the top of the viewport, which put
+              it on the bezel once the landing framed the whole device; it then
+              moved down here and duplicated the one now on the console's own
+              screen. The device wears the mark, and the page carries the pitch. */}
           <div className="relative z-10 w-full max-w-sm px-6 pb-[max(28px,calc(env(safe-area-inset-bottom)+20px))] text-center">
             <h1 className="text-balance text-3xl font-extrabold leading-tight tracking-tight text-text">
               {APP.tagline}
@@ -234,7 +261,7 @@ export default function Onboarding({
                   </span>{" "}
                   in demo and finished on{" "}
                   <span className="font-bold text-text-2">
-                    ${(Number(past.balance) / 1e6).toFixed(2)}
+                    ${fromRaw(past.balance).toFixed(2)}
                   </span>
                   . From here it counts.
                 </p>
@@ -245,6 +272,30 @@ export default function Onboarding({
                 onClick={() => setStep("customize")}
               >
                 Continue
+              </TapTarget>
+            </>
+          ) : needsSignIn ? (
+            <>
+              <h2 className="text-2xl font-extrabold tracking-tight">
+                Sign in to play for real
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-text-2">
+                Playing for real needs a wallet, and signing in is what creates
+                one. Nothing has been charged.
+              </p>
+              <TapTarget
+                className="mt-8 w-full rounded-full bg-brand-500 px-8 py-4 text-base font-extrabold text-black"
+                haptic="high"
+                onClick={fund}
+              >
+                Sign in
+              </TapTarget>
+              <TapTarget
+                className="mt-3 w-full rounded-full border border-[var(--color-line-strong)] px-8 py-4 text-base font-extrabold"
+                haptic="medium"
+                onClick={onDemo}
+              >
+                Try demo instead
               </TapTarget>
             </>
           ) : fundError ? (
@@ -283,11 +334,13 @@ export default function Onboarding({
             <>
               <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/15 border-t-brand-500" />
               <p className="mt-4 text-sm font-semibold text-text-2">
-                {stage === "gas"
-                  ? `Sending you ${GAS.symbol} for gas…`
-                  : stage === "collateral"
-                    ? `Sending you ${SIGNUP_GRANT} ${COLLATERAL.symbol}…`
-                    : "Creating your wallet…"}
+                {stage === "signin"
+                  ? "Signing you in…"
+                  : stage === "gas"
+                    ? `Sending you ${GAS.symbol} for gas…`
+                    : stage === "collateral"
+                      ? `Sending you ${SIGNUP_GRANT} ${COLLATERAL.symbol}…`
+                      : "Creating your wallet…"}
               </p>
               <p className="mt-2 text-[11px] text-text-3">
                 Two transactions on Somnia. A few seconds.
@@ -298,7 +351,17 @@ export default function Onboarding({
       )}
 
       {step === "customize" && (
-        <div className="flex w-full max-w-md flex-col">
+        <>
+          {/* Seats the type on the console without covering it. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-[62%]"
+            style={{
+              background:
+                "linear-gradient(to top, #000 30%, #000000f0 55%, #00000080 78%, #0000 100%)",
+            }}
+          />
+          <div className="relative z-10 flex w-full max-w-md flex-col">
           <h2 className="text-2xl font-extrabold tracking-tight">Make it yours</h2>
           <p className="mt-1 text-sm text-text-2">
             Pick a skin. Change it anytime.
@@ -316,7 +379,8 @@ export default function Onboarding({
           >
             Let&apos;s play
           </TapTarget>
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

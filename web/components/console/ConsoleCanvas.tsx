@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useRef } from "react";
+import type { TokenDisplay } from "@/lib/console/controls";
 import { useLatest } from "@/lib/react/hooks";
 import * as THREE from "three";
 import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader.js";
@@ -278,6 +279,22 @@ function backPlateTexture(): THREE.CanvasTexture {
   return texture;
 }
 
+/**
+ * The cap face — the plate an action key wears, as fractions of the key itself.
+ *
+ * Both of the things that can sit on it are canvas textures, so this ratio has
+ * to be the same in three places: the plane, the legend texture and the token
+ * texture. It was not. `capLabelTexture` kept the 256x64 canvas it was copied
+ * from — the shape of the MENU/HOME pills, which really are 4:1 — and painted it
+ * onto a plane that is 1.54:1, so LONG and SHORT came out stretched to about two
+ * and a half times their proper height. Derived here, once, from the key spec.
+ */
+const CAP_FACE = { w: 0.9, h: 0.62 } as const;
+const CAP_TEX_W = 256;
+const CAP_TEX_H = Math.round(
+  (CAP_TEX_W * (BUTTON_SPECS[1].h * CAP_FACE.h)) / (BUTTON_SPECS[1].w * CAP_FACE.w),
+);
+
 /** Key captions (MENU / HOME) printed beside the pill keys. */
 function labelTexture(text: string): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
@@ -290,40 +307,200 @@ function labelTexture(text: string): THREE.CanvasTexture {
   ctx.textBaseline = "middle";
   ctx.font = `700 34px ${SILKSCREEN_FONT}`;
   ctx.letterSpacing = "3px";
-  ctx.fillText(text, 128, 34);
+  // The play key's caption is whatever the route programmed — "PLAY" but also
+  // "TAKE THE DEAL". Condensing beats clipping; the pill captions are short
+  // enough that this never fires for them.
+  ctx.fillText(text, 128, 34, 236);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
 
 /**
- * The same silkscreen, but two-tone: white letters with a dark halo.
+ * WCAG relative luminance for a `#rrggbb` string, 0 (black) to 1 (white).
  *
- * An action cap can be any colour a preset or a game asks for, and a selected
- * key blooms almost to white — so a single-tone caption disappears on one state
- * or the other. Carrying both tones in the texture means the material is not
- * tinted at all and the label reads on every cap.
+ * Used to pick a legend ink that survives every preset. Nothing here needs the
+ * full contrast-ratio formula — one threshold against the cap is enough, and it
+ * keeps the decision in one readable line.
  */
-function capLabelTexture(text: string): THREE.CanvasTexture {
+function relativeLuminance(hex: string): number {
+  const n = parseInt(hex.replace("#", ""), 16);
+  if (!Number.isFinite(n)) return 0;
+  const lin = (c: number) => {
+    const s = c / 255;
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return (
+    0.2126 * lin((n >> 16) & 255) +
+    0.7152 * lin((n >> 8) & 255) +
+    0.0722 * lin(n & 255)
+  );
+}
+
+/**
+ * A cap that is a little SCREEN rather than a printed legend.
+ *
+ * The reference's two secondary keys are inset panels — one reads HOW TO on a
+ * brushed blue plate, the other shows the asset as a coin. `KeyControl.display`
+ * has described this since the port and rendered nowhere. A moulded key can
+ * carry a display; that is what makes the device read as an instrument instead
+ * of a row of stickers.
+ *
+ * Drawn at the cap's own aspect so the panel sits inside the moulding with an
+ * even margin, and always dark, because a recessed screen is dark whatever the
+ * body around it is.
+ */
+function capDisplayTexture(display: TokenDisplay): THREE.CanvasTexture {
+  const W = CAP_TEX_W;
+  const H = CAP_TEX_H;
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 64;
+  canvas.width = W;
+  canvas.height = H;
   const ctx = canvas.getContext("2d")!;
-  ctx.clearRect(0, 0, 256, 64);
+  ctx.clearRect(0, 0, W, H);
+
+  /**
+   * The coin fills the CAP, not a little window inside it.
+   *
+   * The first pass drew a recessed black panel with a small coin floating in the
+   * middle of it — a screen inside a screen, and at cap size the coin came out
+   * smaller than the legend it replaced. A moulded key with a token on it should
+   * read as the token: edge to edge, with the cap's own bevel and highlight
+   * doing the framing, which is what "behind the button texture" means.
+   */
+  const cx = W / 2;
+  const cy = H / 2;
+  const r = H * 0.5;
+
+  const coin = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+  coin.addColorStop(0, "#ffe4a3");
+  coin.addColorStop(0.45, "#e8a93a");
+  coin.addColorStop(1, "#a86c10");
+  ctx.fillStyle = coin;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // A milled rim, so it reads as struck metal rather than a flat disc.
+  ctx.strokeStyle = "rgba(255,255,255,0.30)";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 7, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = "#1a1206";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = `800 34px ${SILKSCREEN_FONT}`;
-  ctx.letterSpacing = "3px";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(8,8,6,0.92)";
-  ctx.lineWidth = 7;
-  ctx.strokeText(text, 128, 34);
-  ctx.fillStyle = "#ffffff";
-  ctx.fillText(text, 128, 34);
+  const ticker = display.ticker.slice(0, 4).toUpperCase();
+  ctx.font = `800 ${ticker.length > 3 ? 52 : 64}px ${SILKSCREEN_FONT}`;
+  ctx.fillText(ticker, cx, cy + 2, r * 1.7);
+
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
+
+/**
+ * The moulded cap label.
+ *
+ * Set the way the reference sets it: plain semibold, normal tracking, white,
+ * over a soft shadow rather than an outline. It used to be 800 weight with 3px
+ * of letterspacing and a 7px dark stroke, which made a key cap look like a
+ * sticker — the halo read as a second colour and the tracking pushed short
+ * words like PREV and NEXT out to the cap's edges. A moulded key has its legend
+ * printed on it, not stuck to it.
+ *
+ * The shadow still earns its place: an action cap is whatever colour a preset
+ * or a game asks for, so white alone can drop out on a pale one. A soft shadow
+ * separates it without becoming an outline.
+ */
+function capLabelTexture(text: string, capColor = "#000000"): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = CAP_TEX_W;
+  canvas.height = CAP_TEX_H;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, CAP_TEX_W, CAP_TEX_H);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `600 40px ${SILKSCREEN_FONT}`;
+  ctx.letterSpacing = "0px";
+
+  // Ink chosen against the cap it will sit on. Presets run from bone to
+  // graphite, so a fixed white legend is invisible on a pale cap and a fixed
+  // dark one is invisible on a deep one. The old texture hid this behind a
+  // heavy outline — remove the outline and the choice has to be made honestly.
+  const light = relativeLuminance(capColor) < 0.5;
+  ctx.shadowColor = light ? "rgba(8,8,6,0.5)" : "rgba(255,255,255,0.45)";
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 1;
+  ctx.fillStyle = light ? "#ffffff" : "#15130f";
+  // Width is unchanged from before — it was never the broken axis, and the
+  // clamp is what lets SHORT sit on the same cap as LONG.
+  ctx.fillText(text, CAP_TEX_W / 2, CAP_TEX_H / 2 + 2, 240);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/**
+ * The thumbwheel drum, with its detent values printed around the circumference.
+ *
+ * The bezel over this pocket has a rectangular window cut in it, so the drum is
+ * read the way a real slot wheel is: the selected value fills the window and the
+ * next one peeks in below. The drum was previously blank, which left the console
+ * with a control that changes the stake and shows nothing.
+ *
+ * Orientation matters and is not obvious. On a `CylinderGeometry` side, `u` runs
+ * around the circumference and `v` runs along the axis. The mount rotates the
+ * cylinder a quarter turn about z, so the axis lies horizontal — which means `u`
+ * reads as *vertical* travel on screen and `v` as horizontal. Text that should
+ * read left-to-right therefore has to be drawn rotated a quarter turn, running
+ * along the texture's y.
+ */
+function wheelDrumTexture(slots: string[], ink: string): THREE.CanvasTexture {
+  const n = Math.max(1, slots.length);
+  const slot = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = slot * n;
+  canvas.height = 384;
+  const ctx = canvas.getContext("2d")!;
+
+  // The drum is a dark part in every preset, so it carries its own ground
+  // rather than taking the shell colour — a stake has to stay readable when the
+  // body is bone and when it is graphite.
+  ctx.fillStyle = "#0b0b0c";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = ink;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `700 132px ${SILKSCREEN_FONT}`;
+  slots.forEach((text, i) => {
+    ctx.save();
+    ctx.translate(i * slot + slot / 2, canvas.height / 2);
+    // A QUARTER TURN CLOCKWISE, not anticlockwise. The cylinder's `u` winds the
+    // opposite way round from the guess above, so the other sign puts every
+    // glyph on its head — "25" reads as "S2" through the window.
+    ctx.rotate(Math.PI / 2);
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  });
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  return texture;
+}
+
+/**
+ * The width the screen's UI is authored against, in CSS pixels.
+ *
+ * Every type size and gap inside the glass is a fixed pixel value tuned at this
+ * width; `--screen-content-scale` then maps that layout onto whatever width the
+ * device is actually drawn at. Change this and the whole screen re-proportions,
+ * which is the point — one number, not a sweep of media queries.
+ */
+const AUTHOR_W = 390;
 
 /** A tiny studio scene baked to an environment map — no HDRI file. */
 function buildEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
@@ -394,6 +571,57 @@ export interface ConsoleCanvasProps {
    * the screen you are on has programmed them to do.
    */
   actionLabels?: { action1?: string; action2?: string };
+  /**
+   * Inset panels for the two secondary caps. A cap with a display shows the
+   * panel instead of a printed legend — see `capDisplayTexture`.
+   */
+  actionDisplays?: {
+    action1?: TokenDisplay | null;
+    action2?: TokenDisplay | null;
+  };
+  /**
+   * Keys the current screen has not programmed.
+   *
+   * An unassigned cap used to render at the preset's full action colour, so on
+   * a screen like Snipe — which has no side to choose and therefore no action
+   * keys — you got two bright, blank, inviting buttons that do nothing. A key
+   * with nothing behind it should look like unlit hardware, not a missing
+   * label.
+   */
+  dimKeys?: Partial<Record<ButtonKey, boolean>>;
+  /**
+   * Fraction of the viewport reserved at the bottom for a sheet, 0 to 0.7. The
+   * device is fitted into what is left and lifted clear of the band.
+   */
+  bottomInset?: number;
+  /**
+   * Let the device lean toward the pointer.
+   *
+   * OFF everywhere by default, and it must stay that way. The screen is DOM,
+   * positioned from the axis-aligned bounding box of the projected aperture, and
+   * a DOM rect cannot rotate — under yaw that box grows past the aperture and
+   * the black surface overhangs the bezel. It is only safe on the two screens
+   * where the console is an OBJECT being looked at rather than an instrument
+   * being read: the landing and the customizer.
+   */
+  lean?: boolean;
+  /**
+   * A resting 3D angle, in radians [yaw, pitch], that the lean moves around.
+   *
+   * The customizer wants the device TURNED — you are inspecting an object, and
+   * face-on hides the side wall, the seam and the depth of every part you are
+   * being asked to recolour. Safe there and only there: a yaw cannot be matched
+   * by the DOM screen, and the customizer's screen is blank.
+   */
+  restAngle?: [number, number];
+  /**
+   * The thumbwheel's detent values, already formatted, plus which one is
+   * selected. They are printed around the drum, so the value shows through the
+   * bezel's window the way a real slot wheel reads. Without them the drum spins
+   * and says nothing.
+   */
+  wheelSlots?: string[];
+  wheelIndex?: number;
   /** Attract mode — dims the device slightly behind the PRESS START marquee. */
   idle?: boolean;
   /**
@@ -424,6 +652,13 @@ export default function ConsoleCanvas({
   screenElRef,
   keyGlow,
   actionLabels,
+  actionDisplays,
+  dimKeys,
+  bottomInset = 0,
+  lean = false,
+  restAngle,
+  wheelSlots,
+  wheelIndex = 0,
   idle = false,
   exportMode = false,
   className,
@@ -437,7 +672,6 @@ export default function ConsoleCanvas({
     renderer: THREE.WebGLRenderer;
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
-    tilt: THREE.Group;
     device: THREE.Group;
     keys: KeyMesh[];
     keyGlowPlanes: Map<ButtonKey, THREE.Mesh>;
@@ -446,6 +680,9 @@ export default function ConsoleCanvas({
     knobMat: THREE.MeshStandardMaterial;
     knobSpin: THREE.Group;
     wheelSpin: THREE.Group;
+    wheelDrumMat: THREE.MeshStandardMaterial;
+    /** The drum's eased spin target, driven by `wheelIndex`. */
+    wheelTarget: { value: number };
     logoMats: THREE.MeshStandardMaterial[];
     logoEyeMats: THREE.MeshStandardMaterial[];
     backPlateMat: THREE.MeshBasicMaterial;
@@ -454,13 +691,25 @@ export default function ConsoleCanvas({
       mesh: THREE.Mesh;
       mat: THREE.MeshBasicMaterial;
       text: string;
+      /** The cap colour the current texture's ink was chosen against. */
+      ink: string;
     }[];
     envMap: THREE.Texture;
     invalidate: () => void;
+    frameCamera: () => void;
+    restLean: () => void;
     setKeyColors: (theme: Theme) => void;
   } | null>(null);
 
   const handlers = useLatest({ onPress, onKnobStep, onWheelStep });
+
+  // Latest dim map, readable from inside the build closure and from the theme
+  // effect, so a preset change re-applies the same dimming.
+  const dimRef = useLatest<Partial<Record<ButtonKey, boolean>>>(dimKeys ?? {});
+  const themeRef = useLatest(theme);
+  const insetRef = useLatest(bottomInset);
+  const leanRef = useLatest(lean);
+  const restRef = useLatest(restAngle ?? [0, 0]);
 
   // Latest glow map, readable from inside the build closure.
   const keyGlowRef = useLatest<Partial<Record<ButtonKey, number>>>(keyGlow ?? {});
@@ -529,7 +778,8 @@ export default function ConsoleCanvas({
     fill.position.set(...LIGHTS.fill.position);
     scene.add(fill);
 
-    // Group hierarchy: tilt (pointer/orientation lean) > device (model space)
+    // `tilt` carries the pointer lean and is the identity unless `lean` is on.
+    // See `onPointerMove` for why that is off nearly everywhere.
     const tilt = new THREE.Group();
     scene.add(tilt);
     const device = new THREE.Group();
@@ -803,11 +1053,12 @@ export default function ConsoleCanvas({
       mesh: THREE.Mesh;
       mat: THREE.MeshBasicMaterial;
       text: string;
+      ink: string;
     }[] = [];
     ([1, 2] as const).forEach((i) => {
       const spec = BUTTON_SPECS[i];
-      // White ink: the caption now sits on the cap, which is the action colour
-      // in every preset, not on the body the silkscreen palette was chosen for.
+      // The texture carries its own ink, chosen against the cap colour, so the
+      // material is left untinted.
       const mat = new THREE.MeshBasicMaterial({
         map: capLabelTexture(""),
         color: new THREE.Color("#ffffff"),
@@ -816,13 +1067,30 @@ export default function ConsoleCanvas({
       });
       // On the cap, not under it — and parented to the cap so it travels with
       // the key on every press, the way the brand mark rides the Play key.
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(spec.w * 0.82, spec.w * 0.205), mat);
-      mesh.position.set(0, 0, spec.depth / 2 + 0.08);
+      // Sized to the cap face, not to a line of text: the same plane carries a
+      // centred legend or a full inset panel, and only its texture changes.
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(spec.w * CAP_FACE.w, spec.h * CAP_FACE.h),
+        mat,
+      );
+      // Sat down onto the cap rather than floating over it, so the shell's own
+      // key light and bevel read across the face instead of past it.
+      mesh.position.set(0, 0, spec.depth / 2 + 0.035);
       const cap = keys.find((k) => k.userData.key === BUTTON_KEYS[i]);
       (cap ?? device).add(mesh);
-      actionCaptions.push({ mesh, mat, text: "" });
+      actionCaptions.push({ mesh, mat, text: "", ink: "" });
       disposables.push(mesh.geometry, mat);
     });
+
+    /*
+     * The Play cap carries the brand mark and NOTHING ELSE.
+     *
+     * A caption was tried here and removed: the mark alone is what the
+     * reference's key wears, and a word under it made the cap busy without
+     * telling the player anything the glass was not already saying. Screens set
+     * `main.label` for their own copy — "TAKE THE DEAL", "CASH OUT $0.01" — and
+     * that belongs on the screen, where there is room to say it properly.
+     */
 
     // Pill captions
     const labelMats: THREE.MeshBasicMaterial[] = [];
@@ -991,6 +1259,9 @@ export default function ConsoleCanvas({
       bumpMap: knobBump,
       bumpScale: 12,
     });
+    // The printed values arrive from `wheelSlots`; until a screen programs the
+    // wheel the drum stays bare, which is the honest state for a control with
+    // nothing assigned to it.
     const wheelDrumGeo = new THREE.CylinderGeometry(0.37, 0.37, 0.76, 64, 1, false);
     const wheelDrum = new THREE.Mesh(wheelDrumGeo, wheelDrumMat);
     wheelDrum.castShadow = true;
@@ -1167,6 +1438,9 @@ export default function ConsoleCanvas({
       keys.forEach((k) => {
         const mat = k.material as THREE.MeshStandardMaterial;
         mat.color.set(keyColorFor(t, k.userData.key));
+        // Darkened, not greyed: multiplying keeps the preset's hue so the cap
+        // still reads as the same moulded part, just unlit.
+        if (dimRef.current[k.userData.key]) mat.color.multiplyScalar(0.4);
         mat.emissive.copy(glow);
       });
       keyGlowPlanes.forEach((plane) => {
@@ -1185,9 +1459,15 @@ export default function ConsoleCanvas({
     };
 
     const resize = () => {
-      const rect = wrap.getBoundingClientRect();
-      width = Math.max(1, rect.width);
-      height = Math.max(1, rect.height);
+      // LAYOUT size, not the bounding rect. The stage wraps the canvas and the
+      // DOM screen in a layer that may be rotated, and `getBoundingClientRect`
+      // on a rotated element returns the enclosing axis-aligned box — bigger
+      // than the element. Sizing the renderer from that inflated the drawing
+      // buffer and made every projection land in a space the canvas pixels did
+      // not share, which showed up as the black screen surface hanging out past
+      // the shell. `offsetWidth`/`offsetHeight` ignore transforms.
+      width = Math.max(1, wrap.offsetWidth);
+      height = Math.max(1, wrap.offsetHeight);
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
@@ -1196,14 +1476,44 @@ export default function ConsoleCanvas({
     };
 
     // Frame the device: fit its height into the viewport with a little margin.
+    /**
+     * Frame the device, optionally reserving a band at the bottom.
+     *
+     * `bottomInset` is the fraction of the viewport a sheet is about to cover.
+     * The customizer needs it: the console is the SUBJECT there, and framed to
+     * the full viewport it sat behind the sheet with only its screen showing —
+     * you could not see the object you were being asked to recolour. Reserving
+     * the band both shrinks the device to fit above it and rides it upward, so
+     * the whole machine is in view.
+     */
     const frameCamera = () => {
       const halfFov = (camera.fov * Math.PI) / 180 / 2;
       const aspect = Math.max(camera.aspect, 1e-4);
-      const fitH = BODY_H / 2 / Math.tan(halfFov);
+      const inset = Math.max(0, Math.min(0.7, insetRef.current));
+      const usable = 1 - inset;
+      const fitH = BODY_H / usable / 2 / Math.tan(halfFov);
       const fitW = BODY_W / 2 / (Math.tan(halfFov) * aspect);
-      const z = Math.max(fitH, fitW) * 1.06 + GROUP_Z;
-      camera.position.set(0, bodyCenterY(0), z);
-      camera.lookAt(0, bodyCenterY(0), 0);
+      /*
+       * How much air is left around the device.
+       *
+       * 1.06 pushed the camera 6% further back than the fit needs, which left
+       * the console at 92% of the frame — 15px of dead frame down each side and
+       * 22px top and bottom, on a screen where every pixel of glass is the
+       * product. It is now 2%, just enough that the shell's own shadow is not
+       * cut by the frame's edge.
+       *
+       * The landing is the exception and keeps the old air: it tilts the device
+       * 2.4 degrees, and a rotated rectangle needs the corners to go somewhere
+       * or `overflow: hidden` takes them off.
+       */
+      const margin = insetRef.current > 0 ? 1.06 : 1.02;
+      const z = Math.max(fitH, fitW) * margin + GROUP_Z;
+      // Half the reserved band, in world units at the device's depth. Looking
+      // BELOW the device's centre is what carries it up the screen.
+      const visibleH = 2 * Math.tan(halfFov) * Math.max(0.001, z - GROUP_Z);
+      const shift = (visibleH * inset) / 2;
+      camera.position.set(0, bodyCenterY(0) - shift, z);
+      camera.lookAt(0, bodyCenterY(0) - shift, 0);
     };
 
     // Screen rect projection -> DOM
@@ -1231,13 +1541,24 @@ export default function ConsoleCanvas({
         // Points 2 and 3 are the inner corner where the aperture steps up.
         if ((i === 2 || i === 3) && sy < stepY) stepY = sy;
       });
-      const w = maxX - minX + 8;
-      const h = maxY - minY + 8;
-      el.style.left = `${minX - 4}px`;
-      el.style.top = `${minY - 4}px`;
+      // A hair of bleed so no seam shows between the DOM surface and the bevel
+      // that overhangs it. It has to be PROPORTIONAL: a flat 4px was about 1% of
+      // the aperture on a phone, which is enough to see the black surface
+      // standing proud of the frame all the way round.
+      const bleed = Math.max(1, Math.min(4, (maxX - minX) * 0.004));
+      const w = maxX - minX + bleed * 2;
+      const h = maxY - minY + bleed * 2;
+      el.style.left = `${minX - bleed}px`;
+      el.style.top = `${minY - bleed}px`;
       el.style.width = `${w}px`;
       el.style.height = `${h}px`;
-      const scale = Math.max(0.4, Math.min(1, w / 340));
+      // The content is authored against AUTHOR_W and scaled to whatever width
+      // the device is actually drawn at. The clamp used to stop at 1, so above
+      // 340px the transform did nothing and the layout simply got wider while
+      // every font size stayed a fixed pixel value — which is why type shrank
+      // relative to the glass as the window grew. It scales up now, so the
+      // screen looks the same at every size, which is what a screen does.
+      const scale = Math.max(0.4, w / AUTHOR_W);
       el.style.setProperty("--screen-content-scale", scale.toFixed(4));
 
       // The aperture is an L: the bottom-right is notched out for the Play key.
@@ -1285,6 +1606,76 @@ export default function ConsoleCanvas({
         host.style.setProperty("--device-top", `${dMinY}px`);
         host.style.setProperty("--device-bottom", `${height - dMaxY}px`);
         host.style.setProperty("--device-width", `${dMaxX - dMinX}px`);
+
+        // The aperture, published the same way and for the same reason.
+        //
+        // `--device-*` is the whole hardware — shell, keys and chin. A portal
+        // that wants to cover only the GLASS could not, because the screen rect
+        // lived in inline styles on the surface element and nothing outside
+        // could see it. That is why the menu used to swallow the keys and the
+        // chin and take the console off screen with it.
+        host.style.setProperty("--screen-left", `${minX - bleed}px`);
+        host.style.setProperty("--screen-top", `${minY - bleed}px`);
+        host.style.setProperty("--screen-right", `${width - (maxX + bleed)}px`);
+        host.style.setProperty("--screen-bottom", `${height - (maxY + bleed)}px`);
+        host.style.setProperty("--screen-width", `${w}px`);
+
+
+        // Every control, published as a rect the onboarding tour can point at.
+        //
+        // The tour names five keys, the dial and the stake wheel, and until now
+        // it pointed at none of them — it was a modal at the bottom of the
+        // VIEWPORT describing hardware that might not even be under it. The
+        // reference hung `data-tour-anchor` on zero-size elements over these
+        // same positions; publishing the rects does the same job and survives
+        // the portal, which is where the tour actually lives.
+        const anchor = (name: string, cx: number, cy: number, hw: number, hh: number) => {
+          let aMinX = Infinity;
+          let aMinY = Infinity;
+          let aMaxX = -Infinity;
+          let aMaxY = -Infinity;
+          for (const [ax, ay] of [
+            [cx - hw, cy - hh],
+            [cx + hw, cy - hh],
+            [cx + hw, cy + hh],
+            [cx - hw, cy + hh],
+          ]) {
+            projected.set(ax, ay, 0.2).applyMatrix4(device.matrixWorld).project(camera);
+            const px = (projected.x * 0.5 + 0.5) * width;
+            const py = (-projected.y * 0.5 + 0.5) * height;
+            if (px < aMinX) aMinX = px;
+            if (px > aMaxX) aMaxX = px;
+            if (py < aMinY) aMinY = py;
+            if (py > aMaxY) aMaxY = py;
+          }
+          host.style.setProperty(`--anchor-${name}-x`, `${aMinX}px`);
+          host.style.setProperty(`--anchor-${name}-y`, `${aMinY}px`);
+          host.style.setProperty(`--anchor-${name}-w`, `${aMaxX - aMinX}px`);
+          host.style.setProperty(`--anchor-${name}-h`, `${aMaxY - aMinY}px`);
+        };
+        BUTTON_KEYS.forEach((key, i) => {
+          const spec = BUTTON_SPECS[i];
+          const pos = BUTTON_POS[i];
+          anchor(key, toX(pos.x) + spec.dx, toY(pos.y) + spec.dy, spec.w / 2, spec.h / 2);
+        });
+        anchor(
+          "knob",
+          toX(KNOB_POCKET.px),
+          toY(KNOB_POCKET.py),
+          KNOB_POCKET.w / 2,
+          KNOB_POCKET.h / 2,
+        );
+        anchor(
+          "amount",
+          toX(WHEEL_POCKET.px),
+          toY(WHEEL_POCKET.py),
+          WHEEL_POCKET.w / 2,
+          WHEEL_POCKET.h / 2,
+        );
+        host.style.setProperty("--anchor-screen-x", `${minX - bleed}px`);
+        host.style.setProperty("--anchor-screen-y", `${minY - bleed}px`);
+        host.style.setProperty("--anchor-screen-w", `${w}px`);
+        host.style.setProperty("--anchor-screen-h", `${h}px`);
       }
     };
 
@@ -1311,15 +1702,27 @@ export default function ConsoleCanvas({
           k.userData.glow += (targetGlow - k.userData.glow) * Math.min(1, dt * 8);
           animating = true;
         }
-        mat.emissiveIntensity = k.userData.glow * 1.15;
+        /**
+         * The play key does not bloom.
+         *
+         * It is the biggest, most saturated part on the device and it pulses on
+         * nearly every screen, so at the shared intensity it washed to white and
+         * threw a halo over the shell around it — the mark and the caption on
+         * the cap both disappeared into it, and the reference's own key is flat
+         * colour with no bloom at all. It still lifts and presses, and it is
+         * still the only thing that size and that colour, which is all the
+         * emphasis a primary key needs.
+         */
+        const isPlay = k.userData.key === "play";
+        mat.emissiveIntensity = isPlay ? 0 : k.userData.glow * 1.15;
         const plane = keyGlowPlanes.get(k.userData.key);
         if (plane) {
-          (plane.material as THREE.MeshBasicMaterial).opacity =
-            k.userData.glow * 0.5;
+          (plane.material as THREE.MeshBasicMaterial).opacity = isPlay
+            ? 0
+            : k.userData.glow * 0.5;
         }
       }
 
-      // Lean toward the pointer
       if (
         Math.abs(tilt.rotation.x - tiltTarget.x) > 1e-4 ||
         Math.abs(tilt.rotation.y - tiltTarget.y) > 1e-4
@@ -1441,19 +1844,20 @@ export default function ConsoleCanvas({
 
         if (steps !== 0) {
           dragging.emitted = detents;
-          const turn =
-            dragging.kind === "knob"
-              ? (Math.PI * 2) / KNOB.snapInterval
-              : (Math.PI * 2) / 12;
-          // The drum rolls with the thumb. `steps` is the *value* delta and
+          const turn = (Math.PI * 2) / KNOB.snapInterval;
+          // The knob rolls with the thumb. `steps` is the *value* delta and
           // already carries the "up means more" inversion, so the visible spin
           // takes the same sign as the pointer's travel instead.
-          const spin = steps * turn;
           if (dragging.kind === "knob") {
-            knobTarget.value += spin;
+            knobTarget.value += steps * turn;
             handlers.current.onKnobStep?.(steps);
           } else {
-            wheelTarget.value += spin;
+            // The drum is NOT spun from the drag. It carries printed values now,
+            // so its angle has to be whatever the selected slot is — spinning it
+            // by accumulated drag would let the picture drift off the value the
+            // moment a step is clamped at either end of the ladder. The step
+            // goes out, the new index comes back as a prop, and the effect below
+            // sets the angle. One render of latency buys a drum that cannot lie.
             handlers.current.onWheelStep?.(steps);
           }
         }
@@ -1461,12 +1865,16 @@ export default function ConsoleCanvas({
         return;
       }
 
-      // Idle lean
+      // The lean, on the two screens that opt in. Deliberately gentle: the DOM
+      // screen is an axis-aligned rect and cannot rotate with the device, so
+      // every degree of yaw grows its bounding box past the aperture. Small
+      // enough and the overhang stays inside the bevel's own shadow.
+      if (!leanRef.current) return;
       const rect = canvas.getBoundingClientRect();
       const nx = (event.clientX - rect.left) / rect.width - 0.5;
       const ny = (event.clientY - rect.top) / rect.height - 0.5;
-      tiltTarget.y = nx * 0.34;
-      tiltTarget.x = ny * 0.18;
+      tiltTarget.y = restRef.current[0] + nx * 0.16;
+      tiltTarget.x = restRef.current[1] + ny * 0.09;
     };
 
     const releaseKey = () => {
@@ -1486,8 +1894,8 @@ export default function ConsoleCanvas({
     };
 
     const onPointerLeave = () => {
-      tiltTarget.x = 0;
-      tiltTarget.y = 0;
+      tiltTarget.y = restRef.current[0];
+      tiltTarget.x = restRef.current[1];
       dragging = null;
       releaseKey();
     };
@@ -1541,7 +1949,6 @@ export default function ConsoleCanvas({
       renderer,
       scene,
       camera,
-      tilt,
       device,
       keys,
       keyGlowPlanes,
@@ -1550,6 +1957,8 @@ export default function ConsoleCanvas({
       knobMat,
       knobSpin,
       wheelSpin,
+      wheelDrumMat,
+      wheelTarget,
       logoMats,
       logoEyeMats,
       backPlateMat,
@@ -1557,6 +1966,11 @@ export default function ConsoleCanvas({
       actionCaptions,
       envMap,
       invalidate,
+      frameCamera,
+      restLean: () => {
+        tiltTarget.y = restRef.current[0];
+        tiltTarget.x = restRef.current[1];
+      },
       setKeyColors,
     };
 
@@ -1575,6 +1989,21 @@ export default function ConsoleCanvas({
       for (const d of disposables) d.dispose();
       envMap.dispose();
       renderer.dispose();
+      /*
+       * NO `renderer.forceContextLoss()` here, though `BUG_AUDIT.md` L7 asked
+       * for one. It breaks the app, and the reason is the case L7 cited in its
+       * favour.
+       *
+       * The `<canvas>` is React's, held by a ref, and it OUTLIVES this effect.
+       * Force-losing a context permanently poisons the element it belonged to —
+       * `getContext` returns null on it ever after — so StrictMode's second
+       * mount rebuilt the scene against a dead canvas and threw "Cannot read
+       * properties of null (reading 'precision')" from the `WebGLRenderer`
+       * constructor. Every route that draws the console was blank.
+       *
+       * `dispose()` is the right call for a canvas that is reused. The context
+       * goes when the element does.
+       */
       sceneRef.current = null;
     };
     // The scene is built once; theme and glow are applied by the effects below.
@@ -1702,16 +2131,123 @@ export default function ConsoleCanvas({
   useEffect(() => {
     const s = sceneRef.current;
     if (!s) return;
+    const shown = [
+      actionDisplays?.action1 ?? null,
+      actionDisplays?.action2 ?? null,
+    ];
     [a1, a2].forEach((text, i) => {
       const caption = s.actionCaptions[i];
-      if (!caption || caption.text === text) return;
+      if (!caption) return;
+      // A display keys off its ticker; a legend keys off its text and the cap
+      // colour it was inked against.
+      const key = shown[i] ? `token:${shown[i]!.ticker}` : `${text}@${theme.action}`;
+      if (caption.text === key) return;
       caption.mat.map?.dispose();
-      caption.mat.map = capLabelTexture(text);
+      caption.mat.map = shown[i]
+        ? capDisplayTexture(shown[i]!)
+        : capLabelTexture(text, theme.action);
       caption.mat.needsUpdate = true;
-      caption.text = text;
+      caption.text = key;
+      caption.ink = theme.action;
     });
     s.invalidate();
-  }, [a1, a2]);
+  }, [a1, a2, theme.action, actionDisplays?.action1, actionDisplays?.action2]);
+
+  // ── Lean ───────────────────────────────────────────────────────────────────
+  // Navigating away from a leaning screen has to bring the device back square,
+  // or it stays at whatever angle the pointer left it while a game is being read
+  // through the glass.
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s || lean) return;
+    s.restLean();
+    s.invalidate();
+  }, [lean]);
+
+  // ── Resting angle ──────────────────────────────────────────────────────────
+  const restKey = (restAngle ?? [0, 0]).join(",");
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    s.restLean();
+    s.invalidate();
+  }, [restKey]);
+
+  // ── Camera framing ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    s.frameCamera();
+    s.renderer.shadowMap.needsUpdate = true;
+    s.invalidate();
+  }, [bottomInset]);
+
+  // ── Unassigned keys ────────────────────────────────────────────────────────
+  const dimKey = JSON.stringify(dimKeys ?? {});
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    s.setKeyColors(themeRef.current);
+    s.renderer.shadowMap.needsUpdate = true;
+    s.invalidate();
+    // `themeRef` is a ref: stable, and read for its latest value on purpose so
+    // a dim change does not have to wait for a preset change to re-apply.
+  }, [dimKey, themeRef]);
+
+  // ── Thumbwheel drum ────────────────────────────────────────────────────────
+  // The values are printed around the drum and the selected one is turned into
+  // the bezel's window. Both halves key off the same slot list, so the picture
+  // and the value cannot disagree.
+  const slotKey = (wheelSlots ?? []).join("\u0000");
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    const slots = slotKey ? slotKey.split("\u0000") : [];
+    s.wheelDrumMat.map?.dispose();
+    // PRINTED IN DESCENDING ORDER, so the drum follows the thumb.
+    //
+    // The console's convention is "drag up, the value goes up" — the same as the
+    // knob. On a wheel with values ascending upward, honouring that forces the
+    // surface to roll DOWNWARD as you drag up, because the next-larger value
+    // sits above the window and has to come down into it. That reads as the
+    // control fighting your thumb.
+    //
+    // Printing them the other way round puts the next-larger value BELOW the
+    // window, so a drag upward rolls the surface upward to fetch it. The value
+    // still climbs with the drag; the drum now moves with it.
+    s.wheelDrumMat.map = slots.length
+      ? wheelDrumTexture([...slots].reverse(), "#f2f2f2")
+      : null;
+    // `map` is MULTIPLIED by `color`, and the drum's own colour is near-black —
+    // so a printed drum has to drop to white or the numbers are multiplied into
+    // the ground and vanish. The texture carries its own dark background, so the
+    // part still reads as the same black drum.
+    s.wheelDrumMat.color.set(slots.length ? 0xffffff : HARDWARE_COLORS.wheelDrum);
+    // Ridges are what makes it read as a wheel, but at full depth they chew the
+    // glyphs apart. Enough relief to catch the key light, not enough to distort.
+    s.wheelDrumMat.bumpScale = slots.length ? 3 : 12;
+    s.wheelDrumMat.needsUpdate = true;
+    s.invalidate();
+  }, [slotKey]);
+
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    const count = slotKey ? slotKey.split("\u0000").length : 0;
+    // A bare drum has nothing to align, so leave it where it is.
+    if (count < 2) return;
+    // One slot per detent, plus HALF a slot of phase.
+    //
+    // Without the half, the window frames the seam between two values instead of
+    // a value: at index 0 it showed the top of "1" and the bottom of "25" at
+    // once. A slot's centre is at (i + 0.5) / count around the drum, not i /
+    // count, and that is where the window has to land.
+    // The print order is reversed (see the texture effect), so the selected
+    // value's slot is counted from the far end.
+    const slotAt = count - 1 - wheelIndex;
+    s.wheelTarget.value = -((slotAt + 0.5) / count) * Math.PI * 2;
+    s.invalidate();
+  }, [slotKey, wheelIndex]);
 
   // ── Key bloom targets ──────────────────────────────────────────────────────
   const glowKey = JSON.stringify(keyGlow ?? {});

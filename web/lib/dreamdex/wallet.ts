@@ -19,12 +19,14 @@
 
 import {
   createPublicClient,
+  createWalletClient,
   formatEther,
   formatUnits,
   http,
   parseAbi,
   type Address,
   type Hash,
+  type WalletClient,
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import {
@@ -47,6 +49,15 @@ export interface WalletState {
   collateral: bigint;
   /** False until the key has been read from storage on the client. */
   ready: boolean;
+  /**
+   * False until a balance has actually come back from the chain.
+   *
+   * `collateral` is `0n` before the first read AND when the wallet is empty, and
+   * the hub printed that straight out as `AVAILABLE $0.00` for a wallet holding
+   * 497 tUSDC. Same shape as the list bugs in `ERRORS.md`: **zero must never
+   * stand in for unread.**
+   */
+  read: boolean;
   /** True while a balance read is in flight. */
   loading: boolean;
   /** Last read that failed, for honest display rather than a silent zero. */
@@ -58,6 +69,7 @@ const SERVER_STATE: WalletState = {
   gas: 0n,
   collateral: 0n,
   ready: false,
+  read: false,
   loading: false,
   error: null,
 };
@@ -98,6 +110,15 @@ function loadKey(): `0x${string}` | null {
  * Returns the address so callers can act on it without waiting for a render.
  */
 export function ensureWallet(): Address | null {
+  /*
+   * A managed wallet already IS the wallet — do not go looking for a key.
+   *
+   * Every funding path starts by calling this, and without this line the first
+   * one after a Privy login would have generated a burner and published ITS
+   * address over the managed one: the grant would land on a wallet the trader
+   * never signs with, and the player's balance would read as somebody else's.
+   */
+  if (managed) return managed.address;
   if (account) return account.address;
   if (typeof window === "undefined") return null;
 
@@ -121,9 +142,66 @@ export const getAccount = () => account;
 /**
  * Export the raw key so a player can move funds out or import elsewhere. This
  * is the only recovery path a burner has, so it must exist.
+ *
+ * **Null under a managed wallet, and that is the point of one.** Privy keeps the
+ * key in its own custody and hands out a provider, never the secret. Anything
+ * that needs to *sign* must go through `signer()` instead; only the reveal on
+ * `/menu/wallet` may ask for the key itself, and it has to handle null.
  */
 export function exportKey(): `0x${string}` | null {
+  if (managed) return null;
   return typeof window === "undefined" ? null : loadKey();
+}
+
+// ── Who signs ───────────────────────────────────────────────────────────────
+
+/**
+ * A managed wallet, when one is connected.
+ *
+ * This is the seam `wallet.ts` has documented since Phase 1 finally being used.
+ * `EmbeddedWallet` is a key in `localStorage`; a managed wallet (Privy) is an
+ * address plus a `WalletClient` over its provider, and the key never leaves the
+ * provider. Everything above this file asks for `signer()` and does not care
+ * which it got.
+ */
+let managed: { address: Address; client: WalletClient } | null = null;
+
+/** Hand the app a managed wallet. Called by the Privy bridge once it is ready. */
+export function attachManaged(address: Address, client: WalletClient) {
+  if (managed?.address === address) return;
+  managed = { address, client };
+  account = null;
+  set({ address, ready: true });
+  void refresh();
+}
+
+/** Drop the managed wallet — a logout. Leaves no address behind. */
+export function detachManaged() {
+  if (!managed) return;
+  managed = null;
+  set({ address: null, ready: true, gas: 0n, collateral: 0n });
+}
+
+/** True when the connected wallet is managed rather than a local burner. */
+export const isManaged = () => managed !== null;
+
+/**
+ * The thing that signs, whichever kind of wallet is connected.
+ *
+ * Three places write to the chain outside the SDK's trader — `preApprove`, the
+ * withdraw form, and the trader's own construction — and all of them used to
+ * build a client from the raw key. They go through here now, so a managed wallet
+ * needs no change in any of them.
+ */
+export function signer(): WalletClient | null {
+  if (managed) return managed.client;
+  ensureWallet();
+  if (!account) return null;
+  return createWalletClient({
+    account,
+    chain: CHAIN,
+    transport: http(HTTP_RPC_URL),
+  });
 }
 
 // ── Balances ────────────────────────────────────────────────────────────────
@@ -135,9 +213,16 @@ const erc20 = parseAbi([
   "function faucet(uint256 amount)",
 ]);
 
+/** Counts refreshes so a slow reply cannot overwrite a newer balance. */
+let latestRead = 0;
+
 export async function refresh(): Promise<void> {
   const address = ensureWallet();
   if (!address) return;
+  // Called from mount effects, after every order, and from `ensureFunded`, so
+  // reads overlap. Only the newest may write: a reply that arrives late carries
+  // a pre-trade balance, and screens read this straight after awaiting a trade.
+  const mine = ++latestRead;
   set({ loading: true, error: null });
   try {
     const [gas, collateral] = await Promise.all([
@@ -149,8 +234,10 @@ export async function refresh(): Promise<void> {
         args: [address],
       }) as Promise<bigint>,
     ]);
-    set({ gas, collateral, loading: false });
+    if (mine !== latestRead) return;
+    set({ gas, collateral, loading: false, read: true });
   } catch (err) {
+    if (mine !== latestRead) return;
     set({
       loading: false,
       error: err instanceof Error ? err.message : "Could not read balances",
@@ -228,6 +315,28 @@ const lastClaim = (): number => {
   }
 };
 
+export interface GrantStatus {
+  amount: number;
+  kind: "signup" | "weekly";
+  nextAt: number;
+}
+
+const readGrant = (): GrantStatus => {
+  const last = lastClaim();
+  return {
+    amount: last ? WEEKLY_GRANT : SIGNUP_GRANT,
+    kind: last ? "weekly" : "signup",
+    nextAt: last ? last + GRANT_INTERVAL_MS : 0,
+  };
+};
+
+let grant: GrantStatus | null = null;
+
+function setGrant(next: GrantStatus) {
+  grant = next;
+  listeners.forEach((fn) => fn());
+}
+
 /**
  * How many players a referral code has actually brought in.
  *
@@ -251,23 +360,20 @@ export async function invitedCount(code: string): Promise<number | null> {
 /**
  * What the next claim would be, and when it unlocks.
  *
- * `nextAt` of 0 means there is nothing to wait for. Deliberately free of
- * `Date.now()` so a screen can call it while rendering — reading the clock
- * during render is what the React Compiler's purity rule rejects, so the caller
- * compares against its own ticking clock.
+ * The schedule lives in local storage, so it is read once here and published to
+ * subscribers rather than read during render — the same impurity the rest of the
+ * app routes around with `useSyncExternalStore`. `nextAt` of 0 means there is
+ * nothing to wait for; it is deliberately free of `Date.now()`, so a screen
+ * compares it against its own ticking clock.
  */
-export function grantStatus(): {
-  amount: number;
-  kind: "signup" | "weekly";
-  nextAt: number;
-} {
-  const last = typeof window === "undefined" ? 0 : lastClaim();
-  return {
-    amount: last ? WEEKLY_GRANT : SIGNUP_GRANT,
-    kind: last ? "weekly" : "signup",
-    nextAt: last ? last + GRANT_INTERVAL_MS : 0,
-  };
+export function hydrateGrant() {
+  if (grant || typeof window === "undefined") return;
+  setGrant(readGrant());
 }
+
+/** Null until `hydrateGrant` has read the schedule on the client. */
+export const getGrantSnapshot = () => grant;
+export const getGrantServerSnapshot = (): GrantStatus | null => null;
 
 /**
  * Mint the player's collateral: `SIGNUP_GRANT` the first time, `WEEKLY_GRANT`
@@ -285,10 +391,11 @@ export function grantStatus(): {
  */
 export async function requestCollateral(): Promise<GrantResult> {
   const address = ensureWallet();
-  if (!account || !address) return { ok: false, reason: "No wallet yet" };
+  const wallet = signer();
+  if (!wallet || !address) return { ok: false, reason: "No wallet yet" };
   if (needsGas(state.gas)) return { ok: false, reason: "Needs STT for gas first" };
 
-  const status = grantStatus();
+  const status = grant ?? readGrant();
   if (Date.now() < status.nextAt) {
     const days = Math.ceil((status.nextAt - Date.now()) / (24 * 60 * 60 * 1000));
     return {
@@ -299,13 +406,9 @@ export async function requestCollateral(): Promise<GrantResult> {
   }
 
   try {
-    const { createWalletClient } = await import("viem");
-    const wallet = createWalletClient({
-      account,
-      chain: CHAIN,
-      transport: http(HTTP_RPC_URL),
-    });
     const hash = await wallet.writeContract({
+      account: address,
+      chain: CHAIN,
       address: COLLATERAL.address,
       abi: erc20,
       functionName: "faucet",
@@ -319,6 +422,7 @@ export async function requestCollateral(): Promise<GrantResult> {
     } catch {
       // not persisted — the schedule restarts, which only ever helps the player
     }
+    setGrant(readGrant());
     await refresh();
     return {
       ok: true,
@@ -336,7 +440,11 @@ export async function requestCollateral(): Promise<GrantResult> {
 }
 
 /** Where first-run funding has got to. Every stage is a real transaction. */
-export type FundingStage = "gas" | "collateral" | "done";
+/**
+ * `signin` is not funding, but it is the first thing the funding screen waits
+ * on when a managed wallet is configured, and the screen needs a caption for it.
+ */
+export type FundingStage = "signin" | "gas" | "collateral" | "done";
 
 /**
  * Fund a brand-new wallet so a first-time visitor can actually trade.

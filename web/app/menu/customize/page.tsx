@@ -9,6 +9,7 @@
  */
 
 import { useState } from "react";
+import { RotateCcw, Share2 } from "lucide-react";
 import PresetCarousel from "@/components/customize/PresetCarousel";
 import SwatchGrid from "@/components/customize/SwatchGrid";
 import TapTarget from "@/components/ui/TapTarget";
@@ -19,7 +20,6 @@ import {
   isCustomized,
   type PartKey,
 } from "@/lib/console/themes";
-import { useToast } from "@/components/ui/Toast";
 import { playSfx } from "@/lib/sound";
 
 const TABS: { id: "presets" | PartKey; label: string }[] = [
@@ -34,7 +34,6 @@ const TABS: { id: "presets" | PartKey; label: string }[] = [
 export default function CustomizePage() {
   const { custom, resolved, set } = useConsoleTheme();
   const [tab, setTab] = useState<"presets" | PartKey>("presets");
-  const toast = useToast();
 
   const setPart = (part: PartKey, index: number) =>
     set({ ...custom, parts: { ...custom.parts, [part]: index } });
@@ -100,27 +99,31 @@ export default function CustomizePage() {
         )}
       </div>
 
-      <div className="mt-5 flex items-center justify-between gap-3 pb-[max(8px,env(safe-area-inset-bottom))]">
+      {/* One primary, two utilities — the reference's shape. Three equal pills
+          read as three equal choices, and Done is not one of three. The round
+          keys keep their own jobs: the left one undoes the recolouring back to
+          the preset, the right one goes to the card that shows the rig off. */}
+      <div className="mt-5 flex items-center gap-3 pb-[max(8px,env(safe-area-inset-bottom))]">
         <TapTarget
-          className="relative h-[58px] flex-1 rounded-full border border-[var(--color-line-strong)] text-[15px] font-bold text-text-2"
+          className="relative grid h-[58px] w-[58px] shrink-0 place-items-center rounded-full border border-[var(--color-line-strong)] text-text-2"
           onClick={() => set({ preset: custom.preset })}
+          aria-label="Reset to the preset"
         >
-          Reset
-        </TapTarget>
-        <TapTarget
-          className="relative h-[58px] flex-1 rounded-full border border-[var(--color-line-strong)] text-[15px] font-bold text-text-2"
-          onClick={() =>
-            toast("For now, show off your rig with your PnL card")
-          }
-        >
-          Share
+          <RotateCcw size={20} />
         </TapTarget>
         <TapTarget
           href="/games"
-          className="relative grid h-[58px] flex-1 place-items-center rounded-full bg-brand-500 text-[15px] font-extrabold text-black"
+          className="relative grid h-[58px] flex-1 place-items-center rounded-full bg-white text-[15px] font-extrabold text-black"
           haptic="high"
         >
           Done
+        </TapTarget>
+        <TapTarget
+          href="/menu/share"
+          className="relative grid h-[58px] w-[58px] shrink-0 place-items-center rounded-full border border-[var(--color-line-strong)] text-text-2"
+          aria-label="Share your rig"
+        >
+          <Share2 size={20} />
         </TapTarget>
       </div>
     </>

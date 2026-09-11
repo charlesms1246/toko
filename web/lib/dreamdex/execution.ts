@@ -138,8 +138,13 @@ const paper: Executor = {
   },
 
   async sell(w, side, yesPrice, size) {
+    // The book has depth for far more than the paper position, so the sell is
+    // sized against what is actually held. The ledger is the only record of it.
+    const have = demo.held(w.marketId, side);
+    if (have <= 0n) return { ok: false, filled: 0n, error: "Nothing to sell" };
+
     const b = await book.readBook(w.poolAddress);
-    const want = Number(size) / Number(ONE);
+    const want = Number(size < have ? size : have) / Number(ONE);
     const floor = ownTerms(side, yesPrice);
 
     // Selling walks the bids, best (highest) first, and stops at the limit —
@@ -159,10 +164,13 @@ const paper: Executor = {
     if (filled <= 0) return { ok: false, filled: 0n, noLiquidity: true };
 
     demo.close(w.marketId, side, raw(proceeds), raw(filled));
+    const average = proceeds / filled;
     return {
       ok: true,
       filled: raw(filled),
-      fillPrice: raw(proceeds / filled),
+      // YES terms, like every other `fillPrice` — the bids just walked are in
+      // the side's own terms, which for a short is `1 - p`.
+      fillPrice: raw(side === "up" ? average : 1 - average),
     };
   },
 
@@ -247,3 +255,14 @@ export function subscribeBalance(fn: () => void) {
 
 export const getBalance = () => current().balance();
 export const getServerBalance = () => 0n;
+
+/**
+ * Has a balance actually been read?
+ *
+ * Paper play is instant — the ledger is local, so it is always read. The chain
+ * has to be asked, and until it answers `balance()` is `0n`, which a screen
+ * cannot tell apart from an empty wallet.
+ */
+export const getBalanceRead = () =>
+  current().paper ? true : wallet.getSnapshot().read;
+export const getServerBalanceRead = () => false;

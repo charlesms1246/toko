@@ -85,7 +85,12 @@ export async function load(): Promise<void> {
           for (const f of fills) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const fill = f as any;
-            const value = Number(fill.quoteQuantity) / ONE;
+            // A row whose quote quantity will not read is skipped, not counted
+            // as NaN: one of those poisons the address's whole volume and
+            // leaves its sort position undefined.
+            const quote = Number(fill.quoteQuantity);
+            if (!Number.isFinite(quote)) continue;
+            const value = quote / ONE;
             for (const who of [fill.taker, fill.maker]) {
               if (!who) continue;
               const key = String(who).toLowerCase();

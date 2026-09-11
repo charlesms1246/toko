@@ -3,8 +3,9 @@
 import type { GameId } from "@/lib/api/types";
 
 /**
- * The eight money games ship as single-color SVGs, used as masks so they can be
- * tinted to whatever the surrounding UI needs.
+ * The money games ship as single-color SVGs, used as masks so they can be
+ * tinted to whatever the surrounding UI needs. Keyed by `GameId`, so a game
+ * that is not on the roster cannot be asked for.
  */
 export default function GameIcon({
   game,

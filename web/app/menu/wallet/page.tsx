@@ -19,7 +19,6 @@ import {
   explorerTx,
 } from "@/lib/dreamdex/config";
 import * as wallet from "@/lib/dreamdex/wallet";
-import { useIsMounted } from "@/lib/react/hooks";
 import { useNow } from "@/lib/games/useRound";
 
 /** How long until the next weekly claim, in the coarsest useful unit. */
@@ -42,18 +41,23 @@ export default function WalletPage() {
   const [busy, setBusy] = useState<"gas" | "collateral" | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [lastTx, setLastTx] = useState<string | null>(null);
-  const mounted = useIsMounted();
   // Ticks so the countdown moves, and so readiness is never decided by reading
   // the clock mid-render.
   const now = useNow(30_000);
 
+  const grant = useSyncExternalStore(
+    wallet.subscribe,
+    wallet.getGrantSnapshot,
+    wallet.getGrantServerSnapshot,
+  );
+
   useEffect(() => {
     wallet.ensureWallet();
     void wallet.refresh();
+    // The schedule lives in local storage, so it is only knowable on the client.
+    wallet.hydrateGrant();
   }, []);
 
-  // The schedule lives in local storage, so it is only knowable on the client.
-  const grant = mounted ? wallet.grantStatus() : null;
   const grantReady = grant != null && now >= grant.nextAt;
 
   const fundGas = useCallback(async () => {
@@ -173,6 +177,10 @@ export default function WalletPage() {
         ))}
       </MenuSection>
 
+      {/* A managed wallet has no key to show — Privy keeps it, which is the
+          reason to use one. Showing a dead "reveal" row would promise a
+          recovery path that does not exist. */}
+      {wallet.isManaged() ? null : (
       <MenuSection title="Private key">
         {revealed ? (
           <button
@@ -197,16 +205,28 @@ export default function WalletPage() {
           />
         )}
       </MenuSection>
+      )}
 
       <div className="rounded-2xl border border-[var(--color-premium-500)] bg-white/[.03] p-4">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--color-premium-500)]">
-          Testnet burner
+          {wallet.isManaged() ? "Testnet wallet" : "Testnet burner"}
         </p>
         <p className="mt-2 text-[11px] leading-relaxed text-text-3">
-          This key is generated in your browser and stored there. It holds testnet
-          {` ${GAS.symbol} `}and {COLLATERAL.symbol} only — never send real funds
-          to it. Clearing site data destroys it, so export the key first if you
-          want to keep the address.
+          {wallet.isManaged() ? (
+            <>
+              This wallet is held by Privy and signs through it — the key never
+              reaches this page, so there is nothing here to export. It holds
+              testnet{` ${GAS.symbol} `}and {COLLATERAL.symbol} only; never send
+              real funds to it.
+            </>
+          ) : (
+            <>
+              This key is generated in your browser and stored there. It holds
+              testnet{` ${GAS.symbol} `}and {COLLATERAL.symbol} only — never send
+              real funds to it. Clearing site data destroys it, so export the key
+              first if you want to keep the address.
+            </>
+          )}
         </p>
       </div>
     </>

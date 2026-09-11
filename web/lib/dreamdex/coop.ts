@@ -45,7 +45,7 @@ import * as orders from "./orders";
 import * as book from "./book";
 import * as positions from "./positions";
 import * as wallet from "./wallet";
-import { MAKER_GAS_LIMIT } from "./config";
+import { fromRaw, MAKER_GAS_LIMIT } from "./config";
 import { getClient } from "./client";
 
 export type Side = orders.Side;
@@ -92,16 +92,6 @@ export const ESCROW_OPTIONS = [
   { label: "1h", secs: 60 * 60 },
   { label: "4h", secs: 4 * 60 * 60 },
 ] as const;
-
-/**
- * Fraction of the escrow after which an unclaimed challenge is pulled.
- *
- * Half the offer's life is long enough to find a taker; past that the collateral
- * is better back in the challenger's hands than sitting on a book nobody is
- * crossing. The pool's own expiry is the backstop for anyone who closes the app
- * before this fires.
- */
-export const REVERT_AT = 0.5;
 
 /**
  * What a challenge link carries.
@@ -160,11 +150,16 @@ export function decode(code: string): Challenge | null {
   try {
     const raw = JSON.parse(b64url.decode(code));
     if (typeof raw.f !== "string" || typeof raw.i !== "number") return null;
+    // The price is checked too, not just the address and id. A mangled `p` is
+    // `NaN` here, and a `NaN` challenge reads out on the accept screen as
+    // "Costs up to $NaN" rather than as the broken link it is.
+    const yesPrice = Number(raw.p) / 1000;
+    if (!(yesPrice > 0) || !(yesPrice < 1)) return null;
     return {
       id: raw.i,
       from: raw.f as Address,
       side: raw.s === 1 ? "up" : "down",
-      yesPrice: Number(raw.p) / 1000,
+      yesPrice,
       size: Number(raw.q) || 1,
       marketId: typeof raw.m === "string" ? raw.m : undefined,
       handle: typeof raw.h === "string" ? raw.h : undefined,
@@ -316,8 +311,6 @@ interface RawOrder {
   expireTimestampNs: bigint;
 }
 
-const RAW = 1e6;
-
 /** One resting order, if it is a live TOKO challenge. */
 function toOpen(
   o: RawOrder,
@@ -335,8 +328,8 @@ function toOpen(
     id: idFromTag(o.userData),
     from: o.owner,
     side: isBid ? "up" : "down",
-    yesPrice: Number(o.price) / RAW,
-    size: Number(o.quantityRemaining) / RAW,
+    yesPrice: fromRaw(o.price),
+    size: fromRaw(o.quantityRemaining),
     marketId: window.marketId,
   };
 
@@ -482,28 +475,6 @@ async function findIn(
     }
   }
   return null;
-}
-
-/**
- * Who crossed a challenger's resting order, if anyone.
- *
- * The challenger is the *maker* here — they rested first — so their fills are
- * the rows where `maker` is their address, and the counterparty is the taker.
- */
-export async function crossedBy(
-  pool: string,
-  challenger: Address,
-): Promise<Address | undefined> {
-  const client = getClient();
-  if (!client) return undefined;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fills = (await client.getFills(pool, { limit: 100 })) as any[];
-    const mine = fills.find((f) => sameAddress(String(f.maker), challenger));
-    return mine ? (mine.taker as Address) : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -729,10 +700,12 @@ export function keepAlive(opts: {
 
       // Gone from the book: taken by somebody, since we are the only one who
       // cancels it. Only trustworthy while the window is still live — an
-      // expired window drops the order without anyone taking it.
+      // expired window drops the order without anyone taking it — and only when
+      // the read actually happened. `null` is a dropped read, not an empty
+      // book: acting on it would retire an offer that is still resting.
       if (windowSecsLeft > rollLead) {
         const own = await orders.ownOpenOrders(window.poolAddress);
-        if (!own.some((id) => id === orderId)) {
+        if (own && !own.some((id) => id === orderId)) {
           finish("taken", "Somebody took it");
           return;
         }

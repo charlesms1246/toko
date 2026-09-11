@@ -10,5 +10,5 @@
 import LadderConsole from "@/components/games/LadderConsole";
 
 export default function PressPage() {
-  return <LadderConsole title="Press" lockSide={false} />;
+  return <LadderConsole title="Press" />;
 }

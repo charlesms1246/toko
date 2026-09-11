@@ -49,6 +49,13 @@ const THRESHOLD = parseEther(TOPUP_THRESHOLD_STT);
 const COOLDOWN_MS = 60 * 60 * 1000;
 const lastTopUp = new Map<string, number>();
 
+/** Drop entries the cooldown no longer covers, so the map cannot grow forever. */
+function forgetExpired(now: number) {
+  for (const [address, at] of lastTopUp) {
+    if (now - at >= COOLDOWN_MS) lastTopUp.delete(address);
+  }
+}
+
 /**
  * Who we funded, and which referral code they arrived with.
  *
@@ -68,13 +75,33 @@ async function readReferrals(): Promise<Referrals> {
   }
 }
 
+/**
+ * What a code may look like: the same alphabet the username screen allows, or
+ * the shortened address it falls back to. Anything else arrived from a hand-made
+ * URL and is not written to disk.
+ */
+const REF_PATTERN = /^[a-zA-Z0-9_]{1,20}$/;
+
+/**
+ * Writes are chained rather than concurrent. This is a read-modify-write on one
+ * JSON file, so two first-time funders landing together would otherwise read the
+ * same object and the second write would drop the first entry.
+ */
+let writes: Promise<void> = Promise.resolve();
+
 async function recordReferral(address: string, ref: string) {
-  const all = await readReferrals();
-  const key = address.toLowerCase();
-  if (all[key]) return; // first funding only — never double-count a player
-  all[key] = { ref: ref.toLowerCase(), at: Date.now() };
-  await mkdir(dirname(REFERRALS), { recursive: true });
-  await writeFile(REFERRALS, JSON.stringify(all), "utf8");
+  if (!REF_PATTERN.test(ref)) return;
+  const run = writes.then(async () => {
+    const all = await readReferrals();
+    const key = address.toLowerCase();
+    if (all[key]) return; // first funding only — never double-count a player
+    all[key] = { ref: ref.toLowerCase(), at: Date.now() };
+    await mkdir(dirname(REFERRALS), { recursive: true });
+    await writeFile(REFERRALS, JSON.stringify(all), "utf8");
+  });
+  // The chain must survive a failed write; the caller still sees the error.
+  writes = run.catch(() => {});
+  return run;
 }
 
 /**
@@ -120,9 +147,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not a valid address" }, { status: 400 });
   }
 
+  const now = Date.now();
+  forgetExpired(now);
   const seen = lastTopUp.get(address.toLowerCase());
-  if (seen && Date.now() - seen < COOLDOWN_MS) {
-    const mins = Math.ceil((COOLDOWN_MS - (Date.now() - seen)) / 60_000);
+  if (seen && now - seen < COOLDOWN_MS) {
+    const mins = Math.ceil((COOLDOWN_MS - (now - seen)) / 60_000);
     return NextResponse.json(
       { error: `Already topped up — try again in ${mins} min.` },
       { status: 429 },

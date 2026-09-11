@@ -108,17 +108,36 @@ const lastVariant = new Map<string, number>();
 const lastPlayed = new Map<string, number>();
 
 /**
+ * Where a sample's audible part starts, worked out once per buffer.
+ *
+ * A `WeakMap` rather than another url-keyed cache: the offset is a property of
+ * the decoded audio itself, so keying it on the buffer cannot disagree with
+ * `buffers`, and it cannot hold a decoded sample alive on its own.
+ */
+const trimOffsets = new WeakMap<AudioBuffer, number>();
+
+/**
  * Find the first sample above the noise floor and start 8 samples earlier, so
  * a tap fires the instant you touch rather than after the file's lead-in.
+ *
+ * Cached, because this used to run on every `playSfx` — a full scan of the PCM
+ * data, on the hot path of a key press, for a number that cannot change once
+ * the buffer is decoded.
  */
 function trimLeadingSilence(buffer: AudioBuffer): number {
+  const known = trimOffsets.get(buffer);
+  if (known !== undefined) return known;
+
   const data = buffer.getChannelData(0);
+  let offset = 0;
   for (let i = 0; i < data.length; i++) {
     if (Math.abs(data[i]) > 0.002) {
-      return Math.max(0, i - 8) / buffer.sampleRate;
+      offset = Math.max(0, i - 8) / buffer.sampleRate;
+      break;
     }
   }
-  return 0;
+  trimOffsets.set(buffer, offset);
+  return offset;
 }
 
 async function loadSample(url: string): Promise<AudioBuffer | null> {

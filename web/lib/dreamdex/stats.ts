@@ -201,8 +201,10 @@ function build(trades: any[], resolutions: Map<string, any>): Stats {
     winRate: settled.length ? wins / settled.length : 0,
     volume: rounds.reduce((sum, r) => sum + r.cost, 0),
     netPnl: rounds.reduce((sum, r) => sum + r.pnl, 0),
+    // Won rounds only. A multiple on a losing ticket was never collected, and
+    // this is shown as the player's record.
     bestMultiple: rounds.reduce(
-      (best, r) => (r.entryPrice > 0 ? Math.max(best, 1 / r.entryPrice) : best),
+      (best, r) => (r.won && r.entryPrice > 0 ? Math.max(best, 1 / r.entryPrice) : best),
       0,
     ),
     currentStreak,

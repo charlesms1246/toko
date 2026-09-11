@@ -21,7 +21,7 @@
  * somebody else entirely. Both were measured on chain.
  */
 
-import { use, useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { use, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { ScreenRoot, ScreenHeader, ScreenRow, BigNumber } from "@/components/screen/Screen";
 import { useProgramConsole } from "@/lib/console/controls";
@@ -40,7 +40,11 @@ export default function ChallengePage({
 }) {
   const { code } = use(params);
   const router = useRouter();
-  const challenge = coop.decode(code);
+  // Memoised against the code: `decode` returns a fresh object every call, and
+  // the polling effect below depends on it. An unmemoised decode restarts the
+  // interval on every render and each restart reads the chain, which renders
+  // again — see the same trap documented in `coop.keepAlive`.
+  const challenge = useMemo(() => coop.decode(code), [code]);
 
   const [status, setStatus] = useState<coop.ChallengeStatus | null>(null);
   const [phase, setPhase] = useState<Phase>("reading");
@@ -136,12 +140,6 @@ export default function ChallengePage({
             disabled: !takeable || !funded,
             onPress: take,
           },
-    status: {
-      left: status?.open
-        ? `${status.open.window.asset} ${Math.max(0, status.open.windowSecsLeft).toFixed(0)}s`
-        : "CHALLENGE",
-      right: `$${wallet.formatCollateral(me.collateral)}`,
-    },
     lightShow: phase === "took",
   });
 
@@ -245,6 +243,13 @@ export default function ChallengePage({
       <ScreenRow
         label="Settles in"
         value={`${Math.max(0, Math.round(status.open.windowSecsLeft / 60))}m`}
+      />
+      {/* Carried here from the console's chin, which no longer prints live
+          data. This is the one screen where the balance had nowhere else to
+          be, and taking a challenge is the moment it matters most. */}
+      <ScreenRow
+        label="Your balance"
+        value={`$${wallet.formatCollateral(me.collateral)}`}
       />
       <div className="text-center text-[10px] font-semibold uppercase tracking-widest text-text-3">
         {error

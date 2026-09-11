@@ -94,13 +94,16 @@ export function hydrate() {
     const raw =
       window.localStorage.getItem(STORAGE_KEY) ??
       window.localStorage.getItem(LEGACY_KEY);
-    if (!raw) return;
-    const saved = JSON.parse(raw) as Partial<State>;
-    state = {
-      ...state,
-      ...saved,
-      settings: { ...DEFAULT_SETTINGS, ...(saved.settings ?? {}) },
-    };
+    // No early return on an empty store: `emit()` below is what tells
+    // subscribers the flag flipped, and a first-time visitor has nothing saved.
+    if (raw) {
+      const saved = JSON.parse(raw) as Partial<State>;
+      state = {
+        ...state,
+        ...saved,
+        settings: { ...DEFAULT_SETTINGS, ...(saved.settings ?? {}) },
+      };
+    }
   } catch {
     // corrupt blob — keep the fresh state
   }

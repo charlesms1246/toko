@@ -15,17 +15,6 @@
 
 import { getClient } from "@/lib/dreamdex/client";
 
-/**
- * Reference prices for the seeded play history only. Not a live source — the
- * oracle is. These go when the seed fixtures do.
- */
-export const SEED_PRICES: Record<string, number> = {
-  BTC: 63575,
-  ETH: 1725,
-  SOL: 71.45,
-  SOMI: 0.71,
-};
-
 /** Assets we keep a live feed for. All four are carried by the oracle. */
 export const ALL_ASSETS = ["BTC", "ETH", "SOMI", "SOL"];
 

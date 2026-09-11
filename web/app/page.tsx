@@ -25,7 +25,6 @@ export default function AttractScreen() {
         router.push("/games");
       },
     },
-    status: { left: "TOKO-01", right: "READY" },
   });
 
   return (

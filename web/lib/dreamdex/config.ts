@@ -33,6 +33,26 @@ export const COLLATERAL = {
   decimals: 6,
 } as const;
 
+/**
+ * Raw collateral units <-> a decimal amount.
+ *
+ * The 6-vs-18 difference belongs here and nowhere else. Every screen that used
+ * to write `Number(raw) / 1e6` was quietly asserting testnet's decimals from a
+ * file that could not see the deployment.
+ */
+export const fromRaw = (raw: bigint) => Number(raw) / 10 ** COLLATERAL.decimals;
+export const toRaw = (amount: number) =>
+  BigInt(Math.round(amount * 10 ** COLLATERAL.decimals));
+
+/**
+ * Privy app id, for the managed wallet.
+ *
+ * **Empty means Privy is off**, and that is a supported state rather than a
+ * broken one: the app falls back to the embedded burner exactly as before, so a
+ * checkout with no credentials still runs. Demo Mode never reaches either.
+ */
+export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
+
 /** Native gas token on Shannon. */
 export const GAS = { symbol: "STT", decimals: 18 } as const;
 

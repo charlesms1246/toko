@@ -12,8 +12,6 @@ import { ChevronLeft, X } from "lucide-react";
 import TapTarget from "@/components/ui/TapTarget";
 import { ScreenRoot } from "@/components/screen/Screen";
 import { useProgramConsole } from "@/lib/console/controls";
-import { useBalance } from "@/lib/api/hooks";
-import { formatCollateral } from "@/lib/dreamdex/wallet";
 import { useIsMounted } from "@/lib/react/hooks";
 import * as demo from "@/lib/demo";
 import { useSyncExternalStore } from "react";
@@ -35,6 +33,18 @@ const NEEDS_WALLET = [
   "/menu/history",
   "/menu/achievements",
   "/menu/share",
+  // Account was missed on the first pass and is the same case as the rest: it
+  // reads the chain record (plays, win rate, net P&L, volume, streak, best
+  // multiple), prints the real wallet address and network, and says "Signed in
+  // with Embedded wallet". In demo none of that is true of the person reading
+  // it — the figures are a real wallet's, all zero, shown to somebody who has
+  // been playing on paper and therefore has a record that is not zero.
+  "/menu/account",
+  // Referrals is wallet-scoped too, and in demo it renders as a dead page: the
+  // handle comes out empty ("@ —") and the "link" is the bare site root with no
+  // referral code in it, behind a Copy button. A share affordance that copies
+  // something which refers nobody is worse than saying a wallet is needed.
+  "/menu/referrals",
 ];
 
 export default function MenuDrawer({
@@ -45,7 +55,6 @@ export default function MenuDrawer({
   const mounted = useIsMounted();
   const router = useRouter();
   const pathname = usePathname();
-  const balance = useBalance();
   const isHub = pathname === "/menu";
   // The customizer is the one screen whose subject is the console itself, so it
   // docks to the bottom over a live view of it rather than covering it — which
@@ -59,34 +68,58 @@ export default function MenuDrawer({
   const blocked = demoing && NEEDS_WALLET.includes(pathname);
 
   useProgramConsole({
-    status: { left: "MENU", right: `$${formatCollateral(balance)}` },
   });
 
   const drawer = (
     <div
-      className={`fixed z-[45] flex justify-center overflow-hidden ${
-        overConsole ? "items-end" : "bg-black/80 backdrop-blur-md"
+      className={`fixed z-[45] flex items-end justify-center overflow-hidden ${
+        overConsole ? "" : "bg-black/55 backdrop-blur-sm"
       }`}
       style={{
-        // Seated on the device rather than on the page. It is portalled to
-        // <body> to escape the screen's clipping, so it takes the hardware's
-        // projected rect from the canvas instead of filling the viewport —
-        // otherwise the menu is the one part of the app that is not a console.
-        left: "var(--device-left, 0px)",
-        right: "var(--device-right, 0px)",
-        top: "var(--device-top, 0px)",
-        bottom: "var(--device-bottom, 0px)",
-        borderRadius: "clamp(12px, 3.5vw, 26px)",
+        // A sheet IN FRONT OF the device, not a panel inside its glass.
+        //
+        // The menu is not console content — it is the app's own surface, and the
+        // reference presents it the same way: a bottom sheet over a blurred
+        // console, with a drag handle, running to the bottom edge. Anchoring it
+        // to the aperture instead put it *inside* the screen, which left the
+        // Play key poking into a corner of the list and made the menu look like
+        // something the device was displaying rather than something laid over
+        // it. The device rect is the right frame; the glass is not.
+        // The customizer is the exception: the console shrinks to make room for
+        // its sheet, so a sheet measured off the device would shrink with it and
+        // then shrink the device again. It takes the viewport instead.
+        left: overConsole ? 0 : "var(--device-left, 0px)",
+        right: overConsole ? 0 : "var(--device-right, 0px)",
+        top: overConsole ? 0 : "var(--device-top, 0px)",
+        bottom: overConsole ? 0 : "var(--device-bottom, 0px)",
+        borderRadius: overConsole ? 0 : "clamp(12px, 3.5vw, 26px)",
       }}
     >
+      {/* No `max-w-*`: the sheet is as wide as the device. A fixed 448px inside
+          a variable-width frame left it floating with blurred console down both
+          sides on a desktop and filling the frame exactly on a phone — the same
+          screen composed two different ways for no reason a player can see.
+
+          `max-h-[92%]` rather than the full height, so a band of the console
+          stays visible above it. That sliver is what says "this is over the
+          device", and it is what the reference shows above its own sheet. */}
       <div
-        className={`flex w-full max-w-md flex-col ${
+        className={`flex w-full flex-col ${
           overConsole
-            ? "max-h-[82%] bg-gradient-to-t from-black via-black/96 to-transparent pt-6"
-            : "h-full bg-[#0d0d0f]"
+            ? "max-h-[46%] max-w-md bg-gradient-to-t from-black via-black/96 to-transparent pt-6"
+            : "max-h-[92%] rounded-t-[18px] bg-[#0d0d0f]"
         }`}
         style={{ animation: "drawer-rise .3s var(--ease-out-expo) both" }}
       >
+        {/* The grab handle. It is not draggable — the sheet is dismissed by the
+            close key or the MENU pill — but it is the one mark that reads
+            "sheet" at a glance, and the reference's carries the same. */}
+        {!overConsole && (
+          <span
+            aria-hidden
+            className="mx-auto mt-2.5 h-1 w-9 shrink-0 rounded-full bg-white/25"
+          />
+        )}
         <header
           className={`flex items-center justify-between px-3 py-3 ${
             overConsole ? "" : "border-b border-[var(--color-line)]"
@@ -132,7 +165,15 @@ export default function MenuDrawer({
           </span>
         )}
       </ScreenRoot>
-      {mounted && createPortal(drawer, document.body)}
+      {/* Into the app COLUMN, not the body.
+          The frame is a containing block for `position: fixed`, and the
+          console publishes its `--device-*` rect in frame coordinates — a
+          16px inset each side. Portalled to `document.body` the sheet sat
+          outside the frame, so those insets were measured against the whole
+          viewport and the menu spread across the desk while the console it is
+          supposed to cover stayed 460px wide. */}
+      {mounted &&
+        createPortal(drawer, document.querySelector(".app-frame") ?? document.body)}
     </>
   );
 }

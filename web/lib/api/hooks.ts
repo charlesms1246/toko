@@ -92,6 +92,15 @@ export function useBalance(): bigint {
   );
 }
 
+/** False until a real balance has arrived — see `getBalanceRead`. */
+export function useBalanceRead(): boolean {
+  return useSyncExternalStore(
+    execution.subscribeBalance,
+    execution.getBalanceRead,
+    execution.getServerBalanceRead,
+  );
+}
+
 export function useMinigameBest(game: MinigameId) {
   const get = useMemo(
     () => () => snapshot(`best:${game}`, () => store.getMinigameBest(game)),

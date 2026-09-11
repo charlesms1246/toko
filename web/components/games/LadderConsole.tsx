@@ -1,14 +1,11 @@
 "use client";
 
 /**
- * The roll ladder on the console — Press and Breakout.
+ * The roll ladder on the console — Press.
  *
  * Each rung is a real Round staked with the previous rung's payout. Win
- * and the console offers PRESS or FOLD; lose and the ladder ends there.
- *
- * Press lets you pick a side each rung. Breakout locks the side chosen at the
- * start, which is what makes it a call on the move continuing rather than a
- * fresh bet every window.
+ * and the console offers PRESS or FOLD; lose and the ladder ends there. You
+ * pick a side afresh on every rung.
  */
 
 import { useState } from "react";
@@ -17,18 +14,17 @@ import { useRollLadder } from "@/lib/games/useRollLadder";
 import type { Side } from "@/lib/games/useRound";
 import * as book from "@/lib/dreamdex/book";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
+import { fromRaw } from "@/lib/dreamdex/config";
 import PriceChart from "@/components/screen/PriceChart";
 import {
-  CentreRule,
-  CentreStat,
   Footer,
   Fx,
   GhostCount,
   Header,
+  Payoff,
   Shell,
   Splash,
   Stage,
-  StageCentre,
   Tile,
   TileRow,
 } from "@/components/screen/GameScreen";
@@ -36,14 +32,8 @@ import { useSpot } from "@/lib/api/hooks";
 import { formatPrice } from "@/lib/api/math";
 import * as markets from "@/lib/dreamdex/markets";
 
-export default function LadderConsole({
-  title,
-  lockSide,
-}: {
-  title: string;
-  lockSide: boolean;
-}) {
-  const ladder = useRollLadder(lockSide);
+export default function LadderConsole({ title }: { title: string }) {
+  const ladder = useRollLadder();
   const spot = useSpot(ladder.round.window?.asset ?? "BTC");
   const { round } = ladder;
   const [side, setSide] = useState<Side>("up");
@@ -54,14 +44,32 @@ export default function LadderConsole({
   useProgramConsole({
     main: ladder.canPress
       ? { label: "PRESS", pulse: true, onPress: ladder.press }
-      : live
-        ? { label: "RIDING", disabled: true }
-        : {
-            label: round.status === "pending" ? "…" : "START",
-            loading: round.status === "pending",
-            disabled: !round.canEnter || !ask,
-            onPress: () => ladder.start(side),
-          },
+      : ladder.finished
+        ? { label: "NEW LADDER", pulse: true, onPress: ladder.clear }
+        : live
+          ? { label: "RIDING", disabled: true }
+          : !ask && round.status !== "pending"
+            ? // A dead key has to say why it is dead.
+              //
+              // It kept the label START while disabled, so selecting a side with
+              // no offer left the player pressing a button that looked ready and
+              // did nothing. `RoundConsole` already answers this with NO BID;
+              // this is the same answer for the other direction of the book.
+              { label: "NO OFFER", disabled: true }
+            : {
+                // "START" on a ladder that is already two rungs up reads as
+                // "begin again", which is exactly what it used to do. Mid-ladder
+                // this key places the NEXT rung with the rolled stake.
+                label:
+                  round.status === "pending"
+                    ? "…"
+                    : ladder.banked.length > 0
+                      ? "NEXT RUNG"
+                      : "START",
+                loading: round.status === "pending",
+                disabled: !round.canEnter,
+                onPress: () => ladder.start(side),
+              },
     action1: ladder.canPress
       ? { label: "FOLD", onPress: ladder.fold }
       : {
@@ -78,12 +86,6 @@ export default function LadderConsole({
           disabled: live || round.status === "pending",
           onPress: () => setSide("down"),
         },
-    status: {
-      left: round.window
-        ? `${round.window.asset} ${round.secsLeft.toFixed(0)}s`
-        : title.toUpperCase(),
-      right: `$${formatCollateral(round.balance)}`,
-    },
     lightShow: round.status === "settling" || ladder.canPress,
   });
 
@@ -92,6 +94,9 @@ export default function LadderConsole({
       <PriceChart
         bare
         asset={round.window?.asset ?? "BTC"}
+        side={round.side}
+        openedAt={round.openedAt}
+        next={round.next}
         entry={
           round.window?.strike != null
             ? markets.strikePrice(round.window.strike)
@@ -106,11 +111,10 @@ export default function LadderConsole({
     <Header
       eyebrow={`${title} · rung ${ladder.height + 1}`}
       value={spot > 0 ? `$${formatPrice(spot)}` : "—"}
-      rightLabel={round.window ? "Ends in" : "In the ladder"}
-      rightValue={
-        round.window
-          ? `${round.secsLeft.toFixed(0)}s`
-          : `$${ladder.atRisk.toFixed(2)}`
+      rightLabel="Available"
+      rightValue={`$${formatCollateral(round.balance)}`}
+      rightNote={
+        round.window ? `Ends in ${round.secsLeft.toFixed(0)}s` : undefined
       }
       badge={ladder.height > 0 ? `Rung ${ladder.height}` : undefined}
     />
@@ -193,14 +197,14 @@ export default function LadderConsole({
             label="Staked"
             value={
               round.entryCost != null
-                ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
+                ? `$${fromRaw(round.entryCost).toFixed(2)}`
                 : "—"
             }
           />
           <Tile label="At risk" value={`$${ladder.atRisk.toFixed(2)}`} />
           <Tile
             label="Pays"
-            value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
+            value={`$${fromRaw(round.held).toFixed(2)}`}
             tone="brand"
           />
         </TileRow>
@@ -221,23 +225,18 @@ export default function LadderConsole({
   return (
     <Shell>
       {header}
-      <Stage>
-        {chart}
-        <StageCentre>
-          <CentreStat
-            label={side === "up" ? "Up pays" : "Down pays"}
-            value={ask ? `${book.multipleAt(ask.price).toFixed(2)}x` : "—"}
-            tone={side === "up" ? "up" : "down"}
-          />
-          <CentreRule />
-          <CentreStat
-            label="First rung"
-            value={ask ? `$${ask.price.toFixed(2)}` : "—"}
-          />
-        </StageCentre>
-      </Stage>
+      <Stage>{chart}</Stage>
       <Footer>
-        <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+        <Payoff
+          label={
+            ask
+              ? `${side === "up" ? "Long" : "Short"} · $${ask.price.toFixed(2)} → $1.00 a rung`
+              : "No offer on this side"
+          }
+          value={ask ? `${book.multipleAt(ask.price).toFixed(2)}x` : "—"}
+          tone={side === "up" ? "up" : "down"}
+        />
+        <div className="mt-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
           {round.message
             ? round.message
             : !round.window

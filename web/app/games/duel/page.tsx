@@ -38,24 +38,22 @@ import { useRouter } from "next/navigation";
 import { useProgramConsole } from "@/lib/console/controls";
 import { useRound, useNow, type Side } from "@/lib/games/useRound";
 import * as coop from "@/lib/dreamdex/coop";
-import * as book from "@/lib/dreamdex/book";
 import * as wallet from "@/lib/dreamdex/wallet";
+import { fromRaw } from "@/lib/dreamdex/config";
 import * as demo from "@/lib/demo";
 import { useToast } from "@/components/ui/Toast";
 import { useUser } from "@/lib/api/hooks";
 import PriceChart from "@/components/screen/PriceChart";
 import {
-  CentreRule,
-  CentreStat,
   Footer,
   Fx,
   GhostCount,
   Header,
   Notice,
+  Payoff,
   Shell,
   Splash,
   Stage,
-  StageCentre,
   StageReadout,
   Tile,
   TileRow,
@@ -287,12 +285,6 @@ export default function DuelPage() {
       format: (v) => coop.ESCROW_OPTIONS[v].label,
       onChange: (v) => !live && !posted && setEscrowIdx(v),
     },
-    status: {
-      left: round.window
-        ? `${round.window.asset} ${round.secsLeft.toFixed(0)}s`
-        : "DUEL",
-      right: `$${wallet.formatCollateral(round.balance)}`,
-    },
     lightShow: round.status === "settling" || settled,
   });
 
@@ -316,6 +308,9 @@ export default function DuelPage() {
       <PriceChart
         bare
         asset={round.window?.asset ?? "BTC"}
+        side={round.side}
+        openedAt={round.openedAt}
+        next={round.next}
         entry={
           round.window?.strike != null
             ? markets.strikePrice(round.window.strike)
@@ -330,11 +325,10 @@ export default function DuelPage() {
     <Header
       eyebrow={`Duel · ${round.window?.asset ?? "—"}`}
       value={spot > 0 ? `$${formatPrice(spot)}` : "—"}
-      rightLabel={round.window ? "Ends in" : "Balance"}
-      rightValue={
-        round.window
-          ? `${round.secsLeft.toFixed(0)}s`
-          : `$${wallet.formatCollateral(round.balance)}`
+      rightLabel="Available"
+      rightValue={`$${wallet.formatCollateral(round.balance)}`}
+      rightNote={
+        round.window ? `Ends in ${round.secsLeft.toFixed(0)}s` : undefined
       }
     />
   );
@@ -343,7 +337,7 @@ export default function DuelPage() {
     const won = round.status === "won";
     const net =
       round.payout != null && round.entryCost != null
-        ? Number(round.payout - round.entryCost) / 1e6
+        ? fromRaw(round.payout - round.entryCost)
         : null;
     return (
       <Shell>
@@ -399,13 +393,13 @@ export default function DuelPage() {
             label="Paid"
             value={
               round.entryCost != null
-                ? `$${(Number(round.entryCost) / 1e6).toFixed(2)}`
+                ? `$${fromRaw(round.entryCost).toFixed(2)}`
                 : "—"
             }
           />
           <Tile
             label="Pays"
-            value={`$${(Number(round.held) / 1e6).toFixed(2)}`}
+            value={`$${fromRaw(round.held).toFixed(2)}`}
             tone="up"
           />
         </TileRow>
@@ -482,8 +476,6 @@ export default function DuelPage() {
     );
   }
 
-  const ask = book.best(side === "up" ? round.book.yesAsks : round.book.noAsks);
-
   return (
     <Shell>
       {header}
@@ -498,23 +490,17 @@ export default function DuelPage() {
         />
         <Tile label="Stands" value={escrow.label} />
       </TileRow>
-      <Stage>
-        {chart}
-        <StageCentre>
-          <CentreStat
-            label="Your side pays"
-            value={myCost == null ? "—" : `${(1 / myCost).toFixed(2)}x`}
-          />
-          <CentreRule />
-          <CentreStat
-            label={side === "up" ? "Market up" : "Market down"}
-            value={ask ? ask.price.toFixed(3) : "—"}
-            tone={side === "up" ? "up" : "down"}
-          />
-        </StageCentre>
-      </Stage>
+      <Stage>{chart}</Stage>
       <Footer>
-        <div className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
+        <Payoff
+          label={
+            myCost == null
+              ? "No price inside the spread"
+              : `${side === "up" ? "Long" : "Short"} · $${myCost.toFixed(2)} → $${SIZE.toFixed(2)}`
+          }
+          value={myCost == null ? "—" : `${(1 / myCost).toFixed(2)}x`}
+        />
+        <div className="mt-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-text-3">
           {round.message
             ? round.message
             : finished

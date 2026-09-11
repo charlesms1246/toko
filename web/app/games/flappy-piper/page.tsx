@@ -61,7 +61,8 @@ export default function FlappyPiperPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [phase, setPhase] = useState<"intro" | "playing" | "over">("intro");
   const [score, setScore] = useState(0);
-  const [lastScore, setLastScore] = useState(0);
+  const [run, setRun] = useState({ score: 0, seconds: 0, flaps: 0 });
+  const lastScore = run.score;
   const actions = useStoreActions();
   const best = useMinigameBest("flappy-piper");
 
@@ -69,6 +70,8 @@ export default function FlappyPiperPage() {
     w: 0,
     h: 0,
     birdY: 0.42,
+    /** Flaps this run. Real, and the only other thing the run measures. */
+    flaps: 0,
     angle: -0.35,
     vy: 0,
     elapsed: 0,
@@ -86,7 +89,10 @@ export default function FlappyPiperPage() {
     const e = engine.current;
     e.running = false;
     cancelAnimationFrame(e.raf);
-    setLastScore(e.score);
+    // Captured before the reset. Candles passed, seconds airborne, flaps spent
+    // — all three are things the run did. There is no rank and no global board,
+    // because there is no server to hold one.
+    setRun({ score: e.score, seconds: e.elapsed, flaps: e.flaps });
     setPhase("over");
     actions.submitMinigameScore("flappy-piper", e.score);
     playLose();
@@ -279,6 +285,7 @@ export default function FlappyPiperPage() {
     e.birdY = 0.42;
     e.angle = -0.35;
     e.vy = FLAP;
+    e.flaps = 0;
     e.score = 0;
     e.elapsed = 0;
     e.candles = [];
@@ -298,6 +305,7 @@ export default function FlappyPiperPage() {
       start();
       return;
     }
+    e.flaps += 1;
     e.vy = FLAP;
     haptics.press("low");
   }, [start]);
@@ -308,11 +316,13 @@ export default function FlappyPiperPage() {
       pulse: true,
       onPress: flap,
     },
-    status: { left: "FLAPPY PIPER", right: `BEST ${best}` },
   });
 
-  const kicker =
-    lastScore > 0 && lastScore >= best ? "Top of the board" : "Run over";
+  const isBest = lastScore > 0 && lastScore >= best;
+  const kicker = isBest ? "Top of the board" : "Run over";
+  /** This run as a share of the personal best, for the result screen's bar. */
+  const pctOfBest =
+    best > 0 ? Math.round(Math.min(1, lastScore / best) * 100) : 100;
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-black text-text">
@@ -350,17 +360,92 @@ export default function FlappyPiperPage() {
       )}
 
       {phase === "over" && (
-        <div className="absolute inset-0 z-20 flex flex-col justify-center bg-black/95 p-[var(--screen-rim,24px)]">
-          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-brand-500">
-            {kicker}
+        /*
+         * Laid out down the whole screen, the same three bands Line Rider's
+         * result uses: the verdict, what the run did, and what to press. The
+         * scrim is not opaque — the candles you flew into stay visible behind
+         * the numbers, and that last frame is the run's own.
+         */
+        <div
+          className="absolute inset-0 z-20 flex flex-col justify-between p-[var(--screen-rim,24px)]"
+          style={{
+            background:
+              "linear-gradient(180deg,#000000e0 0%,#0000009e 44%,#000000ee 100%)",
+          }}
+        >
+          <div>
+            <div
+              className={`text-[11px] font-bold uppercase tracking-[0.2em] ${
+                isBest ? "text-brand-500" : "text-text-3"
+              }`}
+            >
+              {kicker}
+            </div>
+            <div
+              className="tnum text-[64px] font-extrabold leading-[0.9] text-text"
+              style={{
+                textShadow: isBest
+                  ? "0 0 18px rgba(255,192,22,.55), 0 0 48px rgba(255,192,22,.25)"
+                  : "0 0 22px rgba(255,255,255,.16)",
+              }}
+            >
+              {lastScore}
+            </div>
+            <div className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-text-3">
+              {isBest ? (
+                <>Your best yet</>
+              ) : (
+                <>
+                  Best <span className="tnum text-text-2">{best}</span> ·{" "}
+                  <span className="tnum text-text-2">{best - lastScore}</span> to
+                  beat it
+                </>
+              )}
+            </div>
           </div>
-          <div className="tnum text-5xl font-extrabold leading-none text-text">
-            {lastScore}
+
+          <div>
+            <div className="flex items-baseline justify-between text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">
+              <span>This run</span>
+              <span className="tnum">{best > 0 ? `${pctOfBest}%` : "—"}</span>
+            </div>
+            <div className="mt-1.5 h-1.5 w-full overflow-hidden bg-white/10">
+              <div
+                className="h-full"
+                style={{
+                  width: `${pctOfBest}%`,
+                  background: isBest
+                    ? "var(--color-brand-500)"
+                    : "var(--color-up)",
+                }}
+              />
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">
+                  Time airborne
+                </div>
+                <div className="tnum mt-0.5 text-2xl font-extrabold leading-none text-text">
+                  {run.seconds.toFixed(1)}
+                  <span className="ml-0.5 text-sm font-bold text-text-3">s</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">
+                  Flaps
+                </div>
+                <div className="tnum mt-0.5 text-2xl font-extrabold leading-none text-text">
+                  {run.flaps}
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="mt-1 text-[11px] uppercase tracking-[0.14em] text-text-3">
-            Best <span className="tnum text-text">{best}</span>
-          </div>
-          <div className="mt-4 text-[11px] font-bold uppercase tracking-[0.16em] text-text-3">
+
+          <div
+            className="text-[11px] font-bold uppercase tracking-[0.16em] text-text-3"
+            style={{ paddingRight: "var(--screen-notch, 0px)" }}
+          >
             Press the <span className="text-brand-500">big button</span>
           </div>
         </div>

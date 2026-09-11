@@ -23,13 +23,11 @@
 
 import {
   createPublicClient,
-  createWalletClient,
   http,
   maxUint256,
   parseAbi,
   type Address,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
 import {
   CHAIN,
   COLLATERAL,
@@ -38,7 +36,8 @@ import {
   MAKER_GAS_LIMIT,
 } from "./config";
 import { getClient } from "./client";
-import { exportKey } from "./wallet";
+import { getTrader } from "./trader";
+import * as wallet from "./wallet";
 import type { Window } from "./markets";
 
 const ONE = BigInt(10 ** COLLATERAL.decimals);
@@ -104,22 +103,6 @@ export function snapSize(size: bigint, grid: Grid): bigint {
   return snapped < grid.minQuantity ? 0n : snapped;
 }
 
-let trader: unknown = null;
-
-function getTrader() {
-  if (trader) return trader;
-  const client = getClient();
-  const key = exportKey();
-  if (!client || !key) return null;
-  trader = client.createTrader({
-    privateKey: key,
-    decimals: COLLATERAL.decimals,
-    // Without this the SDK's 10M default demands 0.6 STT of balance to sign.
-    gas: GAS_LIMIT,
-  });
-  return trader;
-}
-
 export interface OrderOutcome {
   ok: boolean;
   hash?: string;
@@ -139,11 +122,17 @@ const expiryNs = (w: Window) => BigInt(w.expiry) * 1_000_000_000n;
 function summarise(res: any): OrderOutcome {
   const fills = (res.fills ?? []) as { quantityFilled: bigint; fillPrice: bigint }[];
   const filled = fills.reduce((sum, f) => sum + BigInt(f.quantityFilled ?? 0n), 0n);
+  // Size-weighted, not the first level touched: an order that sweeps several
+  // levels would otherwise report the best price it reached as the blended one.
+  const paid = fills.reduce(
+    (sum, f) => sum + BigInt(f.quantityFilled ?? 0n) * BigInt(f.fillPrice ?? 0n),
+    0n,
+  );
   return {
     ok: filled > 0n,
     hash: res.hash,
     filled,
-    fillPrice: fills[0]?.fillPrice,
+    fillPrice: filled > 0n ? paid / filled : undefined,
   };
 }
 
@@ -152,6 +141,31 @@ function asOutcome(err: unknown): OrderOutcome {
   if (message.includes("ImmediateOrCancelNoFill")) {
     return { ok: false, filled: 0n, noLiquidity: true };
   }
+
+  /*
+   * A bare revert is not a sentence.
+   *
+   * The SDK hands back `placeBinaryOrder reverted: Transaction 0xa901… reverted
+   * (no revert data recoverable)`, and that went straight onto the glass, in
+   * caps, wrapping over four lines of a phone-width screen. It tells a player
+   * nothing they can act on.
+   *
+   * `ERRORS.md` has this shape four times over: a revert with no reason, and
+   * ~98% of the gas limit burned, is a GATE — the pool refusing — not a
+   * shortfall. The most common gate by far is the window locking between the
+   * press and the block. So the player is told that, and the raw string still
+   * goes to the console, because a swallowed error is how "failing constantly"
+   * becomes indistinguishable from "never reached".
+   */
+  if (/reverted/i.test(message)) {
+    console.error("[orders] reverted:", message);
+    return {
+      ok: false,
+      filled: 0n,
+      error: "The pool refused the order — the window may have just locked",
+    };
+  }
+
   return { ok: false, filled: 0n, error: message.replace(/^@somnia-chain\/markets-sdk: /, "") };
 }
 
@@ -201,8 +215,9 @@ export async function buy(
 /**
  * Rest a bid on the book instead of taking one.
  *
- * This is what makes Pin and co-op play *maker* games: the order sits at the
- * called price and fills only if the market comes to it. Two consequences:
+ * This is what makes Lucky's rest-instead-of-fail path and co-op play *maker*
+ * moves: the order sits at the called price and fills only if the market comes
+ * to it. Two consequences:
  *
  * - Escrow is locked for as long as it rests. It is released by a fill, a
  *   cancel, or the order ageing out.
@@ -284,26 +299,37 @@ export async function cancel(pool: string, orderId: bigint): Promise<OrderOutcom
   }
 }
 
-/** Order ids this wallet has resting on a pool, straight from the pool. */
-export async function ownOpenOrders(pool: string): Promise<bigint[]> {
-  const key = exportKey();
-  if (!key) return [];
-  return openOrdersOf(pool, privateKeyToAccount(key).address);
+/**
+ * Order ids this wallet has resting on a pool, straight from the pool.
+ *
+ * `null` means the read did not happen. An empty array is a real answer —
+ * nothing resting — and callers act on it, so a dropped RPC read must not be
+ * able to impersonate one.
+ */
+export async function ownOpenOrders(pool: string): Promise<bigint[] | null> {
+  // The address, not the key — this reads, it does not sign, and a managed
+  // wallet has no key to offer.
+  const address = wallet.getSnapshot().address;
+  if (!address) return null;
+  return openOrdersOf(pool, address);
 }
 
 /**
- * Order ids *any* address has resting on a pool.
+ * Order ids *any* address has resting on a pool. `null` when the read failed.
  *
  * Co-op needs this: the person opening a challenge link has to know whether the
  * challenger's bid is still on the book, and that is somebody else's order.
  */
-export async function openOrdersOf(pool: string, address: Address): Promise<bigint[]> {
+export async function openOrdersOf(
+  pool: string,
+  address: Address,
+): Promise<bigint[] | null> {
   const client = getClient();
-  if (!client) return [];
+  if (!client) return null;
   try {
     return (await client.getOwnOpenOrdersOnchain(pool, address)) as bigint[];
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -357,18 +383,18 @@ export async function sell(
 const approved = new Set<string>();
 
 export async function preApprove(pool: string): Promise<void> {
-  const key = exportKey();
-  if (!key) return;
+  const signer = wallet.signer();
+  const owner = wallet.getSnapshot().address;
+  if (!signer || !owner) return;
   const spender = pool.toLowerCase();
   if (approved.has(spender)) return;
 
   try {
-    const account = privateKeyToAccount(key);
     const allowance = (await publicClient.readContract({
       address: COLLATERAL.address,
       abi: erc20Abi,
       functionName: "allowance",
-      args: [account.address, pool as Address],
+      args: [owner, pool as Address],
     })) as bigint;
 
     // Anything short of a full allowance gets topped up to max, matching what
@@ -378,12 +404,9 @@ export async function preApprove(pool: string): Promise<void> {
       return;
     }
 
-    const wallet = createWalletClient({
-      account,
+    const hash = await signer.writeContract({
+      account: owner,
       chain: CHAIN,
-      transport: http(HTTP_RPC_URL),
-    });
-    const hash = await wallet.writeContract({
       address: COLLATERAL.address,
       abi: erc20Abi,
       functionName: "approve",

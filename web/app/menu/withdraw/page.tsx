@@ -9,12 +9,17 @@
  */
 
 import { useCallback, useState, useSyncExternalStore } from "react";
-import { createWalletClient, http, isAddress, parseAbi, parseUnits, type Address } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import {
+  formatUnits,
+  isAddress,
+  parseAbi,
+  parseUnits,
+  type Address,
+} from "viem";
 import TapTarget from "@/components/ui/TapTarget";
 import { MenuRow } from "@/components/menu/MenuUI";
 import { useToast } from "@/components/ui/Toast";
-import { CHAIN, COLLATERAL, GAS_LIMIT, HTTP_RPC_URL, explorerTx } from "@/lib/dreamdex/config";
+import { CHAIN, COLLATERAL, GAS_LIMIT, explorerTx } from "@/lib/dreamdex/config";
 import * as wallet from "@/lib/dreamdex/wallet";
 
 const erc20 = parseAbi(["function transfer(address to, uint256 value) returns (bool)"]);
@@ -32,21 +37,26 @@ export default function WithdrawPage() {
   const [lastTx, setLastTx] = useState<string | null>(null);
 
   const balance = Number(state.collateral) / 10 ** COLLATERAL.decimals;
+  // What MAX writes. Formatted from the raw balance, so it is the balance
+  // exactly: `toFixed(2)` rounds half up, which can land above the balance and
+  // make the form reject its own MAX, and rounds down otherwise, stranding dust
+  // that MAX is there to sweep.
+  const maxAmount = formatUnits(state.collateral, COLLATERAL.decimals);
   const value = Number(amount);
   const valid =
     Number.isFinite(value) && value > 0 && value <= balance && isAddress(to);
 
   const send = useCallback(async () => {
-    const key = wallet.exportKey();
-    if (!key || !valid) return;
+    // Whoever signs — a burner's key or a managed wallet's provider. This used
+    // to build a client from the raw key, which a managed wallet does not have.
+    const client = wallet.signer();
+    const from = wallet.getSnapshot().address;
+    if (!client || !from || !valid) return;
     setBusy(true);
     try {
-      const client = createWalletClient({
-        account: privateKeyToAccount(key),
-        chain: CHAIN,
-        transport: http(HTTP_RPC_URL),
-      });
       const hash = await client.writeContract({
+        account: from,
+        chain: CHAIN,
         address: COLLATERAL.address,
         abi: erc20,
         functionName: "transfer",
@@ -94,7 +104,7 @@ export default function WithdrawPage() {
         <button
           type="button"
           className="shrink-0 rounded-full border border-[var(--color-line-strong)] px-3 py-1 text-[11px] font-bold text-text-2"
-          onClick={() => setAmount(balance.toFixed(2))}
+          onClick={() => setAmount(maxAmount)}
         >
           MAX
         </button>

@@ -17,6 +17,8 @@
  */
 
 import { getClient } from "./client";
+import { createPoller } from "./poller";
+import { ALL_ASSETS } from "@/lib/api/prices";
 
 export interface Window {
   marketId: string;
@@ -109,21 +111,17 @@ export async function load(): Promise<void> {
   }
 }
 
-let poll: ReturnType<typeof setInterval> | null = null;
+const poller = createPoller();
 
 /**
  * Keep the window list fresh. A 1m window rolls every minute, so this refreshes
  * often enough to pick up the successor without hammering the indexer.
+ *
+ * Six screens share this one poll, so the interval is refcounted: it stops when
+ * the last of them unmounts, not the first.
  */
 export function startPolling(everyMs = 5000): () => void {
-  void load();
-  poll ??= setInterval(() => void load(), everyMs);
-  return () => {
-    if (poll) {
-      clearInterval(poll);
-      poll = null;
-    }
-  };
+  return poller.track("markets", everyMs, load);
 }
 
 /** Seconds until a window locks. Negative once it has. */
@@ -149,22 +147,67 @@ export const secondsLeft = (w: Window) => w.expiry - Date.now() / 1000;
  * every candidate's book on every poll, the console remembers the ones that
  * actually failed and prefers something else.
  */
+/**
+ * Can this app show a price for that asset?
+ *
+ * The venue lists windows on assets the oracle feed does not carry — a live
+ * `BOTNAV` hour window was picked up by Duel, and every screen built around the
+ * price came up empty: no chart at all, a dash where the spot goes. A game whose
+ * whole screen is a price chart cannot be played on a market it cannot price, so
+ * such windows are not offered rather than offered broken.
+ */
+const isPriceable = (asset: string) => ALL_ASSETS.includes(asset);
+
 export function shortestRound(
   windows: Window[],
   minSecsLeft = 0,
   skip?: ReadonlySet<string>,
 ): Window | null {
-  const live = windows.filter((w) => secondsLeft(w) > minSecsLeft);
-  // Windows already caught with nothing to trade against are passed over — but
-  // never to the point of returning nothing, because a window with a thin book
-  // is still better than no window at all.
-  const usable = skip?.size ? (live.filter((w) => !skip.has(w.marketId)) ) : live;
-  const pool = usable.length ? usable : live;
-  if (!pool.length) return null;
-  const shortest = Math.min(...pool.map((w) => w.intervalSec));
+  const live = windows.filter(
+    (w) => secondsLeft(w) > minSecsLeft && isPriceable(w.asset),
+  );
+  if (!live.length) return null;
+
+  /*
+   * The cadence is chosen BEFORE the skip list is consulted, and that ordering
+   * is the point.
+   *
+   * `skip` holds windows a press recently found empty. Applied first, it could
+   * remove the only live 1m window and hand back a 3-hour one — which is what
+   * happened: a run of unlucky presses walked the console from 60s to 5m to 15m
+   * to 3h, and every screen is built around a minute. A thin book is a reason to
+   * prefer a different window of the SAME cadence, not a reason to change what
+   * game the player is playing.
+   *
+   * So: shortest cadence from everything live, then avoid the skipped ones
+   * within it, and fall back to them rather than return nothing.
+   */
+  const shortest = Math.min(...live.map((w) => w.intervalSec));
+  const sameCadence = live.filter((w) => w.intervalSec === shortest);
+  const fresh = skip?.size
+    ? sameCadence.filter((w) => !skip.has(w.marketId))
+    : sameCadence;
+  const pool = fresh.length ? fresh : sameCadence;
+
+  return pool.sort((a, b) => a.expiry - b.expiry)[0] ?? null;
+}
+
+/**
+ * The window a player rolls into when this one closes.
+ *
+ * Same ASSET, soonest expiry after this one — deliberately not the same cadence.
+ * The first version required both and found nothing against 27 open windows:
+ * this venue's series are irregular (31s, 115s and 507s one-offs are on record),
+ * so "the next 1m BTC window" frequently does not exist while "the next BTC
+ * window" does. The looser rule is also the truthful one, because it is what the
+ * games themselves pick next.
+ *
+ * Null when nothing follows, which the chart shows as no forward band at all.
+ */
+export function nextAfter(windows: Window[], current: Window): Window | null {
   return (
-    pool
-      .filter((w) => w.intervalSec === shortest)
+    windows
+      .filter((w) => w.asset === current.asset && w.expiry > current.expiry)
       .sort((a, b) => a.expiry - b.expiry)[0] ?? null
   );
 }
@@ -187,5 +230,11 @@ export function nextToClose(
   minSecsLeft = 0,
 ): Window | null {
   const pool = intervalSec ? ofInterval(windows, intervalSec) : windows;
-  return pool.filter((w) => secondsLeft(w) > minSecsLeft)[0] ?? null;
+  // Same rule as `shortestRound`: never hand back a market this app cannot
+  // draw a price for.
+  return (
+    pool.filter(
+      (w) => secondsLeft(w) > minSecsLeft && isPriceable(w.asset),
+    )[0] ?? null
+  );
 }

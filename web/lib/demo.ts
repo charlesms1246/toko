@@ -22,13 +22,15 @@
  * real leaderboard.
  */
 
+import { fromRaw, toRaw } from "@/lib/dreamdex/config";
+
 const MODE_KEY = "toko_demo_mode_v1";
 const LEDGER_KEY = "toko_demo_ledger_v1";
 /** What a finished demo run left behind, for the conversion moment. */
 const PAST_KEY = "toko_demo_past_v1";
 
 /** Hypothetical opening balance, in collateral units. Labelled everywhere. */
-export const OPENING_BALANCE = 100n * 1_000_000n;
+export const OPENING_BALANCE = toRaw(100);
 
 export interface Ledger {
   /** Hypothetical collateral, raw. */
@@ -226,9 +228,22 @@ export function clearPastRun() {
  * round is unfinished rather than quietly discard it.
  */
 export function hasOpenPlay(): boolean {
+  return openCount() > 0;
+}
+
+/**
+ * How many paper positions and resting bids are still on the books.
+ *
+ * Needed by name, not just as a boolean, because leaving demo discards them and
+ * the player is owed the number before they decide. Note these do NOT clear
+ * themselves: a position is only settled by `execution.claim`, which runs from
+ * the game screen that opened it. Walk away mid-window and the entry sits here
+ * for good, which is why the way out must never be an unconditional refusal.
+ */
+export function openCount(): number {
   return (
-    Object.values(state.ledger.positions).some((v) => v > 0n) ||
-    Object.keys(state.ledger.resting).length > 0
+    Object.values(state.ledger.positions).filter((v) => v > 0n).length +
+    Object.keys(state.ledger.resting).length
   );
 }
 
@@ -262,12 +277,23 @@ export function fill(marketId: string, side: "up" | "down", cost: bigint, size: 
   });
 }
 
-/** Give up contracts and take the proceeds. */
+/**
+ * Give up contracts and take the proceeds.
+ *
+ * Clamped to what is held, and the proceeds are scaled by the same ratio. A
+ * paper balance credited for contracts that were never owned is an invented
+ * number, so the floor lives here rather than in whichever caller sized the
+ * fill.
+ */
 export function close(marketId: string, side: "up" | "down", proceeds: bigint, size: bigint) {
   update((l) => {
-    l.balance += proceeds;
+    if (size <= 0n) return;
     const k = key(marketId, side === "up" ? 0 : 1);
-    l.positions[k] = (l.positions[k] ?? 0n) - size;
+    const have = l.positions[k] ?? 0n;
+    const sold = size > have ? have : size;
+    if (sold <= 0n) return;
+    l.balance += (proceeds * sold) / size;
+    l.positions[k] = have - sold;
     if (l.positions[k] <= 0n) delete l.positions[k];
   });
 }
@@ -316,12 +342,9 @@ export function unrest(marketId: string, refund: bigint) {
 export function expireRest(marketId: string) {
   const pending = state.ledger.resting[marketId];
   if (!pending) return;
-  const escrow = BigInt(
-    Math.round(
-      (Number(pending.size) / 1e6) *
-        (pending.side === "up" ? pending.yesPrice : 1 - pending.yesPrice) *
-        1e6,
-    ),
+  const escrow = toRaw(
+    fromRaw(pending.size) *
+      (pending.side === "up" ? pending.yesPrice : 1 - pending.yesPrice),
   );
   unrest(marketId, escrow);
 }

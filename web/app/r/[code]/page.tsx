@@ -27,7 +27,7 @@ export default function ReferralCodePage({
     return () => clearTimeout(timer);
   }, [code, router]);
 
-  useProgramConsole({ status: { left: "REFERRAL", right: code.toUpperCase() } });
+  useProgramConsole({});
 
   return (
     <ScreenRoot className="items-center gap-1">

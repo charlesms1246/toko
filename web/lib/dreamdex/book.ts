@@ -13,6 +13,7 @@
 
 import { COLLATERAL } from "./config";
 import { getClient } from "./client";
+import { createPoller } from "./poller";
 
 const ONE = 10 ** COLLATERAL.decimals;
 
@@ -108,11 +109,15 @@ export function subscribeBook(fn: () => void) {
 export const getBookSnapshot = () => bookState;
 export const getBookServerSnapshot = () => SERVER_STATE;
 
-let bookPoll: ReturnType<typeof setInterval> | null = null;
+const poller = createPoller();
 
 /** Follow one pool's book until told otherwise. */
 export function track(pool: string, everyMs = 1500): () => void {
-  if (bookState.pool !== pool) setBook({ pool, book: EMPTY_BOOK, error: null });
+  // `loading` belongs here: the first read for a new pool is the only time the
+  // book is genuinely unknown, and the tick below clears the flag either way.
+  if (bookState.pool !== pool) {
+    setBook({ pool, book: EMPTY_BOOK, error: null, loading: true });
+  }
 
   const tick = async () => {
     try {
@@ -129,15 +134,8 @@ export function track(pool: string, everyMs = 1500): () => void {
     }
   };
 
-  // Always replace: `??=` would keep an interval still closed over the previous
-  // pool, so switching markets would silently keep polling the old one.
-  if (bookPoll) clearInterval(bookPoll);
-  void tick();
-  bookPoll = setInterval(() => void tick(), everyMs);
-  return () => {
-    if (bookPoll) {
-      clearInterval(bookPoll);
-      bookPoll = null;
-    }
-  };
+  // Keyed on the pool: the poller replaces the interval when the pool changes,
+  // so no interval is left closed over the one we moved off, and refcounts
+  // callers on the same pool so the first unmount does not silence the second.
+  return poller.track(pool, everyMs, tick);
 }
