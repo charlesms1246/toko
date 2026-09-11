@@ -255,3 +255,14 @@ export function subscribeBalance(fn: () => void) {
 
 export const getBalance = () => current().balance();
 export const getServerBalance = () => 0n;
+
+/**
+ * Has a balance actually been read?
+ *
+ * Paper play is instant — the ledger is local, so it is always read. The chain
+ * has to be asked, and until it answers `balance()` is `0n`, which a screen
+ * cannot tell apart from an empty wallet.
+ */
+export const getBalanceRead = () =>
+  current().paper ? true : wallet.getSnapshot().read;
+export const getServerBalanceRead = () => false;

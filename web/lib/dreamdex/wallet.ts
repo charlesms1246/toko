@@ -49,6 +49,15 @@ export interface WalletState {
   collateral: bigint;
   /** False until the key has been read from storage on the client. */
   ready: boolean;
+  /**
+   * False until a balance has actually come back from the chain.
+   *
+   * `collateral` is `0n` before the first read AND when the wallet is empty, and
+   * the hub printed that straight out as `AVAILABLE $0.00` for a wallet holding
+   * 497 tUSDC. Same shape as the list bugs in `ERRORS.md`: **zero must never
+   * stand in for unread.**
+   */
+  read: boolean;
   /** True while a balance read is in flight. */
   loading: boolean;
   /** Last read that failed, for honest display rather than a silent zero. */
@@ -60,6 +69,7 @@ const SERVER_STATE: WalletState = {
   gas: 0n,
   collateral: 0n,
   ready: false,
+  read: false,
   loading: false,
   error: null,
 };
@@ -225,7 +235,7 @@ export async function refresh(): Promise<void> {
       }) as Promise<bigint>,
     ]);
     if (mine !== latestRead) return;
-    set({ gas, collateral, loading: false });
+    set({ gas, collateral, loading: false, read: true });
   } catch (err) {
     if (mine !== latestRead) return;
     set({

@@ -1493,7 +1493,21 @@ export default function ConsoleCanvas({
       const usable = 1 - inset;
       const fitH = BODY_H / usable / 2 / Math.tan(halfFov);
       const fitW = BODY_W / 2 / (Math.tan(halfFov) * aspect);
-      const z = Math.max(fitH, fitW) * 1.06 + GROUP_Z;
+      /*
+       * How much air is left around the device.
+       *
+       * 1.06 pushed the camera 6% further back than the fit needs, which left
+       * the console at 92% of the frame — 15px of dead frame down each side and
+       * 22px top and bottom, on a screen where every pixel of glass is the
+       * product. It is now 2%, just enough that the shell's own shadow is not
+       * cut by the frame's edge.
+       *
+       * The landing is the exception and keeps the old air: it tilts the device
+       * 2.4 degrees, and a rotated rectangle needs the corners to go somewhere
+       * or `overflow: hidden` takes them off.
+       */
+      const margin = insetRef.current > 0 ? 1.06 : 1.02;
+      const z = Math.max(fitH, fitW) * margin + GROUP_Z;
       // Half the reserved band, in world units at the device's depth. Looking
       // BELOW the device's centre is what carries it up the screen.
       const visibleH = 2 * Math.tan(halfFov) * Math.max(0.001, z - GROUP_Z);

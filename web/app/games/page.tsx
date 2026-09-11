@@ -19,7 +19,7 @@ import { Footer, Shell } from "@/components/screen/GameScreen";
 import GameIcon from "@/components/games/GameIcon";
 import { GAME_TAGLINES } from "@/lib/api/fixtures";
 import { GAME_LABELS, LAB_GAMES, LIVE_GAMES, MINIGAMES } from "@/lib/api/types";
-import { useBalance, useIsAdmin } from "@/lib/api/hooks";
+import { useBalance, useBalanceRead, useIsAdmin } from "@/lib/api/hooks";
 import { formatCollateral } from "@/lib/dreamdex/wallet";
 import { playSfx } from "@/lib/sound";
 import * as demo from "@/lib/demo";
@@ -46,6 +46,7 @@ interface Entry {
 export default function GamesPage() {
   const router = useRouter();
   const balance = useBalance();
+  const balanceRead = useBalanceRead();
   const admin = useIsAdmin();
   const user = useUser();
   const [index, setIndex] = useState(0);
@@ -270,7 +271,11 @@ export default function GamesPage() {
           </div>
           <div className="mt-0.5 leading-none">
             <span className="tnum text-[26px] font-extrabold tracking-tight text-text">
-              ${formatCollateral(balance)}
+              {/* A dash until the chain has answered. `0n` is what the store
+                  holds both before the first read and for an empty wallet, and
+                  printing it made a wallet with 497 tUSDC read $0.00 for a
+                  second on every load. */}
+              {balanceRead ? `$${formatCollateral(balance)}` : "—"}
             </span>
             <span className="ml-1 font-mono text-[11px] uppercase tracking-[0.1em] text-text-2">
               {COLLATERAL.symbol}
