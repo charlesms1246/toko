@@ -238,6 +238,15 @@ export function useRound(
   const [filledOnArrival, setFilledOnArrival] = useState(false);
   const [cashedOut, setCashedOut] = useState(false);
   const [noLiquidity, setNoLiquidity] = useState(false);
+  /**
+   * A won round whose payout did not land. It holds the console on the result
+   * instead of letting it reset after five seconds, because the message saying
+   * so is the only thing telling the player their money is still sitting in
+   * `/menu/positions` waiting to be claimed.
+   */
+  const [claimFailed, setClaimFailed] = useState(false);
+  /** The market this round has already fired a claim for. See the poll below. */
+  const claimedRef = useRef<string | null>(null);
   /** The window the open position belongs to — not necessarily the live one. */
   const [playing, setPlaying] = useState<markets.Window | null>(null);
   /**
@@ -340,43 +349,69 @@ export function useRound(
     const poll = async () => {
       const client = getClient();
       if (!client) return;
+
+      // Only the oracle read may fail quietly — it is the one that is *meant*
+      // to, for the few seconds between the buzzer and the result landing.
+      // Wrapping the claim in this too is what used to swallow a failed payout.
+      let chain;
       try {
-        const chain = await client.getMarketOnchain(playing.marketId);
-        if (cancelled) return;
-        if (!chain?.isResolved && !chain?.isVoided) return;
-
-        const mine = side === "up" ? 0 : 1;
-        if (chain.isVoided) {
-          setStatus("void");
-        } else if (Number(chain.winningOutcome) === mine) {
-          setStatus("won");
-        } else {
-          setStatus("lost");
-          setPayout(0n);
-          return;
-        }
-
-        // Claim straight away — this is the round's payout, and the player
-        // pressed for it. Losing positions are never claimed: they pay zero and
-        // would only burn gas.
-        const claim: Position = {
-          marketId: playing.marketId,
-          poolAddress: playing.poolAddress,
-          asset: playing.asset,
-          interval: playing.interval,
-          outcomeIndex: mine as 0 | 1,
-          balance: held,
-          expiry: playing.expiry,
-          status: "Finalized",
-          kind: chain.isVoided ? "voided" : "winner",
-          redeemable: chain.isVoided ? held / 2n : held,
-        };
-        const result = await execution.current().claim(claim);
-        if (cancelled) return;
-        setPayout(result.paid);
-        if (!result.ok) setMessage(result.error ?? "Could not claim");
+        chain = await client.getMarketOnchain(playing.marketId);
       } catch {
-        // Keep polling; the oracle lands within a few seconds.
+        return;
+      }
+      if (cancelled) return;
+      if (!chain?.isResolved && !chain?.isVoided) return;
+
+      const mine = side === "up" ? 0 : 1;
+      if (chain.isVoided) {
+        setStatus("void");
+      } else if (Number(chain.winningOutcome) === mine) {
+        setStatus("won");
+      } else {
+        setStatus("lost");
+        setPayout(0n);
+        return;
+      }
+
+      // Setting the status above is what ends `settling`, so this effect is
+      // already being torn down. The interval stops with it, but the poll that
+      // is mid-flight right now does not — hence the ref rather than
+      // `cancelled`, which would block the claim entirely.
+      if (claimedRef.current === playing.marketId) return;
+      claimedRef.current = playing.marketId;
+
+      // Claim straight away — this is the round's payout, and the player
+      // pressed for it. Losing positions are never claimed: they pay zero and
+      // would only burn gas.
+      const claim: Position = {
+        marketId: playing.marketId,
+        poolAddress: playing.poolAddress,
+        asset: playing.asset,
+        interval: playing.interval,
+        outcomeIndex: mine as 0 | 1,
+        balance: held,
+        expiry: playing.expiry,
+        status: "Finalized",
+        kind: chain.isVoided ? "voided" : "winner",
+        redeemable: chain.isVoided ? held / 2n : held,
+      };
+
+      // Deliberately not guarded by `cancelled`. A claim is more than one
+      // transaction, and by the time they land this effect is long gone —
+      // guarding the result is how a won round ended up paying nothing with
+      // nothing on screen to say so.
+      try {
+        const result = await execution.current().claim(claim);
+        setPayout(result.paid);
+        if (!result.ok) {
+          setMessage(result.error ?? "Could not claim");
+          setClaimFailed(true);
+        }
+      } catch (err) {
+        setMessage(
+          err instanceof Error ? err.message.split("\n")[0] : "Could not claim",
+        );
+        setClaimFailed(true);
       }
     };
 
@@ -616,18 +651,20 @@ export function useRound(
     setFilledOnArrival(false);
     setCashedOut(false);
     setNoLiquidity(false);
+    setClaimFailed(false);
     setOpenedAt(null);
     // Paper play has no on-chain positions to re-read.
     if (!execution.current().paper) void positions.refresh();
   }, []);
 
-  // Return the console to idle a few seconds after a result.
+  // Return the console to idle a few seconds after a result — unless the payout
+  // failed, in which case resetting would wipe the only notice of it.
   useEffect(() => {
-    if (holdResult) return;
+    if (holdResult || claimFailed) return;
     if (status !== "won" && status !== "lost" && status !== "void") return;
     const timer = setTimeout(reset, 5000);
     return () => clearTimeout(timer);
-  }, [holdResult, status, reset]);
+  }, [holdResult, claimFailed, status, reset]);
 
   return {
     window,
